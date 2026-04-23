@@ -34,6 +34,7 @@ const timeSlots = [
   { time: "15:00", available: true },
   { time: "16:00", available: false },
   { time: "17:00", available: true },
+  { time: "18:00", available: true },
 ];
 
 export default function Home() {
@@ -80,7 +81,7 @@ export default function Home() {
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       style={{ fontSize: 10, color: "#E1306C", display: "block", marginTop: 4 }}
-    >
+    
       @{d.ig}
     </a>
   </div>
@@ -129,6 +130,3 @@ export default function Home() {
           <button onClick={() => alert("預約已送出！")} style={{ width: "100%", background: "#534AB7", color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>確認預約</button>
         </div>
       </div>
-    </div>
-  );
-}
