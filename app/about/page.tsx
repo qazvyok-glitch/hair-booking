@@ -176,16 +176,16 @@ export default function About() {
   <a href="/" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
     <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="3" y="4" width="20" height="20" rx="2" stroke="#5F5E5A" strokeWidth="1.8"/>
-  <path d="M16 2v4M8 2v4M3 10h18" stroke="#5F5E5A" strokeWidth="1.8" strokeLinecap="round"/>
-  <circle cx="8" cy="14" r="1" fill="#5F5E5A"/>
-  <circle cx="12" cy="14" r="1" fill="#5F5E5A"/>
-  <circle cx="16" cy="14" r="1" fill="#5F5E5A"/>
-  <circle cx="8" cy="18" r="1" fill="#5F5E5A"/>
-  <circle cx="12" cy="18" r="1" fill="#5F5E5A"/>
+  <rect x="2" y="4" width="22" height="20" rx="2" stroke="#040404" strokeWidth="1.8"/>
+  <path d="M16 2v4M8 2v4M3 10h18" stroke="#040404" strokeWidth="1.8" strokeLinecap="round"/>
+  <circle cx="8" cy="14" r="1" fill="#040404"/>
+  <circle cx="12" cy="14" r="1" fill="#040404"/>
+  <circle cx="16" cy="14" r="1" fill="#040404"/>
+  <circle cx="8" cy="18" r="1" fill="#040404"/>
+  <circle cx="12" cy="18" r="1" fill="#040404"/>
 </svg>
     </div>
-    <span style={{ fontSize: 10, color: "#5F5E5A" }}>預約</span>
+    <span style={{ fontSize: 10, color: "#534ab7" }}>預約</span>
   </a>
   <a href="/about" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
     <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
