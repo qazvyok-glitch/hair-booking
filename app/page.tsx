@@ -86,9 +86,9 @@ const lunchBreak : string[] = [];
 const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
 
 const fontSizes = [
-  { label: "小", value: 0.85 },
-  { label: "中", value: 1 },
-  { label: "大", value: 1.15 },
+  { label: "小", value: 1 },
+  { label: "中", value: 1.15 },
+  { label: "大", value: 1.5 },
 ];
 
 function buildCalendar(year: number, month: number) {
