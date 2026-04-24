@@ -383,11 +383,14 @@ export default function Home() {
 <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
   <a href="/" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
     <div style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5F5E5A" strokeWidth="1.8" strokeLinecap="round">
-  <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
-  <line x1="20" y1="4" x2="8.12" y2="15.88"/>
-  <line x1="14.47" y1="14.48" x2="20" y2="20"/>
-  <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="3" y="4" width="20" height="20" rx="2" stroke="#5F5E5A" strokeWidth="1.8"/>
+  <path d="M16 2v4M8 2v4M3 10h18" stroke="#5F5E5A" strokeWidth="1.8" strokeLinecap="round"/>
+  <circle cx="8" cy="14" r="1" fill="#5F5E5A"/>
+  <circle cx="12" cy="14" r="1" fill="#5F5E5A"/>
+  <circle cx="16" cy="14" r="1" fill="#5F5E5A"/>
+  <circle cx="8" cy="18" r="1" fill="#5F5E5A"/>
+  <circle cx="12" cy="18" r="1" fill="#5F5E5A"/>
 </svg>
     </div>
     <span style={{ fontSize: 10, color: "#5F5E5A" }}>預約</span>
