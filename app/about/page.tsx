@@ -83,7 +83,7 @@ export default function About() {
 
         {/* LOGO 與店名 */}
         <div style={{ background: "#fff", padding: "28px 16px 20px", textAlign: "center", borderBottom: "0.5px solid #D3D1C7" }}>
-          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 32 }}>🍒</div>
+ <img src="/logo.png" alt="Bing Cherry Hair Salon" style={{ width: 90, height: 90, borderRadius: "50%", objectFit: "cover", margin: "0 auto 12px", display: "block" }} />
           <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 14 }}>{info.name || "Bing Cherry Hair Salon"}</div>
 
           {/* 社群圖示列 */}
@@ -172,17 +172,25 @@ export default function About() {
         )}
 
         {/* 底部導覽列 */}
-        <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
-          <a href="/" style={{ flex: 1, padding: "10px 0", textAlign: "center", textDecoration: "none" }}>
-            <div style={{ fontSize: 20 }}>✂</div>
-            <div style={{ fontSize: 10, color: "#5F5E5A", marginTop: 2 }}>預約</div>
-          </a>
-          <a href="/about" style={{ flex: 1, padding: "10px 0", textAlign: "center", textDecoration: "none" }}>
-            <div style={{ fontSize: 20 }}>🍒</div>
-            <div style={{ fontSize: 10, color: "#534AB7", marginTop: 2 }}>關於我們</div>
-          </a>
-        </div>
-
+<div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
+  <a href="/" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+    <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
+ <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#5F5E5A" strokeWidth="1.8" strokeLinecap="round">
+  <circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+  <line x1="20" y1="4" x2="8.12" y2="15.88"/>
+  <line x1="14.47" y1="14.48" x2="20" y2="20"/>
+  <line x1="8.12" y1="8.12" x2="12" y2="12"/>
+</svg>
+    </div>
+    <span style={{ fontSize: 10, color: "#5F5E5A" }}>預約</span>
+  </a>
+  <a href="/about" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+    <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <img src="/logo.png" alt="logo" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover" }} />
+    </div>
+    <span style={{ fontSize: 10, color: "#534AB7" }}>關於我們</span>
+  </a>
+</div>
       </div>
     </div>
   );
