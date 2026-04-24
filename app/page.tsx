@@ -75,7 +75,13 @@ const designerSchedule: Record<number, { offDays: string[]; offSlots: Record<str
   5: { offDays: ["2026-04-28", "2026-04-29"], offSlots: {} },
 };
 
-const allTimeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+const designerWorkHours: Record<number, string[]> = {
+  1: ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"], // Cherry
+  2: ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"], // Mira
+  3: ["11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"], // Joey
+  4: ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"], // Alisa
+  5: ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"], // Peggy
+};
 const lunchBreak : string[] = [];
 const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -335,7 +341,7 @@ export default function Home() {
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: fs * 11, color: textSub, marginBottom: 7 }}>選擇時段 — {selectedDate.replace(/-/g, "/")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
-                {allTimeSlots.map((t) => {
+                {(designerWorkHours[selectedDesigner.id] || []).map((t) => {
                   const off = isOffSlot(selectedDate, t);
                   const picked = selectedTime === t;
                   return (
