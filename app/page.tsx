@@ -116,7 +116,6 @@ export default function Home() {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [priceData, setPriceData] = useState<PriceItem[]>([]);
@@ -134,8 +133,7 @@ export default function Home() {
         supabase.from("designer_off_days").select("*"),
         supabase.from("designer_off_slots").select("*"),
       ]);
-      if (des) setDesigners(des);
-      if (des && des.length > 0) setSelectedDesigner(des[0]);
+      if (des) { setDesigners(des); if (des.length > 0) setSelectedDesigner(des[0]); }
       if (cats && svcs) {
         setCategories(cats.map((c: ServiceCategory) => ({
           ...c,
@@ -189,12 +187,12 @@ export default function Home() {
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ color: textMain, fontSize: 14 }}>載入中...</div>
+      <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
     </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: bg, display: "flex", justifyContent: "center", padding: "24px 16px" }}>
+    <div style={{ minHeight: "100vh", background: bg, display: "flex", justifyContent: "center", padding: "24px 16px 0" }}>
       {showPrice && <PriceSheet onClose={() => setShowPrice(false)} dark={dark} fs={fs} priceData={priceData} />}
 
       {showSettings && (
@@ -224,7 +222,7 @@ export default function Home() {
         </div>
       )}
 
-      <div style={{ width: "100%", maxWidth: 390, background: cardBg, borderRadius: 20, overflow: "hidden", border: "1px solid " + cardBorder }}>
+      <div style={{ width: "100%", maxWidth: 390, background: cardBg, borderRadius: "20px 20px 0 0", overflow: "hidden", border: "1px solid " + cardBorder, borderBottom: "none", paddingBottom: 80 }}>
         <div style={{ background: cardBg, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "0.5px solid " + cardBorder }}>
           <span style={{ fontSize: fs * 16, fontWeight: 500, color: textMain }}>Bing Cherry Hair Salon</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -259,6 +257,7 @@ export default function Home() {
             </div>
             <button onClick={() => setShowPrice(true)} style={{ fontSize: fs * 11, color: "#7B6FD4", background: dark ? "#2C2840" : "#EEEDFE", border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}>查看價目表 →</button>
           </div>
+
           {categories.map((cat) => {
             const pickedCount = cat.items.filter(i => selectedServices.includes(i.id)).length;
             const isOpen = openCategory === cat.name;
@@ -373,12 +372,25 @@ export default function Home() {
               alert("預約已送出！我們會盡快與您確認。");
               setSelectedServices([]); setSelectedDate(null); setSelectedTime(null);
             }}
-            style={{ width: "100%", background: (selectedServices.length > 0 && selectedDate && selectedTime) ? "#534AB7" : (dark ? "#333" : "#B4B2A9"), color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: fs * 14, fontWeight: 500, cursor: "pointer" }}
+            style={{ width: "100%", background: (selectedServices.length > 0 && selectedDate && selectedTime) ? "#534AB7" : (dark ? "#333" : "#B4B2A9"), color: "#fff", border: "none", borderRadius: 10, padding: 12, fontSize: fs * 14, fontWeight: 500, cursor: "pointer", marginBottom: 16 }}
           >
             確認預約
           </button>
         </div>
       </div>
+
+      {/* 底部導覽列 */}
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: cardBg, borderTop: "0.5px solid " + cardBorder, display: "flex", zIndex: 50 }}>
+        <a href="/" style={{ flex: 1, padding: "10px 0", textAlign: "center", textDecoration: "none" }}>
+          <div style={{ fontSize: 20 }}>✂</div>
+          <div style={{ fontSize: 10, color: "#534AB7", marginTop: 2 }}>預約</div>
+        </a>
+        <a href="/about" style={{ flex: 1, padding: "10px 0", textAlign: "center", textDecoration: "none" }}>
+          <div style={{ fontSize: 20 }}>🍒</div>
+          <div style={{ fontSize: 10, color: textSub, marginTop: 2 }}>關於我們</div>
+        </a>
+      </div>
+
     </div>
   );
 }
