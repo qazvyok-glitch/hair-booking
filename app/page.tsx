@@ -4,7 +4,7 @@ import { useState } from "react";
 const designers = [
   { id: 1, initials: "C", name: "Cherry", nickname: "扁頭救星", style: "日系、剪髮、染髮、燙髮", ig: "bingcherry_cherry", bg: "#EEEDFE", color: "#3C3489" },
   { id: 2, initials: "M", name: "Mira", nickname: "米拉夫人", style: "日系、剪髮、染髮、燙髮", ig: "miramira_lee", bg: "#E1F5EE", color: "#085041" },
-  { id: 3, initials: "J", name: "Joey", nickname: "", style: "日系、剪髮、染髮、燙髮", ig: "wang7723", bg: "#FAEEDA", color: "#633806" },
+  { id: 3, initials: "J", name: "Joey", nickname: "5491", style: "日系、剪髮、染髮、燙髮", ig: "wang7723", bg: "#FAEEDA", color: "#633806" },
   { id: 4, initials: "A", name: "Alisa", nickname: "", style: "日系、男士剪髮、染髮、燙髮", ig: "wan__yu94", bg: "#E6F1FB", color: "#0C447C" },
   { id: 5, initials: "P", name: "Peggy", nickname: "", style: "日系、剪髮、染髮、燙髮", ig: "peggyhair.tainan", bg: "#F4C0D1", color: "#72243E" },
 ];
