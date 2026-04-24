@@ -76,7 +76,7 @@ const designerSchedule: Record<number, { offDays: string[]; offSlots: Record<str
 };
 
 const allTimeSlots = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
-const lunchBreak = ["12:00"];
+const lunchBreak : string[] = [];
 const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
 
 const fontSizes = [
