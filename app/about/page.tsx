@@ -4,6 +4,44 @@ import { supabase } from "../../lib/supabase";
 
 type ShopInfo = { key: string; label: string; value: string };
 
+function IgIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <defs>
+        <linearGradient id="ig2" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#f09433" />
+          <stop offset="50%" stopColor="#dc2743" />
+          <stop offset="100%" stopColor="#bc1888" />
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig2)" />
+      <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" />
+      <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
+    </svg>
+  );
+}
+
+function WebIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill="#534AB7" />
+      <ellipse cx="12" cy="12" rx="4" ry="10" stroke="white" strokeWidth="1.5" fill="none" />
+      <line x1="2" y1="12" x2="22" y2="12" stroke="white" strokeWidth="1.5" />
+      <line x1="4" y1="7" x2="20" y2="7" stroke="white" strokeWidth="1.2" />
+      <line x1="4" y1="17" x2="20" y2="17" stroke="white" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function FbIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <rect width="24" height="24" rx="6" fill="#1877F2" />
+      <path d="M16 8h-2a1 1 0 0 0-1 1v2h3l-.5 3H13v7h-3v-7H8v-3h2V9a4 4 0 0 1 4-4h2v3z" fill="white" />
+    </svg>
+  );
+}
+
 export default function About() {
   const [info, setInfo] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -43,18 +81,36 @@ export default function About() {
           <span style={{ fontSize: 16, fontWeight: 500, color: "#2C2C2A" }}>關於我們</span>
         </div>
 
+        {/* LOGO 與店名 */}
         <div style={{ background: "#fff", padding: "28px 16px 20px", textAlign: "center", borderBottom: "0.5px solid #D3D1C7" }}>
           <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#EEEDFE", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 32 }}>🍒</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>{info.name || "Bing Cherry Hair Salon"}</div>
-          {info.website && (
-            <a href={info.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#7B6FD4", textDecoration: "none" }}>
-              {info.website.replace("https://", "").replace(/\/$/, "")} ↗
-            </a>
-          )}
+          <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 14 }}>{info.name || "Bing Cherry Hair Salon"}</div>
+
+          {/* 社群圖示列 */}
+          <div style={{ display: "flex", justifyContent: "center", gap: 16 }}>
+            {info.ig && (
+              <a href={"https://www.instagram.com/" + info.ig} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                <IgIcon />
+                <span style={{ fontSize: 10, color: "#888780" }}>Instagram</span>
+              </a>
+            )}
+            {info.facebook && (
+              <a href={info.facebook} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                <FbIcon />
+                <span style={{ fontSize: 10, color: "#888780" }}>Facebook</span>
+              </a>
+            )}
+            {info.website && (
+              <a href={info.website} target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                <WebIcon />
+                <span style={{ fontSize: 10, color: "#888780" }}>官網</span>
+              </a>
+            )}
+          </div>
         </div>
 
+        {/* 資訊列表 */}
         <div style={{ background: "#fff", marginTop: 8, borderRadius: 12, overflow: "hidden" }}>
-
           {info.address && (
             <a href={info.maps_url || "#"} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderBottom: "0.5px solid #F1EFE8" }}>
@@ -82,7 +138,7 @@ export default function About() {
           )}
 
           {(info.hours_weekday || info.hours_closed) && (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", borderBottom: "0.5px solid #F1EFE8" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px" }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: "#FAEEDA", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🕐</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: "#888780", marginBottom: 6 }}>營業時間</div>
@@ -93,39 +149,13 @@ export default function About() {
                   </div>
                 )}
                 {info.hours_closed && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 12, color: "#5F5E5A" }}>{info.hours_closed}</span>
                     <span style={{ fontSize: 12, color: "#E24B4A", fontWeight: 500 }}>公休</span>
                   </div>
                 )}
               </div>
             </div>
-          )}
-
-          {info.ig && (
-            <a href={"https://www.instagram.com/" + info.ig} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderBottom: "0.5px solid #F1EFE8" }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: "#FCF0F8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📸</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 2 }}>Instagram</div>
-                  <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 500 }}>@{info.ig}</div>
-                  <div style={{ fontSize: 11, color: "#7B6FD4", marginTop: 2 }}>點此前往 IG ↗</div>
-                </div>
-              </div>
-            </a>
-          )}
-
-          {info.website && (
-            <a href={info.website} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px" }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: "#E6F1FB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🌐</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 2 }}>官方網站</div>
-                  <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 500 }}>{info.website.replace("https://", "").replace(/\/$/, "")}</div>
-                  <div style={{ fontSize: 11, color: "#7B6FD4", marginTop: 2 }}>點此前往官網 ↗</div>
-                </div>
-              </div>
-            </a>
           )}
         </div>
 
