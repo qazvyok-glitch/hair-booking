@@ -381,7 +381,7 @@ export default function Home() {
 
       {/* 底部導覽列 */}
 <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
-  <a href="/" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+  <a href="/booking/step/1" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
     <div style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect x="2" y="4" width="22" height="20" rx="2" stroke="#040404" strokeWidth="1.8"/>
