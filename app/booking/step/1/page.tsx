@@ -46,6 +46,7 @@ export default function Step1() {
     <div style={{ padding: "20px 16px 120px" }}>
       <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>選擇設計師</div>
       <div style={{ fontSize: 12, color: "#888780", marginBottom: 20 }}>請選擇您想預約的設計師</div>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {designers.map((d) => {
           const isSelected = selected?.id === d.id;
@@ -60,6 +61,7 @@ export default function Step1() {
                 padding: "16px 12px",
                 textAlign: "center",
                 cursor: "pointer",
+                boxShadow: isSelected ? "0 4px 16px rgba(83,74,183,0.15)" : "none",
               }}
             >
               <div style={{
@@ -67,24 +69,44 @@ export default function Step1() {
                 background: d.bg_color, color: d.text_color,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 20, fontWeight: 600, margin: "0 auto 10px",
+                border: isSelected ? "2.5px solid #534AB7" : "2px solid transparent",
               }}>
                 {d.initials}
               </div>
+
               <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{d.name}</div>
+
               {d.nickname ? (
                 <div style={{ fontSize: 11, color: "#7B6FD4", margin: "3px 0" }}>{d.nickname}</div>
               ) : null}
-              <div style={{ fontSize: 11, color: "#888780", margin: "4px 0 8px" }}>{d.style}</div>
+
+              <div style={{ fontSize: 11, color: "#888780", lineHeight: 1.5, margin: "4px 0 8px" }}>
+                {d.style}
+              </div>
+
+              <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="2" y="2" width="20" height="20" rx="6" fill="#E1306C" />
+                  <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" />
+                  <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
+                </svg>
+                <span style={{ fontSize: 11, color: "#888780" }}>作品集</span>
+              </div>
+
               {isSelected ? (
                 <div style={{
                   marginTop: 8, background: "#534AB7", color: "#fff",
-                  borderRadius: 20, padding: "3px 12px", fontSize: 11, display: "inline-block",
-                }}>已選擇</div>
+                  borderRadius: 20, padding: "3px 12px",
+                  fontSize: 11, fontWeight: 600, display: "inline-block",
+                }}>
+                  已選擇 ✓
+                </div>
               ) : null}
             </div>
           );
         })}
       </div>
+
       <div style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
         width: "100%", maxWidth: 390, background: "#fff",
