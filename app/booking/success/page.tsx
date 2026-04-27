@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useSettingsStore, fontSizes } from "../../../store/settingsStore";
 
 type BookingInfo = {
   designerName: string;
@@ -24,6 +25,12 @@ function CalendarIcon() {
 export default function BookingSuccess() {
   const router = useRouter();
   const [booking, setBooking] = useState<BookingInfo | null>(null);
+  const { dark, fsIndex } = useSettingsStore();
+  const fs = fontSizes[fsIndex].value;
+  const cardBg = dark ? "#2A2A2A" : "#fff";
+  const cardBorder = dark ? "#3A3A3A" : "#D3D1C7";
+  const textMain = dark ? "#F0EFEA" : "#2C2C2A";
+  const textSub = dark ? "#888780" : "#5F5E5A";
 
   useEffect(() => {
     const saved = sessionStorage.getItem("lastBooking");
@@ -74,44 +81,44 @@ export default function BookingSuccess() {
   }
 
   return (
-    <div style={{ padding: "0" }}>
+    <div style={{ background: cardBg, minHeight: "100vh" }}>
       <div style={{ width: "100%", maxWidth: 390 }}>
 
         <div style={{ textAlign: "center", padding: "32px 0 24px" }}>
           <div style={{ fontSize: 64, marginBottom: 12 }}>🌸</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#2C2C2A", marginBottom: 6 }}>預約成功！</div>
-          <div style={{ fontSize: 13, color: "#888780" }}>我們會盡快與您確認預約時間</div>
+          <div style={{ fontSize: fs * 22, fontWeight: 700, color: textMain, marginBottom: 6 }}>預約成功！</div>
+          <div style={{ fontSize: fs * 13, color: textSub }}>我們會盡快與您確認預約時間</div>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 16, padding: "20px 16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 14 }}>📋 預約資訊</div>
+        <div style={{ background: cardBg, borderRadius: 16, padding: "20px 16px", marginBottom: 12, border: `0.5px solid ${cardBorder}` }}>
+          <div style={{ fontSize: fs * 13, fontWeight: 600, color: textMain, marginBottom: 14 }}>📋 預約資訊</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>設計師</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>
+              <span style={{ color: textSub }}>設計師</span>
+              <span style={{ color: textMain, fontWeight: 500 }}>
                 {designer?.name}{designer?.nickname ? ` (${designer.nickname})` : ""}
               </span>
             </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
+            <div style={{ borderTop: `0.5px solid ${cardBorder}` }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>日期</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>{date ? date.replace(/-/g, "/") : "—"}</span>
+              <span style={{ color: textSub }}>日期</span>
+              <span style={{ color: textMain, fontWeight: 500 }}>{date ? date.replace(/-/g, "/") : "—"}</span>
             </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
+            <div style={{ borderTop: `0.5px solid ${cardBorder}` }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>時段</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>{time || "—"}</span>
+              <span style={{ color: textSub }}>時段</span>
+              <span style={{ color: textMain, fontWeight: 500 }}>{time || "—"}</span>
             </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
+            <div style={{ borderTop: `0.5px solid ${cardBorder}` }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>地址</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>台南市中西區西門路二段10號</span>
+              <span style={{ color: textSub }}>地址</span>
+              <span style={{ color: textMain, fontWeight: 500 }}>台南市中西區西門路二段10號</span>
             </div>
           </div>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 12 }}>🔔 設定提醒</div>
+        <div style={{ background: cardBg, borderRadius: 16, padding: "16px", marginBottom: 12, border: `0.5px solid ${cardBorder}` }}>
+          <div style={{ fontSize: fs * 13, fontWeight: 600, color: textMain, marginBottom: 12 }}>🔔 設定提醒</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={downloadICS}
