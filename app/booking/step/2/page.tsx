@@ -40,8 +40,12 @@ function PriceSheet({ onClose, priceData }: { onClose: () => void; priceData: Pr
           </div>
           <button onClick={onClose} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <img src="/hair-length.png" alt="髮長示意圖" style={{ width: "100%", borderRadius: 10, objectFit: "contain" }} />
+        </div>
         <div style={{ background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 10, padding: "8px 12px", marginBottom: 14, fontSize: 11, color: "#633806" }}>
-          S 耳上 ／ M 下巴上 ／ L 胸上 ／ XL 胸下
+          S 耳上 ／ M 下巴上 ／ L 胸上 ／ XL 胸下<br/>
+          長度超過肚臍以下，由設計師現場諮詢報價。
         </div>
         {categories.map((cat) => (
           <div key={cat} style={{ marginBottom: 18 }}>
