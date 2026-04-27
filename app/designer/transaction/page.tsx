@@ -4,12 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
 type DesignerSession = { id: number; name: string; nickname: string };
-type Booking = {
-  id: number;
-  customer_name: string;
-  booking_date: string;
-  booking_time: string;
-};
+type Booking = { id: number; customer_name: string; booking_date: string; booking_time: string };
 type Service = { id: number; name: string; category_id: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
 type SelectedService = { id: number; name: string; amount: number };
@@ -23,14 +18,14 @@ export default function DesignerTransaction() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
   const [openCategory, setOpenCategory] = useState<number | null>(null);
   const [materials, setMaterials] = useState<Material[]>([{ name: "", quantity: "", unit: "g", cost: "" }]);
-  const [note, setNote] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
   const [productUsage, setProductUsage] = useState<ProductUsageItem[]>([]);
   const [showProducts, setShowProducts] = useState(false);
+  const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"new" | "history">("new");
   const [history, setHistory] = useState<any[]>([]);
@@ -79,19 +74,11 @@ export default function DesignerTransaction() {
     setSelectedServices(selectedServices.map(s => s.id === id ? { ...s, amount: parseInt(value) || 0 } : s));
   }
 
-  function addMaterial() {
-    setMaterials([...materials, { name: "", quantity: "", unit: "g", cost: "" }]);
-  }
-  function removeMaterial(i: number) {
-    setMaterials(materials.filter((_, idx) => idx !== i));
-  }
+  function addMaterial() { setMaterials([...materials, { name: "", quantity: "", unit: "g", cost: "" }]); }
+  function removeMaterial(i: number) { setMaterials(materials.filter((_, idx) => idx !== i)); }
   function updateMaterial(i: number, field: keyof Material, value: string) {
     setMaterials(materials.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
   }
-
-  const totalAmount = selectedServices.reduce((sum, s) => sum + (s.amount || 0), 0);
-  const totalMaterialCost = materials.reduce((sum, m) => sum + (parseInt(m.cost) || 0), 0);
-  const totalProductCost = productUsage.reduce((sum, p) => sum + (p.product.unit_price * p.quantity), 0);
 
   function toggleProduct(product: Product) {
     const exists = productUsage.find(p => p.product.id === product.id);
@@ -106,10 +93,13 @@ export default function DesignerTransaction() {
     setProductUsage(productUsage.map(p => p.product.id === id ? { ...p, quantity: qty } : p));
   }
 
+  const totalAmount = selectedServices.reduce((sum, s) => sum + (s.amount || 0), 0);
+  const totalMaterialCost = materials.reduce((sum, m) => sum + (parseInt(m.cost) || 0), 0);
+  const totalProductCost = productUsage.reduce((sum, p) => sum + (p.product.unit_price * p.quantity), 0);
+
   async function handleSubmit() {
     if (!designer || selectedServices.length === 0) { alert("請至少選擇一項服務"); return; }
     setSaving(true);
-
     await supabase.from("transactions").insert({
       booking_id: selectedBooking?.id || null,
       designer_id: designer.id,
@@ -118,24 +108,37 @@ export default function DesignerTransaction() {
       total_amount: totalAmount,
       note,
     });
-
     if (materials.some(m => m.name)) {
-      const mRows = materials.filter(m => m.name).map(m => ({
-        designer_id: designer.id,
-        booking_id: selectedBooking?.id || null,
-        material_name: m.name,
-        quantity: parseFloat(m.quantity) || 0,
-        unit: m.unit,
-        cost: parseInt(m.cost) || 0,
-        used_at: new Date().toISOString().split("T")[0],
-      }));
-      await supabase.from("material_usage").insert(mRows);
+      await supabase.from("material_usage").insert(
+        materials.filter(m => m.name).map(m => ({
+          designer_id: designer.id,
+          booking_id: selectedBooking?.id || null,
+          material_name: m.name,
+          quantity: parseFloat(m.quantity) || 0,
+          unit: m.unit,
+          cost: parseInt(m.cost) || 0,
+          used_at: new Date().toISOString().split("T")[0],
+        }))
+      );
     }
-
+    if (productUsage.length > 0) {
+      await supabase.from("product_usage").insert(
+        productUsage.map(pu => ({
+          designer_id: designer.id,
+          product_id: pu.product.id,
+          product_name: pu.product.name,
+          quantity: pu.quantity,
+          unit_price: pu.product.unit_price,
+          total_cost: pu.product.unit_price * pu.quantity,
+          used_at: new Date().toISOString().split("T")[0],
+        }))
+      );
+    }
     setSaving(false);
     alert("交易明細已建立！");
     setSelectedServices([]);
     setMaterials([{ name: "", quantity: "", unit: "g", cost: "" }]);
+    setProductUsage([]);
     setSelectedBooking(null);
     setNote("");
     setTab("history");
@@ -143,7 +146,6 @@ export default function DesignerTransaction() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8" }}>
-      {/* 頂部 */}
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => router.push("/designer/dashboard")} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>‹</button>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>交易明細</div>
@@ -153,7 +155,6 @@ export default function DesignerTransaction() {
         </div>
       </div>
 
-      {/* Tab */}
       <div style={{ display: "flex", gap: 6, padding: "14px 16px 8px" }}>
         {[{ key: "new", label: "新增明細" }, { key: "history", label: "交易紀錄" }].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as "new" | "history")} style={{ padding: "6px 16px", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
@@ -165,7 +166,7 @@ export default function DesignerTransaction() {
       <div style={{ padding: "0 16px 32px" }}>
         {tab === "new" ? (
           <>
-            {/* 選擇預約 */}
+            {/* 連結預約 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 10 }}>連結預約（選填）</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -181,7 +182,7 @@ export default function DesignerTransaction() {
               </div>
             </div>
 
-            {/* 服務項目（從資料庫） */}
+            {/* 服務項目 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 10 }}>選擇服務項目</div>
               {categories.map((cat) => {
@@ -210,15 +211,9 @@ export default function DesignerTransaction() {
                                 </div>
                               </div>
                               {picked && (
-                                <div style={{ padding: "6px 12px 10px", background: cat.color, borderTop: "0.5px solid " + cat.text_color + "20" }}>
+                                <div style={{ padding: "6px 12px 10px", background: cat.color, borderTop: `0.5px solid ${cat.text_color}20` }}>
                                   <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>實際收費金額</div>
-                                  <input
-                                    value={picked.amount || ""}
-                                    onChange={(e) => updateAmount(svc.id, e.target.value)}
-                                    placeholder="輸入金額"
-                                    type="number"
-                                    style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                                  />
+                                  <input value={picked.amount || ""} onChange={(e) => updateAmount(svc.id, e.target.value)} placeholder="輸入金額" type="number" style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                                 </div>
                               )}
                             </div>
@@ -229,36 +224,12 @@ export default function DesignerTransaction() {
                   </div>
                 );
               })}
-
               {selectedServices.length > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, padding: "10px 0", borderTop: "0.5px solid #F1EFE8" }}>
                   <span style={{ fontSize: 13, color: "#888780" }}>服務小計</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${totalAmount.toLocaleString()}</span>
                 </div>
               )}
-            </div>
-
-            {/* 材料費 */}
-            <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>自領材料（選填）</div>
-              <div style={{ fontSize: 11, color: "#888780", marginBottom: 10 }}>染膏、雙氧水等耗材</div>
-              {materials.map((m, i) => (
-                <div key={i} style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
-                    <input value={m.name} onChange={(e) => updateMaterial(i, "name", e.target.value)} placeholder="材料名稱" style={{ flex: 2, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
-                    <input value={m.quantity} onChange={(e) => updateMaterial(i, "quantity", e.target.value)} placeholder="用量" style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
-                    <select value={m.unit} onChange={(e) => updateMaterial(i, "unit", e.target.value)} style={{ padding: "8px 6px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none" }}>
-                      <option value="g">g</option>
-                      <option value="ml">ml</option>
-                      <option value="支">支</option>
-                      <option value="個">個</option>
-                    </select>
-                    {materials.length > 1 && <button onClick={() => removeMaterial(i)} style={{ background: "#FCEBEB", border: "none", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#A32D2D", fontSize: 14 }}>✕</button>}
-                  </div>
-                  <input value={m.cost} onChange={(e) => updateMaterial(i, "cost", e.target.value)} placeholder="材料成本（元）" type="number" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-                </div>
-              ))}
-              <button onClick={addMaterial} style={{ width: "100%", padding: "8px 0", background: "#F1EFE8", border: "0.5px dashed #D3D1C7", borderRadius: 8, fontSize: 12, color: "#5F5E5A", cursor: "pointer" }}>＋ 新增材料</button>
             </div>
 
             {/* 自領商品 */}
@@ -315,6 +286,29 @@ export default function DesignerTransaction() {
               )}
             </div>
 
+            {/* 自領材料 */}
+            <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>自領耗材（選填）</div>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 10 }}>染膏、雙氧水等耗材</div>
+              {materials.map((m, i) => (
+                <div key={i} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                    <input value={m.name} onChange={(e) => updateMaterial(i, "name", e.target.value)} placeholder="材料名稱" style={{ flex: 2, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+                    <input value={m.quantity} onChange={(e) => updateMaterial(i, "quantity", e.target.value)} placeholder="用量" style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+                    <select value={m.unit} onChange={(e) => updateMaterial(i, "unit", e.target.value)} style={{ padding: "8px 6px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none" }}>
+                      <option value="g">g</option>
+                      <option value="ml">ml</option>
+                      <option value="支">支</option>
+                      <option value="個">個</option>
+                    </select>
+                    {materials.length > 1 && <button onClick={() => removeMaterial(i)} style={{ background: "#FCEBEB", border: "none", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#A32D2D", fontSize: 14 }}>✕</button>}
+                  </div>
+                  <input value={m.cost} onChange={(e) => updateMaterial(i, "cost", e.target.value)} placeholder="材料成本（元）" type="number" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+              ))}
+              <button onClick={addMaterial} style={{ width: "100%", padding: "8px 0", background: "#F1EFE8", border: "0.5px dashed #D3D1C7", borderRadius: 8, fontSize: 12, color: "#5F5E5A", cursor: "pointer" }}>＋ 新增耗材</button>
+            </div>
+
             {/* 備註 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 14, border: "0.5px solid #D3D1C7" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>備註（選填）</div>
@@ -327,21 +321,21 @@ export default function DesignerTransaction() {
                 <span style={{ fontSize: 12, color: "#888780" }}>服務收入</span>
                 <span style={{ fontSize: 13, color: "#C8C4F8" }}>${totalAmount.toLocaleString()}</span>
               </div>
-              {totalMaterialCost > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "#888780" }}>材料成本</span>
-                  <span style={{ fontSize: 13, color: "#F09595" }}>-${totalMaterialCost.toLocaleString()}</span>
-                </div>
-              )}
               {totalProductCost > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: "#888780" }}>自領商品</span>
                   <span style={{ fontSize: 13, color: "#F09595" }}>-${totalProductCost.toLocaleString()}</span>
                 </div>
               )}
+              {totalMaterialCost > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "#888780" }}>耗材成本</span>
+                  <span style={{ fontSize: 13, color: "#F09595" }}>-${totalMaterialCost.toLocaleString()}</span>
+                </div>
+              )}
               <div style={{ borderTop: "0.5px solid #4A4580", marginTop: 6, paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>淨收入</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: "#C8C4F8" }}>${(totalAmount - totalMaterialCost - totalProductCost).toLocaleString()}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#C8C4F8" }}>${(totalAmount - totalProductCost - totalMaterialCost).toLocaleString()}</span>
               </div>
             </div>
 
