@@ -53,7 +53,7 @@ export default function Step1() {
           const isSelected = selected?.id === 0;
           return (
             <div
-              onClick={() => setDesigner({ id: 0, name: "不指定", nickname: "依時間安排", initials: "✦", style: "依照時間由店家安排", ig: "", bg_color: "#F1EFE8", text_color: "#5F5E5A", work_hours: [] })}
+              onClick={() => setDesigner({ id: 0, name: "不指定", nickname: "依時間安排", initials: "✦", style: "依照時間由店家安排", ig: "", bg_color: "#F1EFE8", text_color: "#5F5E5A", work_hours: ["10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00"] })}
               style={{
                 background: isSelected ? "#EEEDFE" : "#fff",
                 border: "1.5px solid " + (isSelected ? "#534AB7" : "#D3D1C7"),

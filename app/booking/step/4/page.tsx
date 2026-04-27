@@ -30,7 +30,7 @@ export default function Step4() {
     if (!name || !phone) { alert("請填寫姓名與手機號碼"); return; }
     setSubmitting(true);
     const { error } = await supabase.from("bookings").insert({
-      designer_id: designer!.id,
+      designer_id: designer!.id === 0 ? null : designer!.id,
       service_ids: serviceIds,
       booking_date: date,
       booking_time: time,
