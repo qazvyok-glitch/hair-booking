@@ -21,25 +21,68 @@ type ServiceCategory = {
   items: Service[];
 };
 
+type PriceItem = {
+  id: number;
+  category: string;
+  name: string;
+  price_range: string;
+};
+
+function PriceSheet({ onClose, priceData }: { onClose: () => void; priceData: PriceItem[] }) {
+  const categories = [...new Set(priceData.map((p) => p.category))];
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 390, background: "#fff", borderRadius: "20px 20px 0 0", maxHeight: "85vh", overflowY: "auto", padding: "20px 16px 32px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "#2C2C2A" }}>價目表</div>
+            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>染、燙、護髮依髮長及髮量收費</div>
+          </div>
+          <button onClick={onClose} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 10, padding: "8px 12px", marginBottom: 14, fontSize: 11, color: "#633806" }}>
+          S 耳上 ／ M 下巴上 ／ L 胸上 ／ XL 胸下
+        </div>
+        {categories.map((cat) => (
+          <div key={cat} style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, borderBottom: "1px solid #D3D1C7", paddingBottom: 6, marginBottom: 8, color: "#2C2C2A" }}>{cat}</div>
+            {priceData.filter((p) => p.category === cat).map((item) => (
+              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "0.5px solid #F1EFE8" }}>
+                <div style={{ fontSize: 12, color: "#2C2C2A", flex: 1 }}>{item.name}</div>
+                <div style={{ fontSize: 12, color: "#534AB7", fontWeight: 500, marginLeft: 8 }}>{item.price_range}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div style={{ textAlign: "center", fontSize: 11, color: "#888780" }}>消費滿 $2000 以上，歡迎使用 LINE PAY</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Step2() {
   const router = useRouter();
   const { designer, serviceIds, toggleService } = useBookingStore();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPrice, setShowPrice] = useState(false);
+  const [priceData, setPriceData] = useState<PriceItem[]>([]);
 
   useEffect(() => {
     if (!designer) { router.push("/booking/step/1"); return; }
     Promise.all([
       supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
-    ]).then(([{ data: cats }, { data: svcs }]) => {
+      supabase.from("price_items").select("*").order("sort_order"),
+    ]).then(([{ data: cats }, { data: svcs }, { data: prices }]) => {
       if (cats && svcs) {
         setCategories(cats.map((c: ServiceCategory) => ({
           ...c,
           items: svcs.filter((s: Service) => s.category_id === c.id),
         })));
       }
+      if (prices) setPriceData(prices);
       setLoading(false);
     });
   }, [designer, router]);
@@ -54,7 +97,11 @@ export default function Step2() {
 
   return (
     <div style={{ padding: "20px 16px 120px" }}>
-      <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>選擇服務</div>
+      {showPrice && <PriceSheet onClose={() => setShowPrice(false)} priceData={priceData} />}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A" }}>選擇服務</div>
+        <button onClick={() => setShowPrice(true)} style={{ fontSize: 11, color: "#534AB7", background: "#EEEDFE", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>查看價目表 →</button>
+      </div>
       <div style={{ fontSize: 12, color: "#888780", marginBottom: 20 }}>可複選多項服務</div>
 
       {categories.map((cat) => {
