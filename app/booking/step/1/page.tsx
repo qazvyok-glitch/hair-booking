@@ -84,14 +84,14 @@ export default function Step1() {
                 {d.style}
               </div>
 
-              <div style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+              <a href={"https://www.instagram.com/" + d.ig} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, textDecoration: "none" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="2" y="2" width="20" height="20" rx="6" fill="#E1306C" />
                   <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" />
                   <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
                 </svg>
                 <span style={{ fontSize: 11, color: "#888780" }}>作品集</span>
-              </div>
+              </a>
 
               {isSelected ? (
                 <div style={{
