@@ -81,6 +81,7 @@ export default function DesignerDashboard() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => router.push("/designer/transaction")} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>交易明細</button>
           <button onClick={() => router.push("/designer/schedule")} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>排班設定</button>
           <button onClick={logout} style={{ background: "#333", color: "#888780", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>登出</button>
         </div>
