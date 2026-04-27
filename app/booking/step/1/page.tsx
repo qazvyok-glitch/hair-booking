@@ -48,6 +48,47 @@ export default function Step1() {
       <div style={{ fontSize: 12, color: "#888780", marginBottom: 20 }}>請選擇您想預約的設計師</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        {/* 不指定選項 */}
+        {(() => {
+          const isSelected = selected?.id === 0;
+          return (
+            <div
+              onClick={() => setDesigner({ id: 0, name: "不指定", nickname: "依時間安排", initials: "✦", style: "依照時間由店家安排", ig: "", bg_color: "#F1EFE8", text_color: "#5F5E5A", work_hours: [] })}
+              style={{
+                background: isSelected ? "#EEEDFE" : "#fff",
+                border: "1.5px solid " + (isSelected ? "#534AB7" : "#D3D1C7"),
+                borderRadius: 14,
+                padding: "16px 12px",
+                textAlign: "center",
+                cursor: "pointer",
+                boxShadow: isSelected ? "0 4px 16px rgba(83,74,183,0.15)" : "none",
+                gridColumn: "1 / -1",
+              }}
+            >
+              <div style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: "#F1EFE8", color: "#5F5E5A",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 22, fontWeight: 600, margin: "0 auto 8px",
+                border: isSelected ? "2.5px solid #534AB7" : "2px solid #D3D1C7",
+              }}>✦</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>不指定設計師</div>
+              <div style={{ fontSize: 11, color: "#888780", margin: "4px 0", lineHeight: 1.5 }}>
+                依照我的時間，請店家幫我安排
+              </div>
+              {isSelected ? (
+                <div style={{
+                  marginTop: 8, background: "#534AB7", color: "#fff",
+                  borderRadius: 20, padding: "3px 12px",
+                  fontSize: 11, fontWeight: 600, display: "inline-block",
+                }}>
+                  已選擇 ✓
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
+
         {designers.map((d) => {
           const isSelected = selected?.id === d.id;
           return (
