@@ -69,13 +69,13 @@ export default function Home() {
               color: "#fff",
               border: "none",
               borderRadius: 14,
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: 700,
               cursor: "pointer",
               letterSpacing: "0.04em",
             }}
           >
-            ✂ 立即預約
+            立即預約
           </button>
 
           <button
@@ -87,7 +87,7 @@ export default function Home() {
               color: "rgba(255,255,255,0.5)",
               border: "1.5px solid rgba(255,255,255,0.15)",
               borderRadius: 14,
-              fontSize: 14,
+              fontSize: 18,
               fontWeight: 600,
               cursor: "pointer",
             }}
