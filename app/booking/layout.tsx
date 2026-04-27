@@ -70,7 +70,7 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
         )}
 
         {/* 頁面內容 */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ flex: 1, overflowY: "auto", background: "#fff" }}>
           {children}
         </div>
 

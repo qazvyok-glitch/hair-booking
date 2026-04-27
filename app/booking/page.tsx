@@ -1,13 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-type BookingInfo = {
-  designerName: string;
-  designerNickname: string;
-  date: string;
-  time: string;
-};
+import { useBookingStore } from "../../store/bookingStore";
 
 function CalendarIcon() {
   return (
@@ -23,16 +16,7 @@ function CalendarIcon() {
 
 export default function BookingSuccess() {
   const router = useRouter();
-  const [booking, setBooking] = useState<BookingInfo | null>(null);
-
-  useEffect(() => {
-    const saved = sessionStorage.getItem("lastBooking");
-    if (saved) setBooking(JSON.parse(saved));
-  }, []);
-
-  const designer = booking ? { name: booking.designerName, nickname: booking.designerNickname } : null;
-  const date = booking?.date || null;
-  const time = booking?.time || null;
+  const { designer, serviceIds, date, time } = useBookingStore();
 
   function downloadICS() {
     if (!date || !time) return;
@@ -74,17 +58,21 @@ export default function BookingSuccess() {
   }
 
   return (
-    <div style={{ padding: "0" }}>
+    <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", justifyContent: "center", padding: "24px 16px" }}>
       <div style={{ width: "100%", maxWidth: 390 }}>
 
+        {/* 成功動畫區 */}
         <div style={{ textAlign: "center", padding: "32px 0 24px" }}>
           <div style={{ fontSize: 64, marginBottom: 12 }}>🌸</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#2C2C2A", marginBottom: 6 }}>預約成功！</div>
           <div style={{ fontSize: 13, color: "#888780" }}>我們會盡快與您確認預約時間</div>
         </div>
 
+        {/* 預約資訊卡 */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "20px 16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 14 }}>📋 預約資訊</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>📋</span> 預約資訊
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
               <span style={{ color: "#888780" }}>設計師</span>
@@ -105,11 +93,12 @@ export default function BookingSuccess() {
             <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
               <span style={{ color: "#888780" }}>地址</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>台南市中西區西門路二段10號</span>
+              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>西門路二段10號</span>
             </div>
           </div>
         </div>
 
+        {/* 提醒功能 */}
         <div style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 12 }}>🔔 設定提醒</div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -129,6 +118,7 @@ export default function BookingSuccess() {
           </div>
         </div>
 
+        {/* 截圖提示 */}
         <div style={{ background: "#1A1A1A", borderRadius: 14, padding: "14px 16px", marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#C8A45A", marginBottom: 6 }}>📸 截圖保留預約資訊</div>
           <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.8 }}>

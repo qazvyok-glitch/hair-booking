@@ -43,8 +43,14 @@ export default function Step4() {
       setSubmitting(false);
       return;
     }
-    reset();
+    sessionStorage.setItem("lastBooking", JSON.stringify({
+      designerName: designer!.name,
+      designerNickname: designer!.nickname,
+      date,
+      time,
+    }));
     router.push("/booking/success");
+    setTimeout(() => reset(), 1000);
   }
 
   return (
