@@ -1,101 +1,75 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabase";
 
 export default function Home() {
   const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setUser(session.user);
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#1A1A1A", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: "#fff", fontSize: 14 }}>載入中...</div>
+    </div>
+  );
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#F1EFE8",
-      display: "flex",
-      justifyContent: "center",
-    }}>
-      <div style={{
-        width: "100%",
-        maxWidth: 390,
-        background: "#1A1A1A",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "100vh",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "0 28px",
-        gap: 24,
-      }}>
+    <div style={{ minHeight: "100vh", background: "#1A1A1A", display: "flex", justifyContent: "center", alignItems: "center", padding: "24px 16px" }}>
+      <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column", alignItems: "center", border: "1.5px solid #fff", borderRadius: 24, padding: "40px 24px" }}>
 
-        {/* Logo */}
-        <div style={{
-          width: 100, height: 100, borderRadius: "50%",
-          overflow: "hidden", border: "2px solid rgba(255,255,255,0.15)",
-        }}>
-          <img src="/logo.png" alt="logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-        </div>
+        {/* LOGO */}
+        <img src="/logo.png" alt="logo" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", marginBottom: 20, border: "2px solid #fff" }} />
 
-        {/* 品牌名稱 */}
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 32, fontWeight: 700, color: "#fff", letterSpacing: "0.04em" }}>
-            Bing Cherry
-          </div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", marginTop: 6, letterSpacing: "0.14em" }}>
-            HAIR SALON · 台南
-          </div>
-        </div>
+        {/* 店名 */}
+        <div style={{ fontSize: 22, fontWeight: 700, color: "#fff", marginBottom: 6, textAlign: "center" }}>Bing Cherry Hair Salon</div>
+        <div style={{ fontSize: 13, color: "#888780", marginBottom: 40, textAlign: "center" }}>台南市中西區西門路二段10號</div>
 
-        {/* 標語 */}
-        <div style={{
-          background: "rgba(255,255,255,0.06)",
-          borderRadius: 14,
-          padding: "16px 24px",
-          textAlign: "center",
-          width: "100%",
-        }}>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.75)", lineHeight: 1.8 }}>
-            專屬於你的造型體驗
-          </div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>
-            由專業設計師為您量身打造
-          </div>
-        </div>
+        {/* 按鈕區 */}
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
 
-        {/* 立即預約按鈕 */}
-        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
+          {/* 立即預約 */}
           <button
             onClick={() => router.push("/booking/step/1")}
-            style={{
-              width: "100%",
-              padding: "16px 0",
-              background: "#534AB7",
-              color: "#fff",
-              border: "none",
-              borderRadius: 14,
-              fontSize: 18,
-              fontWeight: 700,
-              cursor: "pointer",
-              letterSpacing: "0.04em",
-            }}
+            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
           >
             立即預約
           </button>
 
+          {user ? (
+            <button
+              onClick={() => router.push("/member/profile")}
+              style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
+            >
+              {user.user_metadata?.full_name || "會員中心"}
+            </button>
+          ) : (
+            <button
+              onClick={() => router.push("/member/login")}
+              style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
+            >
+              會員登入
+            </button>
+          )}
+
           <button
             onClick={() => router.push("/about")}
-            style={{
-              width: "100%",
-              padding: "14px 0",
-              background: "transparent",
-              color: "rgba(255,255,255,0.5)",
-              border: "1.5px solid rgba(255,255,255,0.15)",
-              borderRadius: 14,
-              fontSize: 18,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
+            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
           >
             關於我們
           </button>
         </div>
 
+        <div style={{ marginTop: 32, fontSize: 11, color: "#555", textAlign: "center" }}>
+          © 2024 Bing Cherry Hair Salon
+        </div>
       </div>
     </div>
   );
