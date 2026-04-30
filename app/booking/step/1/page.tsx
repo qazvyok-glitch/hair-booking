@@ -16,11 +16,23 @@ type Designer = {
   work_hours: string[];
 };
 
+type PriceItem = { name: string; price: number };
+type PriceCategory = { cat: string; items: PriceItem[] };
+
+const defaultPrices: PriceCategory[] = [
+  { cat: "洗髮", items: [{ name: "精油髮浴洗", price: 400 }] },
+  { cat: "頭皮護理", items: [{ name: "頭皮深層護理", price: 800 }, { name: "頭皮保濕療程", price: 600 }] },
+  { cat: "剪髮", items: [{ name: "女仕剪髮", price: 350 }, { name: "男仕剪髮", price: 250 }] },
+  { cat: "燙髮", items: [{ name: "一般燙髮", price: 1800 }, { name: "數位燙", price: 2500 }] },
+  { cat: "染髮", items: [{ name: "全頭染", price: 1500 }, { name: "挑染/漸層", price: 2000 }] },
+];
+
 export default function Step1() {
   const router = useRouter();
   const { designer: selected, setDesigner } = useBookingStore();
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [priceModal, setPriceModal] = useState<Designer | null>(null);
 
   useEffect(() => {
     supabase
@@ -125,14 +137,34 @@ export default function Step1() {
                 {d.style}
               </div>
 
-              <a href={"https://www.instagram.com/" + d.ig} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, textDecoration: "none" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="2" y="2" width="20" height="20" rx="6" fill="#E1306C" />
-                  <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" />
-                  <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
-                </svg>
-                <span style={{ fontSize: 11, color: "#888780" }}>作品集</span>
-              </a>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6 }}>
+                <a
+                  href={"https://www.instagram.com/" + d.ig}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ display: "flex", alignItems: "center", gap: 4, textDecoration: "none" }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="2" y="2" width="20" height="20" rx="6" fill="#E1306C" />
+                    <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" />
+                    <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
+                  </svg>
+                  <span style={{ fontSize: 11, color: "#888780" }}>作品集</span>
+                </a>
+
+                <span style={{ color: "#D3D1C7", fontSize: 11 }}>|</span>
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); setPriceModal(d); }}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 11, color: "#534AB7", fontWeight: 600, padding: 0,
+                  }}
+                >
+                  💰 價目表
+                </button>
+              </div>
 
               {isSelected ? (
                 <div style={{
@@ -147,6 +179,75 @@ export default function Step1() {
           );
         })}
       </div>
+
+      {/* 價目表 Modal */}
+      {priceModal && (
+        <div
+          onClick={() => setPriceModal(null)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+            zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff", borderRadius: "22px 22px 0 0",
+              padding: "24px 20px 40px", width: "100%", maxWidth: 390,
+              maxHeight: "75vh", overflowY: "auto",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "#2C2C2A" }}>{priceModal.name} 的價目表</div>
+                {priceModal.nickname && (
+                  <div style={{ fontSize: 12, color: "#7B6FD4", marginTop: 2 }}>{priceModal.nickname}</div>
+                )}
+              </div>
+              <button
+                onClick={() => setPriceModal(null)}
+                style={{
+                  width: 30, height: 30, borderRadius: "50%", background: "#F1EFE8",
+                  border: "none", fontSize: 16, cursor: "pointer", color: "#5F5E5A",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >✕</button>
+            </div>
+
+            {/* Price List */}
+            {defaultPrices.map((cat) => (
+              <div key={cat.cat}>
+                <div style={{
+                  fontSize: 12, fontWeight: 600, color: "#888780",
+                  textTransform: "uppercase", letterSpacing: "0.5px",
+                  margin: "16px 0 8px", borderBottom: "1px solid #F1EFE8",
+                  paddingBottom: 6,
+                }}>
+                  {cat.cat}
+                </div>
+                {cat.items.map((item) => (
+                  <div
+                    key={item.name}
+                    style={{
+                      display: "flex", justifyContent: "space-between",
+                      alignItems: "center", padding: "10px 0",
+                      borderBottom: "1px solid #F9F9F7",
+                    }}
+                  >
+                    <span style={{ fontSize: 14, color: "#2C2C2A" }}>{item.name}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>NT$ {item.price}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <div style={{ fontSize: 11, color: "#B4B2A9", textAlign: "center", marginTop: 20 }}>
+              ※ 實際價格依髮長、髮量調整
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
