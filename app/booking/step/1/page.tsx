@@ -41,7 +41,14 @@ export default function Step1() {
       .eq("is_active", true)
       .order("id")
       .then(({ data }) => {
-        if (data) setDesigners(data);
+        if (data) {
+          const sorted = [...data].sort((a, b) => {
+            if (a.name === "Alisa") return 1;
+            if (b.name === "Alisa") return -1;
+            return 0;
+          });
+          setDesigners(sorted);
+        }
         setLoading(false);
       });
   }, []);
