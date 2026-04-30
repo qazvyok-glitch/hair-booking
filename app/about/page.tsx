@@ -141,33 +141,33 @@ export default function About() {
         <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
           <a href="/" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ fontSize: 22 }}>🏠</span>
+              <span style={{ fontSize: 24 }}>🏠</span>
             </div>
-            <span style={{ fontSize: 10, color: "#5F5E5A" }}>首頁</span>
+            <span style={{ fontSize: 10, color: "#534AB7" }}>首頁</span>
           </a>
           <a href="/booking/step/1" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="4" width="18" height="18" rx="2" fill="#EEEDFE" stroke="#534AB7" strokeWidth="1.8"/>
-                <path d="M16 2v4M8 2v4M3 10h18" stroke="#534AB7" strokeWidth="1.8" strokeLinecap="round"/>
-                <circle cx="8" cy="14" r="1.2" fill="#534AB7"/>
-                <circle cx="12" cy="14" r="1.2" fill="#534AB7"/>
-                <circle cx="16" cy="14" r="1.2" fill="#534AB7"/>
-                <circle cx="8" cy="18" r="1.2" fill="#534AB7"/>
-                <circle cx="12" cy="18" r="1.2" fill="#534AB7"/>
+                <rect x="3" y="4" width="18" height="18" rx="2" fill="#ffffff" stroke="#000000" strokeWidth="1.8"/>
+                <path d="M16 2v4M8 2v4M3 10h18" stroke="#000000" strokeWidth="1.8" strokeLinecap="round"/>
+                <circle cx="8" cy="14" r="1.2" fill="#000000"/>
+                <circle cx="12" cy="14" r="1.2" fill="#000000"/>
+                <circle cx="16" cy="14" r="1.2" fill="#000000"/>
+                <circle cx="8" cy="18" r="1.2" fill="#000000"/>
+                <circle cx="12" cy="18" r="1.2" fill="#000000"/>
               </svg>
             </div>
-            <span style={{ fontSize: 10, color: "#5F5E5A" }}>預約</span>
+            <span style={{ fontSize: 10, color: "#534AB7" }}>預約</span>
           </a>
           <a href="/member/login" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="11" fill="#F1EFE8" stroke="#2C2C2A" strokeWidth="1.5"/>
-                <circle cx="12" cy="9" r="3.5" fill="#2C2C2A"/>
-                <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" fill="#2C2C2A"/>
+                <circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#000000" strokeWidth="1.5"/>
+                <circle cx="12" cy="9" r="3.5" fill="#000000"/>
+                <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" fill="#000000"/>
               </svg>
             </div>
-            <span style={{ fontSize: 10, color: "#5F5E5A" }}>會員</span>
+            <span style={{ fontSize: 10, color: "#534AB7" }}>會員</span>
           </a>
           <a href="/about" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
