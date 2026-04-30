@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import BottomNav from "../components/BottomNav";
 
 type DesignerSession = { id: number; name: string; nickname: string };
 
@@ -85,7 +86,7 @@ export default function DesignerSchedule() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1EFE8" }}>
+    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
       {/* 頂部 */}
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => router.push("/designer/dashboard")} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>‹</button>
@@ -191,6 +192,7 @@ export default function DesignerSchedule() {
           </div>
         )}
       </div>
+      <BottomNav current="schedule" />
     </div>
   );
 }

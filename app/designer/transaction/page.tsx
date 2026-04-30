@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import BottomNav from "../components/BottomNav";
 
 type DesignerSession = { id: number; name: string; nickname: string };
 type Booking = { id: number; customer_name: string; booking_date: string; booking_time: string };
@@ -145,7 +146,7 @@ export default function DesignerTransaction() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1EFE8" }}>
+    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => router.push("/designer/dashboard")} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>‹</button>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>交易明細</div>
@@ -371,6 +372,7 @@ export default function DesignerTransaction() {
           </>
         )}
       </div>
+      <BottomNav current="transaction" />
     </div>
   );
 }
