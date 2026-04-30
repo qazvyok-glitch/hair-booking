@@ -143,7 +143,7 @@ export default function About() {
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <span style={{ fontSize: 24 }}>🏠</span>
             </div>
-            <span style={{ fontSize: 10, color: "#534AB7" }}>首頁</span>
+            <span style={{ fontSize: 12, color: "#1500ff" }}>首頁</span>
           </a>
           <a href="/booking/step/1" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -157,7 +157,7 @@ export default function About() {
                 <circle cx="12" cy="18" r="1.2" fill="#000000"/>
               </svg>
             </div>
-            <span style={{ fontSize: 10, color: "#534AB7" }}>預約</span>
+            <span style={{ fontSize: 12, color: "#1500ff" }}>預約</span>
           </a>
           <a href="/member/login" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -167,13 +167,13 @@ export default function About() {
                 <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" fill="#000000"/>
               </svg>
             </div>
-            <span style={{ fontSize: 10, color: "#534AB7" }}>會員</span>
+            <span style={{ fontSize: 12, color: "#1500ff" }}>會員</span>
           </a>
           <a href="/about" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
               <img src="/logo.png" alt="logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
-            <span style={{ fontSize: 10, color: "#534AB7" }}>關於我們</span>
+            <span style={{ fontSize: 12, color: "#1500ff" }}>關於我們</span>
           </a>
         </div>
 
