@@ -127,7 +127,12 @@ export default function Step2() {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#2C2C2A" }}>{cat.label}</span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "#2C2C2A" }}>
+                  {cat.name}
+                  <span style={{ fontSize: 11, color: "#888780", marginLeft: 6 }}>
+                    {{"洗髮":"Shampoo","剪髮":"Haircut","燙髮":"Perm","染髮":"Color","護髮":"Treatment","頭皮":"Scalp Care"}[cat.name] || ""}
+                  </span>
+                </span>
                 {pickedCount > 0 ? (
                   <span style={{ fontSize: 10, background: cat.text_color, color: "#fff", borderRadius: 10, padding: "1px 8px" }}>
                     {pickedCount} 項
