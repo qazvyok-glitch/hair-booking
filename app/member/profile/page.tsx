@@ -35,8 +35,15 @@ export default function MemberProfile() {
       setUser(session.user);
       setEditName(session.user.user_metadata?.full_name || "");
 
+      const { data: customerData } = await supabase
+        .from("customers")
+        .select("phone")
+        .eq("id", session.user.id)
+        .single();
+      if (customerData?.phone) setEditPhone(customerData.phone);
+
       const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
-        supabase.from("bookings").select("*").eq("customer_phone", session.user.email).order("booking_date", { ascending: false }),
+        supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false }),
         supabase.from("designers").select("id, name, nickname"),
         supabase.from("services").select("id, name"),
       ]);
@@ -75,9 +82,8 @@ export default function MemberProfile() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8" }}>
-      {/* 頂部 */}
       <div style={{ background: "#fff", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "0.5px solid #D3D1C7" }}>
-        <a href="/" style={{ fontSize: 14, color: "#534AB7", textDecoration: "none" }}>← 預約</a>
+        <a href="/" style={{ fontSize: 14, color: "#534AB7", textDecoration: "none" }}>← 首頁</a>
         <span style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>會員中心</span>
         <button onClick={handleLogout} style={{ fontSize: 12, color: "#888780", background: "none", border: "none", cursor: "pointer" }}>登出</button>
       </div>
@@ -109,9 +115,11 @@ export default function MemberProfile() {
               <button
                 onClick={async () => {
                   setSaving(true);
-                  await supabase.auth.updateUser({ data: { full_name: editName, phone: editPhone } });
+                  await supabase.from("customers").upsert({ id: user.id, name: editName, phone: editPhone, email: user.email });
+                  await supabase.auth.updateUser({ data: { full_name: editName } });
                   setSaving(false);
                   setShowEdit(false);
+                  setUser((prev: any) => ({ ...prev, user_metadata: { ...prev.user_metadata, full_name: editName } }));
                 }}
                 style={{ width: "100%", padding: "9px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
               >
@@ -121,9 +129,12 @@ export default function MemberProfile() {
           )}
         </div>
 
-        {/* 預約紀錄 */}
+        {/* 預約紀錄 Tab */}
         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          {[{ key: "upcoming", label: `即將到來 (${upcomingBookings.length})` }, { key: "past", label: `歷史紀錄 (${pastBookings.length})` }].map((t) => (
+          {[
+            { key: "upcoming", label: `即將到來 (${upcomingBookings.length})` },
+            { key: "past", label: `歷史紀錄 (${pastBookings.length})` }
+          ].map((t) => (
             <button key={t.key} onClick={() => setTab(t.key as "upcoming" | "past")} style={{ flex: 1, padding: "8px 0", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
               {t.label}
             </button>
@@ -156,7 +167,7 @@ export default function MemberProfile() {
           ))
         )}
 
-        <div style={{ textAlign: "center", marginTop: 16 }}>
+        <div style={{ textAlign: "center", marginTop: 16, paddingBottom: 32 }}>
           <a href="/booking/step/1" style={{ display: "inline-block", padding: "12px 32px", background: "#534AB7", color: "#fff", borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
             ＋ 新增預約
           </a>

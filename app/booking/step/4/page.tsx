@@ -47,6 +47,7 @@ export default function Step4() {
   async function handleSubmit() {
     if (!name || !phone) { alert("請填寫姓名與手機號碼"); return; }
     setSubmitting(true);
+    const { data: { session } } = await supabase.auth.getSession();
     const { error } = await supabase.from("bookings").insert({
       designer_id: designer!.id === 0 ? null : designer!.id,
       service_ids: serviceIds,
@@ -55,6 +56,7 @@ export default function Step4() {
       customer_name: name,
       customer_phone: phone,
       note: note,
+      user_id: session?.user?.id || null,
     });
     if (error) {
       alert("預約失敗，請再試一次");
