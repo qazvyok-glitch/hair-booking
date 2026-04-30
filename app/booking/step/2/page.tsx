@@ -81,10 +81,20 @@ export default function Step2() {
       supabase.from("price_items").select("*").order("sort_order"),
     ]).then(([{ data: cats }, { data: svcs }, { data: prices }]) => {
       if (cats && svcs) {
-        setCategories(cats.map((c: ServiceCategory) => ({
-          ...c,
-          items: svcs.filter((s: Service) => s.category_id === c.id),
-        })));
+        setCategories(cats.map((c: ServiceCategory) => {
+          const allItems = svcs.filter((s: Service) => s.category_id === c.id);
+          // 合併 S/M/L/XL 變體，只顯示基本名稱
+          const seen = new Set<string>();
+          const dedupedItems = allItems.reduce((acc: Service[], item: Service) => {
+            const baseName = item.name.replace(/\s*\([SMLX]+\)$/, '').trim();
+            if (!seen.has(baseName)) {
+              seen.add(baseName);
+              acc.push({ ...item, name: baseName });
+            }
+            return acc;
+          }, []);
+          return { ...c, items: dedupedItems };
+        }));
       }
       if (prices) setPriceData(prices);
       setLoading(false);
