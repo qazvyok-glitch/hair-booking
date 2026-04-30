@@ -37,7 +37,13 @@ export default function Home() {
 
           {/* 立即預約 */}
           <button
-            onClick={() => router.push("/booking/step/1")}
+            onClick={() => {
+              if (user) {
+                router.push("/booking/step/1");
+              } else {
+                router.push("/member/login");
+              }
+            }}
             style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
           >
             立即預約
