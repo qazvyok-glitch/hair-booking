@@ -6,8 +6,8 @@ import { useBookingStore } from "../../../../store/bookingStore";
 
 export default function Step4() {
   const router = useRouter();
-  const { phone, designer, serviceIds, date, time, reset } = useBookingStore();
-  const [name, setName] = useState("");
+  const { phone, customerName, designer, serviceIds, date, time, reset } = useBookingStore();
+  const [name, setName] = useState(customerName);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,7 +55,20 @@ export default function Step4() {
   return (
     <div style={{ padding: "20px 16px 120px" }}>
       <div style={{ fontSize: 20, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>確認預約</div>
-      <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 20 }}>請確認資訊後送出</div>
+      <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 16 }}>請確認資訊後送出</div>
+
+      {/* 回頭客歡迎提示 */}
+      {customerName ? (
+        <div style={{
+          background: "#f0e9e0", border: "0.5px solid #d9b8b0",
+          borderRadius: 12, padding: "10px 14px", marginBottom: 16,
+          display: "flex", alignItems: "center", gap: 8,
+          fontSize: 13, color: "#7a1f1f",
+        }}>
+          <span style={{ fontSize: 18 }}>🌸</span>
+          <span>歡迎回來，<strong>{customerName}</strong>！已為您帶入姓名。</span>
+        </div>
+      ) : null}
 
       {/* 預約摘要 */}
       <div style={{

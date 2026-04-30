@@ -1,19 +1,42 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../../lib/supabase";
 import { useBookingStore } from "../../store/bookingStore";
 
 export default function BookingPhone() {
   const router = useRouter();
-  const { setPhone } = useBookingStore();
+  const { setPhone, setCustomerName } = useBookingStore();
   const [value, setValue] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleContinue() {
+  async function handleContinue() {
     const cleaned = value.replace(/\D/g, "");
     if (cleaned.length < 8) { alert("請輸入有效的手機號碼"); return; }
+
+    setLoading(true);
     setPhone(value);
+
+    // 查詢是否為回頭客
+    const { data } = await supabase
+      .from("bookings")
+      .select("customer_name")
+      .eq("customer_phone", value)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (data?.customer_name) {
+      setCustomerName(data.customer_name);
+    } else {
+      setCustomerName("");
+    }
+
+    setLoading(false);
     router.push("/booking/step/1");
   }
+
+  const isValid = value.replace(/\D/g, "").length >= 8;
 
   return (
     <div style={{ padding: "32px 20px 120px" }}>
@@ -45,7 +68,7 @@ export default function BookingPhone() {
         placeholder="0912-345-678"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") handleContinue(); }}
+        onKeyDown={(e) => { if (e.key === "Enter" && isValid) handleContinue(); }}
         style={{
           width: "100%", padding: "14px 16px",
           borderRadius: 12, fontSize: 18,
@@ -74,16 +97,16 @@ export default function BookingPhone() {
       }}>
         <button
           onClick={handleContinue}
-          disabled={value.replace(/\D/g, "").length < 8}
+          disabled={!isValid || loading}
           style={{
             width: "100%", padding: "14px 0",
-            background: value.replace(/\D/g, "").length >= 8 ? "#7a1f1f" : "#e5dbd0",
+            background: isValid && !loading ? "#7a1f1f" : "#e5dbd0",
             color: "#fff", border: "none", borderRadius: 12,
             fontSize: 15, fontWeight: 600,
-            cursor: value.replace(/\D/g, "").length >= 8 ? "pointer" : "default",
+            cursor: isValid && !loading ? "pointer" : "default",
           }}
         >
-          繼續 Continue →
+          {loading ? "查詢中..." : "繼續 Continue →"}
         </button>
       </div>
     </div>
