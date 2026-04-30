@@ -13,10 +13,12 @@ type Designer = {
 };
 
 type BookingState = {
+  phone: string;
   designer: Designer | null;
   serviceIds: number[];
   date: string | null;
   time: string | null;
+  setPhone: (phone: string) => void;
   setDesigner: (d: Designer) => void;
   toggleService: (id: number) => void;
   setDate: (date: string) => void;
@@ -25,10 +27,12 @@ type BookingState = {
 };
 
 export const useBookingStore = create<BookingState>((set) => ({
+  phone: "",
   designer: null,
   serviceIds: [],
   date: null,
   time: null,
+  setPhone: (phone) => set({ phone }),
   setDesigner: (d) => set({ designer: d }),
   toggleService: (id) =>
     set((s) => ({
@@ -38,5 +42,5 @@ export const useBookingStore = create<BookingState>((set) => ({
     })),
   setDate: (date) => set({ date, time: null }),
   setTime: (time) => set({ time }),
-  reset: () => set({ designer: null, serviceIds: [], date: null, time: null }),
+  reset: () => set({ phone: "", designer: null, serviceIds: [], date: null, time: null }),
 }));

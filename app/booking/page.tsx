@@ -1,139 +1,90 @@
 "use client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useBookingStore } from "../../store/bookingStore";
 
-function CalendarIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <rect x="3" y="4" width="18" height="18" rx="2"/>
-      <path d="M16 2v4M8 2v4M3 10h18"/>
-      <circle cx="8" cy="14" r="1" fill="currentColor" stroke="none"/>
-      <circle cx="12" cy="14" r="1" fill="currentColor" stroke="none"/>
-      <circle cx="16" cy="14" r="1" fill="currentColor" stroke="none"/>
-    </svg>
-  );
-}
-
-export default function BookingSuccess() {
+export default function BookingPhone() {
   const router = useRouter();
-  const { designer, serviceIds, date, time } = useBookingStore();
+  const { setPhone } = useBookingStore();
+  const [value, setValue] = useState("");
 
-  function downloadICS() {
-    if (!date || !time) return;
-    const [year, month, day] = date.split("-").map(Number);
-    const [hour, minute] = time.split(":").map(Number);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const dtStart = `${year}${pad(month)}${pad(day)}T${pad(hour)}${pad(minute)}00`;
-    const endHour = hour + 2;
-    const dtEnd = `${year}${pad(month)}${pad(day)}T${pad(endHour)}${pad(minute)}00`;
-    const designerName = designer?.name || "設計師";
-    const icsContent = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Bing Cherry Hair Salon//ZH",
-      "BEGIN:VEVENT",
-      `DTSTART:${dtStart}`,
-      `DTEND:${dtEnd}`,
-      `SUMMARY:Bing Cherry Hair Salon - ${designerName}`,
-      `DESCRIPTION:設計師：${designerName}`,
-      "LOCATION:台南市中西區西門路二段10號",
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ].join("\r\n");
-    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "bing-cherry-booking.ics";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function openLineReminder() {
-    const designerName = designer?.name || "設計師";
-    const msg = encodeURIComponent(
-      `📅 Bing Cherry Hair Salon 預約提醒\n設計師：${designerName}\n日期：${date || ""}\n時間：${time || ""}\n地址：台南市中西區西門路二段10號`
-    );
-    window.open("https://line.me/R/msg/text/?" + msg, "_blank");
+  function handleContinue() {
+    const cleaned = value.replace(/\D/g, "");
+    if (cleaned.length < 8) { alert("請輸入有效的手機號碼"); return; }
+    setPhone(value);
+    router.push("/booking/step/1");
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", justifyContent: "center", padding: "24px 16px" }}>
-      <div style={{ width: "100%", maxWidth: 390 }}>
+    <div style={{ padding: "32px 20px 120px" }}>
 
-        {/* 成功動畫區 */}
-        <div style={{ textAlign: "center", padding: "32px 0 24px" }}>
-          <div style={{ fontSize: 64, marginBottom: 12 }}>🌸</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: "#2C2C2A", marginBottom: 6 }}>預約成功！</div>
-          <div style={{ fontSize: 13, color: "#888780" }}>我們會盡快與您確認預約時間</div>
+      {/* Icon */}
+      <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%",
+          background: "#f2e8e6", display: "flex", alignItems: "center",
+          justifyContent: "center", margin: "0 auto 14px", fontSize: 28,
+        }}>📱</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>
+          輸入手機號碼
         </div>
-
-        {/* 預約資訊卡 */}
-        <div style={{ background: "#fff", borderRadius: 16, padding: "20px 16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
-            <span>📋</span> 預約資訊
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>設計師</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>
-                {designer?.name}{designer?.nickname ? ` (${designer.nickname})` : ""}
-              </span>
-            </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>日期</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>{date ? date.replace(/-/g, "/") : "—"}</span>
-            </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>時段</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>{time || "—"}</span>
-            </div>
-            <div style={{ borderTop: "0.5px solid #F1EFE8" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-              <span style={{ color: "#888780" }}>地址</span>
-              <span style={{ color: "#2C2C2A", fontWeight: 500 }}>西門路二段10號</span>
-            </div>
-          </div>
+        <div style={{ fontSize: 13, color: "#9a9188", lineHeight: 1.6 }}>
+          我們將以電話或簡訊確認您的預約
         </div>
+      </div>
 
-        {/* 提醒功能 */}
-        <div style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 12 }}>🔔 設定提醒</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={downloadICS}
-              style={{ flex: 1, padding: "12px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-            >
-              <CalendarIcon />
-              加入行事曆
-            </button>
-            <button
-              onClick={openLineReminder}
-              style={{ flex: 1, padding: "12px 0", background: "#E1F5EE", color: "#06C755", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-            >
-              💬 LINE 提醒
-            </button>
-          </div>
-        </div>
+      {/* Phone label */}
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#9a9188", letterSpacing: "0.08em", marginBottom: 8 }}>
+        ☎ 手機號碼 Phone Number
+      </div>
 
-        {/* 截圖提示 */}
-        <div style={{ background: "#1A1A1A", borderRadius: 14, padding: "14px 16px", marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#C8A45A", marginBottom: 6 }}>📸 截圖保留預約資訊</div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.8 }}>
-            iOS：側邊鍵 + 音量上鍵<br/>
-            Android：電源鍵 + 音量下鍵
-          </div>
-        </div>
+      {/* Input */}
+      <input
+        type="tel"
+        inputMode="tel"
+        placeholder="0912-345-678"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") handleContinue(); }}
+        style={{
+          width: "100%", padding: "14px 16px",
+          borderRadius: 12, fontSize: 18,
+          border: "1.5px solid #e5dbd0",
+          background: "#fdfaf7", outline: "none",
+          letterSpacing: "0.06em", color: "#1a1a1a",
+          marginBottom: 16,
+        }}
+      />
 
+      {/* SMS notice */}
+      <div style={{
+        background: "#f2e8e6", border: "0.5px solid #d9b8b0",
+        borderRadius: 12, padding: "12px 14px", marginBottom: 24,
+        fontSize: 12, color: "#7a1f1f", lineHeight: 1.7,
+      }}>
+        預約確認後，我們會以電話或簡訊與您聯繫。<br/>
+        <span style={{ color: "#9a9188" }}>CASH ONLY 僅收現金</span>
+      </div>
+
+      {/* Continue button (fixed) */}
+      <div style={{
+        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
+        width: "100%", maxWidth: 390, background: "#fdfaf7",
+        borderTop: "0.5px solid #e5dbd0", padding: "12px 16px 24px",
+      }}>
         <button
-          onClick={() => router.push("/")}
-          style={{ width: "100%", padding: "14px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" }}
+          onClick={handleContinue}
+          disabled={value.replace(/\D/g, "").length < 8}
+          style={{
+            width: "100%", padding: "14px 0",
+            background: value.replace(/\D/g, "").length >= 8 ? "#7a1f1f" : "#e5dbd0",
+            color: "#fff", border: "none", borderRadius: 12,
+            fontSize: 15, fontWeight: 600,
+            cursor: value.replace(/\D/g, "").length >= 8 ? "pointer" : "default",
+          }}
         >
-          回到首頁
+          繼續 Continue →
         </button>
-
       </div>
     </div>
   );

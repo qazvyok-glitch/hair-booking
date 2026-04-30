@@ -62,25 +62,25 @@ export default function Step3() {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
-        <div style={{ color: "#534AB7", fontSize: 14 }}>載入中</div>
+        <div style={{ color: "#7a1f1f", fontSize: 14 }}>載入中</div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: "20px 16px 120px" }}>
-      <div style={{ fontSize: 20, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>選擇時間</div>
-      <div style={{ fontSize: 12, color: "#888780", marginBottom: 20 }}>請選擇預約日期與時段</div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>選擇時間</div>
+      <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 20 }}>請選擇預約日期與時段</div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <button onClick={prevMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#7B6FD4" }}>‹</button>
-        <span style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>{year} 年 {month} 月</span>
-        <button onClick={nextMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#7B6FD4" }}>›</button>
+        <button onClick={prevMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9a6060" }}>‹</button>
+        <span style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>{year} 年 {month} 月</span>
+        <button onClick={nextMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9a6060" }}>›</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 }}>
         {weekDays.map((d) => (
-          <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#888780", padding: "2px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#9a9188", padding: "2px 0" }}>{d}</div>
         ))}
       </div>
 
@@ -101,15 +101,15 @@ export default function Step3() {
               style={{
                 textAlign: "center", padding: "6px 0", borderRadius: 8,
                 fontSize: 13, cursor: disabled ? "default" : "pointer",
-                background: isSelected ? "#534AB7" : isToday ? "#EEEDFE" : "#fff",
-                color: isSelected ? "#fff" : disabled ? "#C8C6BE" : isSunday ? "#E24B4A" : "#2C2C2A",
-                border: "0.5px solid " + (isSelected ? "#534AB7" : isToday ? "#AFA9EC" : "#D3D1C7"),
+                background: isSelected ? "#7a1f1f" : isToday ? "#f2e8e6" : "#fdfaf7",
+                color: isSelected ? "#fdfaf7" : disabled ? "#c4b8b0" : isSunday ? "#E24B4A" : "#1a1a1a",
+                border: "0.5px solid " + (isSelected ? "#7a1f1f" : isToday ? "#d9b8b0" : "#e5dbd0"),
                 fontWeight: isToday ? 600 : 400,
               }}
             >
               {day}
               {isOff && !isPast ? (
-                <div style={{ fontSize: 8, color: "#C8C6BE" }}>休</div>
+                <div style={{ fontSize: 8, color: "#c4b8b0" }}>休</div>
               ) : null}
             </div>
           );
@@ -118,7 +118,7 @@ export default function Step3() {
 
       {date ? (
         <div>
-          <div style={{ fontSize: 12, color: "#888780", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 10 }}>
             選擇時段 — {date.replace(/-/g, "/")}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
@@ -130,15 +130,15 @@ export default function Step3() {
                   key={t}
                   onClick={() => { if (!off) setTime(t); }}
                   style={{
-                    background: off ? "#F1EFE8" : picked ? "#534AB7" : "#fff",
-                    border: "0.5px solid " + (picked ? "#534AB7" : "#D3D1C7"),
+                    background: off ? "#f0e9e0" : picked ? "#7a1f1f" : "#fdfaf7",
+                    border: "0.5px solid " + (picked ? "#7a1f1f" : "#e5dbd0"),
                     borderRadius: 8, padding: "8px 0", textAlign: "center",
-                    fontSize: 13, color: off ? "#C8C6BE" : picked ? "#fff" : "#2C2C2A",
+                    fontSize: 13, color: off ? "#c4b8b0" : picked ? "#fdfaf7" : "#1a1a1a",
                     cursor: off ? "default" : "pointer",
                   }}
                 >
                   {t}
-                  {off ? <div style={{ fontSize: 9, color: "#C8C6BE" }}>已滿</div> : null}
+                  {off ? <div style={{ fontSize: 9, color: "#c4b8b0" }}>已滿</div> : null}
                 </div>
               );
             })}
@@ -148,15 +148,15 @@ export default function Step3() {
 
       <div style={{
         position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-        width: "100%", maxWidth: 390, background: "#fff",
-        borderTop: "0.5px solid #D3D1C7", padding: "12px 16px 24px",
+        width: "100%", maxWidth: 390, background: "#fdfaf7",
+        borderTop: "0.5px solid #e5dbd0", padding: "12px 16px 24px",
         display: "flex", gap: 10,
       }}>
         <button
           onClick={() => router.push("/booking/step/2")}
           style={{
-            padding: "13px 18px", background: "#F1EFE8",
-            color: "#5F5E5A", border: "none", borderRadius: 12,
+            padding: "13px 18px", background: "#f0e9e0",
+            color: "#4a4a4a", border: "none", borderRadius: 12,
             fontSize: 14, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -167,8 +167,8 @@ export default function Step3() {
           disabled={!date || !time}
           style={{
             flex: 1, padding: "13px 0",
-            background: date && time ? "#534AB7" : "#D3D1C7",
-            color: "#fff", border: "none", borderRadius: 12,
+            background: date && time ? "#7a1f1f" : "#e5dbd0",
+            color: "#fdfaf7", border: "none", borderRadius: 12,
             fontSize: 15, fontWeight: 600,
             cursor: date && time ? "pointer" : "default",
           }}
