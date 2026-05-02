@@ -45,6 +45,10 @@ export default function DesignerTransaction() {
   const [photoNote, setPhotoNote] = useState("");
   const [history, setHistory] = useState<Transaction[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editServices, setEditServices] = useState<SelectedService[]>([]);
+  const [editNote, setEditNote] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
@@ -238,6 +242,26 @@ export default function DesignerTransaction() {
     return Array.from(years).sort((a, b) => b - a);
   })();
 
+  function openEditTransaction(t: Transaction) {
+    setEditingTransaction(t);
+    setEditServices(t.service_items || []);
+    setEditNote(t.note || "");
+  }
+
+  async function handleEditSave() {
+    if (!editingTransaction) return;
+    setEditSaving(true);
+    const newTotal = editServices.reduce((sum, s) => sum + (s.amount || 0), 0);
+    await supabase.from("transactions").update({
+      service_items: editServices,
+      total_amount: newTotal,
+      note: editNote,
+    }).eq("id", editingTransaction.id);
+    setHistory(history.map(t => t.id === editingTransaction.id ? { ...t, service_items: editServices, total_amount: newTotal, note: editNote } : t));
+    setEditSaving(false);
+    setEditingTransaction(null);
+  }
+
   async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !designer) return;
@@ -413,7 +437,10 @@ export default function DesignerTransaction() {
                 <div key={t.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{t.customer_name}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
+                      <button onClick={() => openEditTransaction(t)} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>編輯</button>
+                    </div>
                   </div>
                   <div style={{ fontSize: 11, color: "#888780" }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
                   {t.service_items && (
@@ -620,6 +647,79 @@ export default function DesignerTransaction() {
           </>
         )}
       </div>
+
+      {/* 編輯交易 Modal */}
+      {editingTransaction && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>修改交易明細</div>
+                <div style={{ fontSize: 12, color: "#888780" }}>{editingTransaction.customer_name} ・ {editingTransaction.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
+              </div>
+              <button onClick={() => setEditingTransaction(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+            </div>
+
+            {/* 服務項目編輯 */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>服務項目</div>
+              {editServices.map((s, i) => (
+                <div key={i} style={{ background: "#F1EFE8", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{s.name}</div>
+                    <button onClick={() => setEditServices(editServices.filter((_, idx) => idx !== i))} style={{ background: "#FCEBEB", border: "none", borderRadius: 6, width: 24, height: 24, color: "#A32D2D", fontSize: 12, cursor: "pointer" }}>x</button>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 3 }}>金額</div>
+                      <input
+                        value={s.amount || ""}
+                        onChange={(e) => setEditServices(editServices.map((sv, idx) => idx === i ? { ...sv, amount: parseInt(e.target.value) || 0 } : sv))}
+                        type="number"
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 3 }}>折扣（元）</div>
+                      <input
+                        value={s.discount || ""}
+                        onChange={(e) => {
+                          const discount = parseInt(e.target.value) || 0;
+                          setEditServices(editServices.map((sv, idx) => idx === i ? { ...sv, discount, amount: Math.max(0, (sv.original_amount || sv.amount) - discount) } : sv));
+                        }}
+                        type="number"
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #FAC775", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#FAEEDA" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "0.5px solid #D3D1C7" }}>
+                <span style={{ fontSize: 13, color: "#888780" }}>合計</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>
+                  ${editServices.reduce((sum, s) => sum + (s.amount || 0), 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* 備註 */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>備註</div>
+              <textarea
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                placeholder="備註..."
+                style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", height: 70, resize: "none", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <button onClick={handleEditSave} disabled={editSaving} style={{ width: "100%", padding: "13px 0", background: editSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: editSaving ? "default" : "pointer" }}>
+              {editSaving ? "儲存中..." : "儲存修改"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 結帳後上傳髮型照提示 */}
       {showPhotoPrompt && (
