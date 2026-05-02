@@ -269,12 +269,14 @@ export default function AdminDesigners() {
 
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>抽成比例（底扣後）</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input type="range" min="0" max="100" step="5"
-                    value={Math.round(form.commission_rate * 100)}
-                    onChange={(e) => setForm({ ...form, commission_rate: parseInt(e.target.value) / 100 })}
-                    style={{ flex: 1 }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 40 }}>{Math.round(form.commission_rate * 100)}%</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={Math.round(form.commission_rate * 100) || ""}
+                    onChange={(e) => setForm({ ...form, commission_rate: (parseInt(e.target.value) || 0) / 100 })}
+                    type="number" min="0" max="100" placeholder="0"
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
                 </div>
               </div>
 
@@ -287,12 +289,14 @@ export default function AdminDesigners() {
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>商品銷售抽成比例</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input type="range" min="0" max="100" step="5"
-                    value={Math.round((form.product_commission_rate || 0) * 100)}
-                    onChange={(e) => setForm({ ...form, product_commission_rate: parseInt(e.target.value) / 100 })}
-                    style={{ flex: 1 }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 40 }}>{Math.round((form.product_commission_rate || 0) * 100)}%</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={Math.round((form.product_commission_rate || 0) * 100) || ""}
+                    onChange={(e) => setForm({ ...form, product_commission_rate: (parseInt(e.target.value) || 0) / 100 })}
+                    type="number" min="0" max="100" placeholder="0"
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
                 </div>
               </div>
             </div>
@@ -301,12 +305,14 @@ export default function AdminDesigners() {
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8 }}>設計師給折扣時，由設計師吸收的比例</div>
               <div style={{ marginBottom: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <input type="range" min="0" max="100" step="10"
-                    value={Math.round((form.discount_absorption || 1) * 100)}
-                    onChange={(e) => setForm({ ...form, discount_absorption: parseInt(e.target.value) / 100 })}
-                    style={{ flex: 1 }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 50 }}>{Math.round((form.discount_absorption || 1) * 100)}%</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={Math.round((form.discount_absorption || 1) * 100) || ""}
+                    onChange={(e) => setForm({ ...form, discount_absorption: (parseInt(e.target.value) || 0) / 100 })}
+                    type="number" min="0" max="100" placeholder="100"
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
                 </div>
                 <div style={{ fontSize: 10, color: "#888780", marginTop: 4 }}>
                   設計師吸收 {Math.round((form.discount_absorption || 1) * 100)}%，
