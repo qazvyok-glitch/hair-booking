@@ -33,11 +33,18 @@ export default function MemberSetup() {
   async function handleSave() {
     if (!name || !phone) { alert("請填寫姓名與手機號碼"); return; }
     setSaving(true);
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("customer_no")
+      .eq("id", user.id)
+      .single();
+
     await supabase.from("customers").upsert({
       id: user.id,
       name,
       phone,
       email: user.email,
+      customer_no: existing?.customer_no || undefined,
     });
     await supabase.auth.updateUser({ data: { full_name: name, phone } });
     router.push("/booking/step/1");

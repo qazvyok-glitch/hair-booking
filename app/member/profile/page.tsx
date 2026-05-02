@@ -26,6 +26,7 @@ export default function MemberProfile() {
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [customerNo, setCustomerNo] = useState("");
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -37,10 +38,11 @@ export default function MemberProfile() {
 
       const { data: customerData } = await supabase
         .from("customers")
-        .select("phone")
+        .select("phone, customer_no")
         .eq("id", session.user.id)
         .single();
       if (customerData?.phone) setEditPhone(customerData.phone);
+      if (customerData?.customer_no) setCustomerNo(customerData.customer_no);
 
       const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
         supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false }),
@@ -96,6 +98,7 @@ export default function MemberProfile() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>{user?.user_metadata?.full_name || "會員"}</div>
               <div style={{ fontSize: 12, color: "#888780" }}>{user?.email}</div>
+              {customerNo && <div style={{ fontSize: 11, color: "#534AB7", background: "#EEEDFE", borderRadius: 6, padding: "2px 8px", display: "inline-block", marginTop: 4 }}>{customerNo}</div>}
             </div>
             <button onClick={() => setShowEdit(!showEdit)} style={{ fontSize: 11, color: "#534AB7", background: "#EEEDFE", border: "none", borderRadius: 8, padding: "5px 10px", cursor: "pointer" }}>
               編輯資料

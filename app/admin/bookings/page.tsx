@@ -14,7 +14,10 @@ type Booking = {
   note: string;
   status: string;
   designer_id: number;
+  user_id: string;
 };
+
+type Customer = { id: string; phone: string; customer_no: string };
 
 type Designer = { id: number; name: string };
 type Service = { id: number; name: string };
@@ -30,6 +33,7 @@ export default function AdminBookings() {
   const [filterDesigner, setFilterDesigner] = useState("all");
   const [filterDate, setFilterDate] = useState("");
   const [search, setSearch] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -43,14 +47,16 @@ export default function AdminBookings() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
+      const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }] = await Promise.all([
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
         supabase.from("designers").select("id, name"),
         supabase.from("services").select("id, name"),
+        supabase.from("customers").select("id, phone, customer_no"),
       ]);
       if (bData) setBookings(bData);
       if (dData) setDesigners(dData);
       if (sData) setServices(sData);
+      if (cData) setCustomers(cData);
       setLoading(false);
     }
     fetchData();
@@ -59,6 +65,11 @@ export default function AdminBookings() {
   function getDesignerName(id: number) {
     if (!id) return "不指定";
     return designers.find(d => d.id === id)?.name || "—";
+  }
+
+  function getCustomerNo(phone: string) {
+    if (!phone) return null;
+    return customers.find(c => c.phone === phone)?.customer_no || null;
   }
 
   function getServiceNames(ids: number[]) {
@@ -159,6 +170,9 @@ export default function AdminBookings() {
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{b.customer_name || "訪客"}</div>
                   <div style={{ fontSize: 12, color: "#888780" }}>{b.customer_phone}</div>
+                  {getCustomerNo(b.customer_phone) && (
+                    <div style={{ fontSize: 10, color: "#534AB7", background: "#EEEDFE", borderRadius: 4, padding: "1px 6px", display: "inline-block", marginTop: 2 }}>{getCustomerNo(b.customer_phone)}</div>
+                  )}
                 </div>
                 <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 500, height: "fit-content", background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
                   {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
