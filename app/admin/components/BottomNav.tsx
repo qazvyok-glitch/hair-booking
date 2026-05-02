@@ -16,6 +16,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
   const items = [
     { key: "dashboard", label: "總覽", icon: "📊", path: "/admin/dashboard" },
     { key: "bookings", label: "預約", icon: "📅", path: "/admin/bookings" },
+    { key: "designers", label: "設計師", icon: "💇", path: "/admin/designers" },
     { key: "services", label: "服務", icon: "✂️", path: "/admin/services" },
     { key: "products", label: "商品", icon: "🛍️", path: "/admin/products" },
     { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
