@@ -660,6 +660,39 @@ export default function DesignerTransaction() {
               <button onClick={() => setEditingTransaction(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
 
+            {/* 新增服務項目 */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>新增服務項目</div>
+              {categories.map((cat) => {
+                const catServices = services.filter(s => s.category_id === cat.id);
+                return (
+                  <div key={cat.id} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, color: cat.text_color, background: cat.color, borderRadius: 6, padding: "2px 8px", display: "inline-block", marginBottom: 4 }}>{cat.label}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {catServices.map(svc => {
+                        const picked = editServices.find(s => s.id === svc.id);
+                        return (
+                          <button
+                            key={svc.id}
+                            onClick={() => {
+                              if (picked) {
+                                setEditServices(editServices.filter(s => s.id !== svc.id));
+                              } else {
+                                setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
+                              }
+                            }}
+                            style={{ padding: "4px 10px", borderRadius: 8, border: "none", background: picked ? cat.text_color : "#F1EFE8", color: picked ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}
+                          >
+                            {svc.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* 服務項目編輯 */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>服務項目</div>
