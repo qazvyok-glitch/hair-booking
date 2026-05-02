@@ -100,10 +100,9 @@ export default function AdminServices() {
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>服務管理</div>
-        <button onClick={activeTab === "services" ? openNew : () => { setEditingCat(null); setCatForm({ name: "", label: "", color: "#E1F5EE", text_color: "#085041", sort_order: 0 }); setShowCatForm(true); }} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
+        <button onClick={activeTab === "services" ? openNew : () => { setEditingCat(null); setCatForm({ name: "", label: "", color: "#E1F5EE", text_color: "#085041", sort_order: 0 }); setShowCatForm(true); }} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
       </div>
 
-      {/* Tab */}
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
         {[{ key: "services", label: "服務項目" }, { key: "categories", label: "服務分類" }].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key as "services" | "categories")} style={{ padding: "6px 16px", borderRadius: 20, border: "none", background: activeTab === t.key ? "#534AB7" : "#fff", color: activeTab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: activeTab === t.key ? 600 : 400, cursor: "pointer" }}>
@@ -128,7 +127,7 @@ export default function AdminServices() {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{s.name}</div>
                         <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>
-                          {s.duration && `${s.duration}`}{s.note && ` ・ ${s.note}`}{s.default_price ? ` ・ $${s.default_price.toLocaleString()}` : ""}
+                          {s.duration && s.duration}{s.note && " · " + s.note}{s.default_price ? " · $" + s.default_price.toLocaleString() : ""}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -165,13 +164,12 @@ export default function AdminServices() {
         )}
       </div>
 
-      {/* 服務表單 */}
       {showForm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "85vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{editing ? "編輯服務" : "新增服務"}</div>
-              <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>服務名稱 *</div>
@@ -204,13 +202,12 @@ export default function AdminServices() {
         </div>
       )}
 
-      {/* 分類表單 */}
       {showCatForm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{editingCat ? "編輯分類" : "新增分類"}</div>
-              <button onClick={() => setShowCatForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+              <button onClick={() => setShowCatForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
             {[
               { key: "name", label: "分類代碼", placeholder: "cut" },
@@ -240,4 +237,3 @@ export default function AdminServices() {
     </div>
   );
 }
-
