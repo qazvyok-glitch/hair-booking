@@ -5,6 +5,7 @@ import { supabase } from "../../../lib/supabase";
 import BottomNav from "../components/BottomNav";
 
 type DesignerSession = { id: number; name: string; nickname: string };
+type Booking = { id: number; customer_name: string; customer_phone: string; booking_date: string };
 type CustomerNote = {
   id: number;
   customer_name: string;
@@ -27,6 +28,8 @@ export default function DesignerCustomers() {
   const router = useRouter();
   const [designer, setDesigner] = useState<DesignerSession | null>(null);
   const [customers, setCustomers] = useState<CustomerNote[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [showBookingPicker, setShowBookingPicker] = useState(false);
   const [photos, setPhotos] = useState<CustomerPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -60,12 +63,14 @@ export default function DesignerCustomers() {
     async function fetchData() {
       const canView = await checkPermission();
       if (!canView) return;
-      const [{ data: cData }, { data: pData }] = await Promise.all([
+      const [{ data: cData }, { data: pData }, { data: bData }] = await Promise.all([
         supabase.from("customer_notes").select("*").eq("designer_id", d.id).order("customer_name"),
         supabase.from("customer_photos").select("*").eq("designer_id", d.id).order("taken_at", { ascending: false }),
+        supabase.from("bookings").select("id, customer_name, customer_phone, booking_date").eq("designer_id", d.id).eq("status", "confirmed").order("booking_date", { ascending: false }).limit(50),
       ]);
       if (cData) setCustomers(cData);
       if (pData) setPhotos(pData);
+      if (bData) setBookings(bData);
       setLoading(false);
     }
     fetchData();
@@ -74,6 +79,18 @@ export default function DesignerCustomers() {
   function openNew() {
     setEditing(null);
     setForm({ customer_name: "", customer_phone: "", hair_type: "", preferences: "", allergies: "", notes: "", last_visit: "" });
+    setShowForm(true);
+  }
+
+  function openFromBooking(b: Booking) {
+    setEditing(null);
+    setForm({
+      customer_name: b.customer_name || "",
+      customer_phone: b.customer_phone || "",
+      hair_type: "", preferences: "", allergies: "", notes: "",
+      last_visit: b.booking_date || "",
+    });
+    setShowBookingPicker(false);
     setShowForm(true);
   }
 
@@ -169,7 +186,10 @@ export default function DesignerCustomers() {
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>顧客備忘</div>
-        <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setShowBookingPicker(true)} style={{ background: "#2C2840", color: "#C8C4F8", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>從預約帶入</button>
+          <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
+        </div>
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
@@ -276,6 +296,40 @@ export default function DesignerCustomers() {
         <div onClick={() => setLightboxUrl("")} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <img src={lightboxUrl} alt="髮型照" style={{ maxWidth: "100%", maxHeight: "90vh", borderRadius: 12, objectFit: "contain" }} />
           <button onClick={() => setLightboxUrl("")} style={{ position: "absolute", top: 20, right: 20, background: "rgba(255,255,255,0.2)", border: "none", borderRadius: "50%", width: 36, height: 36, color: "#fff", fontSize: 18, cursor: "pointer" }}>x</button>
+        </div>
+      )}
+
+      {/* 從預約帶入 Modal */}
+      {showBookingPicker && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 390, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "75vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>從預約帶入客人資料</div>
+              <button onClick={() => setShowBookingPicker(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+            </div>
+            {bookings.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "30px 0", color: "#888780", fontSize: 13 }}>尚無已確認的預約</div>
+            ) : (
+              bookings.map(b => {
+                const alreadyAdded = customers.some(c => c.customer_phone === b.customer_phone && c.customer_name === b.customer_name);
+                return (
+                  <div key={b.id} onClick={() => !alreadyAdded && openFromBooking(b)} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #D3D1C7", marginBottom: 8, cursor: alreadyAdded ? "default" : "pointer", background: alreadyAdded ? "#F1EFE8" : "#fff", opacity: alreadyAdded ? 0.6 : 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{b.customer_name}</div>
+                        <div style={{ fontSize: 11, color: "#888780" }}>{b.customer_phone} ・ {b.booking_date.replace(/-/g, "/")}</div>
+                      </div>
+                      {alreadyAdded ? (
+                        <span style={{ fontSize: 10, color: "#888780", background: "#E0DDD6", borderRadius: 6, padding: "2px 8px" }}>已建立</span>
+                      ) : (
+                        <span style={{ fontSize: 10, color: "#534AB7", background: "#EEEDFE", borderRadius: 6, padding: "2px 8px" }}>帶入 →</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
