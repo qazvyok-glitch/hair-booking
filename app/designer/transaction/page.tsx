@@ -37,6 +37,10 @@ export default function DesignerTransaction() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"new" | "history" | "report">("history");
+  const [showPhotoPrompt, setShowPhotoPrompt] = useState(false);
+  const [completedCustomerName, setCompletedCustomerName] = useState("");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoNote, setPhotoNote] = useState("");
   const [history, setHistory] = useState<Transaction[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -149,13 +153,16 @@ export default function DesignerTransaction() {
       );
     }
     setSaving(false);
-    alert("交易明細已建立！");
     setSelectedServices([]);
     setMaterials([{ name: "", quantity: "", unit: "g", cost: "" }]);
     setProductUsage([]);
-    setSelectedBooking(null);
     setNote("");
-    setTab("history");
+
+    // 詢問是否上傳髮型照
+    const customerName = selectedBooking?.customer_name || "現場客人";
+    setCompletedCustomerName(customerName);
+    setShowPhotoPrompt(true);
+    setSelectedBooking(null);
   }
 
   // 帳務報表計算
@@ -198,6 +205,48 @@ export default function DesignerTransaction() {
     years.add(new Date().getFullYear());
     return Array.from(years).sort((a, b) => b - a);
   })();
+
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !designer) return;
+    setUploadingPhoto(true);
+    const canvas = document.createElement("canvas");
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      const maxSize = 1200;
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(async (blob) => {
+        if (!blob) { setUploadingPhoto(false); return; }
+        const path = `${designer.id}/walk-in/${Date.now()}.jpg`;
+        const { error } = await supabase.storage.from("customer-photos").upload(path, blob, { contentType: "image/jpeg" });
+        if (!error) {
+          const { data: { publicUrl } } = supabase.storage.from("customer-photos").getPublicUrl(path);
+          await supabase.from("customer_photos").insert({
+            designer_id: designer.id,
+            customer_note_id: null,
+            customer_name: completedCustomerName,
+            customer_phone: "",
+            photo_url: publicUrl,
+            note: photoNote,
+            taken_at: new Date().toISOString().split("T")[0],
+          });
+        }
+        setUploadingPhoto(false);
+        setShowPhotoPrompt(false);
+        setPhotoNote("");
+        setTab("history");
+        URL.revokeObjectURL(url);
+      }, "image/jpeg", 0.85);
+    };
+    img.src = url;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
@@ -538,6 +587,43 @@ export default function DesignerTransaction() {
           </>
         )}
       </div>
+
+      {/* 結帳後上傳髮型照提示 */}
+      {showPhotoPrompt && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ width: "100%", maxWidth: 360, background: "#fff", borderRadius: 20, padding: "24px 20px" }}>
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📸</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: "#2C2C2A" }}>交易已建立！</div>
+              <div style={{ fontSize: 13, color: "#888780", marginTop: 4 }}>
+                {completedCustomerName} 的服務完成
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>備註（選填）</div>
+              <input
+                value={photoNote}
+                onChange={(e) => setPhotoNote(e.target.value)}
+                placeholder="染色配方、燙髮時間..."
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <label style={{ display: "block", width: "100%", padding: "13px 0", background: uploadingPhoto ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: uploadingPhoto ? "default" : "pointer", textAlign: "center", marginBottom: 10 }}>
+              {uploadingPhoto ? "上傳中..." : "📷 上傳今日髮型照"}
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: "none" }} disabled={uploadingPhoto} />
+            </label>
+
+            <button
+              onClick={() => { setShowPhotoPrompt(false); setTab("history"); }}
+              style={{ width: "100%", padding: "12px 0", background: "#F1EFE8", color: "#5F5E5A", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
+            >
+              跳過，不上傳
+            </button>
+          </div>
+        </div>
+      )}
 
       <BottomNav current="transaction" />
     </div>
