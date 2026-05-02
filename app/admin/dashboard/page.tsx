@@ -125,8 +125,10 @@ export default function AdminDashboard() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           {[
             { label: "查看所有預約", icon: "📅", path: "/admin/bookings" },
+            { label: "設計師管理", icon: "💇", path: "/admin/designers" },
             { label: "管理服務項目", icon: "✂️", path: "/admin/services" },
             { label: "管理商品清單", icon: "🛍️", path: "/admin/products" },
+            { label: "價目表管理", icon: "💴", path: "/admin/prices" },
             { label: "店資訊設定", icon: "🏪", path: "/admin/shop" },
           ].map((item) => (
             <button key={item.label} onClick={() => router.push(item.path)} style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer" }}>
