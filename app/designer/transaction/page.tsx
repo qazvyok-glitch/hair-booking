@@ -651,69 +651,39 @@ export default function DesignerTransaction() {
       {/* 編輯交易 Modal */}
       {editingTransaction && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "85vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>修改交易明細</div>
-                <div style={{ fontSize: 12, color: "#888780" }}>{editingTransaction.customer_name} ・ {editingTransaction.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
+          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", maxHeight: "90vh", overflowY: "auto" }}>
+
+            {/* 頂部 */}
+            <div style={{ padding: "16px 16px 0", position: "sticky", top: 0, background: "#fff", zIndex: 10, borderBottom: "0.5px solid #F1EFE8", paddingBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>{editingTransaction.customer_name}</div>
+                  <div style={{ fontSize: 11, color: "#888780" }}>{editingTransaction.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#534AB7" }}>${editServices.reduce((sum, s) => sum + (s.amount || 0), 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 10, color: "#888780" }}>合計</div>
+                  </div>
+                  <button onClick={() => setEditingTransaction(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+                </div>
               </div>
-              <button onClick={() => setEditingTransaction(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
 
-            {/* 新增服務項目 */}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>新增服務項目</div>
-              {categories.map((cat) => {
-                const catServices = services.filter(s => s.category_id === cat.id);
-                return (
-                  <div key={cat.id} style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 11, color: cat.text_color, background: cat.color, borderRadius: 6, padding: "2px 8px", display: "inline-block", marginBottom: 4 }}>{cat.label}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {catServices.map(svc => {
-                        const picked = editServices.find(s => s.id === svc.id);
-                        return (
-                          <button
-                            key={svc.id}
-                            onClick={() => {
-                              if (picked) {
-                                setEditServices(editServices.filter(s => s.id !== svc.id));
-                              } else {
-                                setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
-                              }
-                            }}
-                            style={{ padding: "4px 10px", borderRadius: 8, border: "none", background: picked ? cat.text_color : "#F1EFE8", color: picked ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}
-                          >
-                            {svc.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 服務項目編輯 */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>服務項目</div>
-              {editServices.map((s, i) => (
-                <div key={i} style={{ background: "#F1EFE8", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{s.name}</div>
-                    <button onClick={() => setEditServices(editServices.filter((_, idx) => idx !== i))} style={{ background: "#FCEBEB", border: "none", borderRadius: 6, width: 24, height: 24, color: "#A32D2D", fontSize: 12, cursor: "pointer" }}>x</button>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 3 }}>金額</div>
+            <div style={{ padding: "14px 16px 32px" }}>
+              {/* 已選服務 */}
+              {editServices.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  {editServices.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#EEEDFE", borderRadius: 10, marginBottom: 6 }}>
+                      <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{s.name}</div>
                       <input
                         value={s.amount || ""}
                         onChange={(e) => setEditServices(editServices.map((sv, idx) => idx === i ? { ...sv, amount: parseInt(e.target.value) || 0 } : sv))}
                         type="number"
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                        placeholder="金額"
+                        style={{ width: 72, padding: "6px 8px", borderRadius: 8, border: "1px solid #AFA9EC", fontSize: 13, outline: "none", textAlign: "center" }}
                       />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 3 }}>折扣（元）</div>
                       <input
                         value={s.discount || ""}
                         onChange={(e) => {
@@ -721,35 +691,59 @@ export default function DesignerTransaction() {
                           setEditServices(editServices.map((sv, idx) => idx === i ? { ...sv, discount, amount: Math.max(0, (sv.original_amount || sv.amount) - discount) } : sv));
                         }}
                         type="number"
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #FAC775", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#FAEEDA" }}
+                        placeholder="折扣"
+                        style={{ width: 60, padding: "6px 8px", borderRadius: 8, border: "1px solid #FAC775", fontSize: 13, outline: "none", textAlign: "center", background: "#FAEEDA" }}
                       />
+                      <button onClick={() => setEditServices(editServices.filter((_, idx) => idx !== i))} style={{ background: "#FCEBEB", border: "none", borderRadius: 6, width: 28, height: 28, color: "#A32D2D", fontSize: 14, cursor: "pointer", flexShrink: 0 }}>x</button>
                     </div>
-                  </div>
+                  ))}
+                  <div style={{ fontSize: 10, color: "#888780", textAlign: "right", marginTop: 2 }}>左：金額 ｜ 中：折扣</div>
                 </div>
-              ))}
+              )}
 
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "0.5px solid #D3D1C7" }}>
-                <span style={{ fontSize: 13, color: "#888780" }}>合計</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>
-                  ${editServices.reduce((sum, s) => sum + (s.amount || 0), 0).toLocaleString()}
-                </span>
+              {/* 服務選擇 */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>新增 / 移除服務</div>
+                {categories.map((cat) => {
+                  const catServices = services.filter(s => s.category_id === cat.id);
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11, color: cat.text_color, background: cat.color, borderRadius: 6, padding: "3px 10px", display: "inline-block", marginBottom: 6, fontWeight: 600 }}>{cat.label}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {catServices.map(svc => {
+                          const picked = editServices.find(s => s.id === svc.id);
+                          return (
+                            <button
+                              key={svc.id}
+                              onClick={() => {
+                                if (picked) {
+                                  setEditServices(editServices.filter(s => s.id !== svc.id));
+                                } else {
+                                  setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
+                                }
+                              }}
+                              style={{ padding: "7px 12px", borderRadius: 20, border: "none", background: picked ? cat.text_color : "#F1EFE8", color: picked ? "#fff" : "#5F5E5A", fontSize: 12, cursor: "pointer", fontWeight: picked ? 600 : 400 }}
+                            >
+                              {picked ? "✓ " : ""}{svc.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
 
-            {/* 備註 */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>備註</div>
-              <textarea
-                value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
-                placeholder="備註..."
-                style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", height: 70, resize: "none", boxSizing: "border-box" }}
-              />
-            </div>
+              {/* 備註 */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 6 }}>備註</div>
+                <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder="備註..." style={{ width: "100%", padding: "10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", height: 60, resize: "none", boxSizing: "border-box" }} />
+              </div>
 
-            <button onClick={handleEditSave} disabled={editSaving} style={{ width: "100%", padding: "13px 0", background: editSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: editSaving ? "default" : "pointer" }}>
-              {editSaving ? "儲存中..." : "儲存修改"}
-            </button>
+              <button onClick={handleEditSave} disabled={editSaving} style={{ width: "100%", padding: "14px 0", background: editSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: editSaving ? "default" : "pointer" }}>
+                {editSaving ? "儲存中..." : "儲存修改"}
+              </button>
+            </div>
           </div>
         </div>
       )}
