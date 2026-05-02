@@ -36,7 +36,13 @@ export default function AdminDesigners() {
   const [form, setForm] = useState({
     name: "", nickname: "", initials: "", style: "", ig: "",
     bg_color: "#EEEDFE", text_color: "#3C3489",
-    commission_rate: 0.5, joined_date: "", left_date: "",
+    commission_rate: 0.5,
+    commission_base_deduction: 0,
+    commission_threshold: 0,
+    commission_rate_after: 0.5,
+    product_commission_rate: 0.1,
+    discount_absorption: 1.0,
+    joined_date: "", left_date: "",
     can_view_members: true, status: "active",
     work_hours: defaultWorkHours,
   });
@@ -79,6 +85,11 @@ export default function AdminDesigners() {
       style: d.style || "", ig: d.ig || "",
       bg_color: d.bg_color || "#EEEDFE", text_color: d.text_color || "#3C3489",
       commission_rate: d.commission_rate ?? 0.5,
+      commission_base_deduction: (d as any).commission_base_deduction ?? 0,
+      commission_threshold: (d as any).commission_threshold ?? 0,
+      commission_rate_after: (d as any).commission_rate_after ?? 0.5,
+      product_commission_rate: (d as any).product_commission_rate ?? 0.1,
+      discount_absorption: (d as any).discount_absorption ?? 1.0,
       joined_date: d.joined_date || "", left_date: d.left_date || "",
       can_view_members: d.can_view_members ?? true, status: d.status || "active",
       work_hours: d.work_hours || defaultWorkHours,
@@ -157,8 +168,23 @@ export default function AdminDesigners() {
                 </div>
 
                 {/* 抽成與加入日期 */}
-                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: 11, color: "#5F5E5A" }}>
-                  <span>抽成：{Math.round((d.commission_rate || 0) * 100)}%</span>
+                <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 11, color: "#5F5E5A", flexWrap: "wrap" }}>
+                  <span style={{ background: "#EEEDFE", color: "#534AB7", padding: "2px 8px", borderRadius: 6 }}>
+                    服務抽成 {Math.round((d.commission_rate || 0) * 100)}%
+                    {(d as any).commission_base_deduction > 0 && ` (底扣 $${((d as any).commission_base_deduction || 0).toLocaleString()})`}
+                  </span>
+                  {(d as any).product_commission_rate > 0 && (
+                    <span style={{ background: "#E1F5EE", color: "#085041", padding: "2px 8px", borderRadius: 6 }}>
+                      商品抽成 {Math.round(((d as any).product_commission_rate || 0) * 100)}%
+                    </span>
+                  )}
+                  {(d as any).discount_absorption < 1 && (
+                    <span style={{ background: "#FAEEDA", color: "#BA7517", padding: "2px 8px", borderRadius: 6 }}>
+                      折扣吸收 {Math.round(((d as any).discount_absorption || 1) * 100)}%
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "#888780" }}>
                   {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
                   {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
                 </div>
@@ -222,13 +248,70 @@ export default function AdminDesigners() {
               </div>
             </div>
 
-            {/* 抽成與日期 */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>薪資設定</div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>抽成比例</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input type="range" min="0" max="100" step="5" value={Math.round(form.commission_rate * 100)} onChange={(e) => setForm({ ...form, commission_rate: parseInt(e.target.value) / 100 })} style={{ flex: 1 }} />
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 40 }}>{Math.round(form.commission_rate * 100)}%</span>
+            {/* 抽成設定 */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>服務業績抽成</div>
+
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
+                計算方式：(業績 - 底扣) × 抽成%<br/>
+                例：業績 10萬，底扣 5萬，抽 20% → (10萬-5萬)×20% = 1萬
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>每月底扣金額（元）</div>
+                <input
+                  value={form.commission_base_deduction || ""}
+                  onChange={(e) => setForm({ ...form, commission_base_deduction: parseInt(e.target.value) || 0 })}
+                  type="number" placeholder="0"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>抽成比例（底扣後）</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input type="range" min="0" max="100" step="5"
+                    value={Math.round(form.commission_rate * 100)}
+                    onChange={(e) => setForm({ ...form, commission_rate: parseInt(e.target.value) / 100 })}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 40 }}>{Math.round(form.commission_rate * 100)}%</span>
+                </div>
+              </div>
+
+              <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#534AB7" }}>
+                預覽：業績 $100,000 → 抽成 ${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>商品業績抽成</div>
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>商品銷售抽成比例</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input type="range" min="0" max="100" step="5"
+                    value={Math.round((form.product_commission_rate || 0) * 100)}
+                    onChange={(e) => setForm({ ...form, product_commission_rate: parseInt(e.target.value) / 100 })}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 40 }}>{Math.round((form.product_commission_rate || 0) * 100)}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>折扣吸收設定</div>
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8 }}>設計師給折扣時，由設計師吸收的比例</div>
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input type="range" min="0" max="100" step="10"
+                    value={Math.round((form.discount_absorption || 1) * 100)}
+                    onChange={(e) => setForm({ ...form, discount_absorption: parseInt(e.target.value) / 100 })}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", width: 50 }}>{Math.round((form.discount_absorption || 1) * 100)}%</span>
+                </div>
+                <div style={{ fontSize: 10, color: "#888780", marginTop: 4 }}>
+                  設計師吸收 {Math.round((form.discount_absorption || 1) * 100)}%，
+                  店家吸收 {100 - Math.round((form.discount_absorption || 1) * 100)}%
+                </div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
