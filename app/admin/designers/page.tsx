@@ -71,7 +71,13 @@ export default function AdminDesigners() {
     setForm({
       name: "", nickname: "", initials: "", style: "", ig: "",
       bg_color: "#EEEDFE", text_color: "#3C3489",
-      commission_rate: 0.5, joined_date: new Date().toISOString().split("T")[0], left_date: "",
+      commission_rate: 0.5,
+      commission_base_deduction: 0,
+      commission_threshold: 0,
+      commission_rate_after: 0.5,
+      product_commission_rate: 0.1,
+      discount_absorption: 1.0,
+      joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, status: "active",
       work_hours: defaultWorkHours,
     });
