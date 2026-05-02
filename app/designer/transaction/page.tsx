@@ -6,12 +6,20 @@ import BottomNav from "../components/BottomNav";
 
 type DesignerSession = { id: number; name: string; nickname: string };
 type Booking = { id: number; customer_name: string; booking_date: string; booking_time: string };
-type Service = { id: number; name: string; category_id: number };
+type Service = { id: number; name: string; category_id: number; default_price: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
-type SelectedService = { id: number; name: string; amount: number };
+type SelectedService = { id: number; name: string; amount: number; original_amount: number; discount: number };
 type Material = { name: string; quantity: string; unit: string; cost: string };
 type Product = { id: number; name: string; unit: string; unit_price: number; category: string };
 type ProductUsageItem = { product: Product; quantity: number };
+type Transaction = {
+  id: number;
+  customer_name: string;
+  service_items: SelectedService[];
+  total_amount: number;
+  note: string;
+  created_at: string;
+};
 
 export default function DesignerTransaction() {
   const router = useRouter();
@@ -28,9 +36,14 @@ export default function DesignerTransaction() {
   const [showProducts, setShowProducts] = useState(false);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState<"new" | "history">("new");
-  const [history, setHistory] = useState<any[]>([]);
+  const [tab, setTab] = useState<"new" | "history" | "report">("history");
+  const [history, setHistory] = useState<Transaction[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  });
+  const [chartType, setChartType] = useState<"bar" | "pie">("bar");
 
   useEffect(() => {
     const session = sessionStorage.getItem("designerSession");
@@ -62,17 +75,19 @@ export default function DesignerTransaction() {
     fetchData();
   }, [router]);
 
-  function toggleService(svc: Service) {
+  function toggleService(svc: Service & { default_price?: number }) {
     const exists = selectedServices.find(s => s.id === svc.id);
-    if (exists) {
-      setSelectedServices(selectedServices.filter(s => s.id !== svc.id));
-    } else {
-      setSelectedServices([...selectedServices, { id: svc.id, name: svc.name, amount: 0 }]);
-    }
+    if (exists) setSelectedServices(selectedServices.filter(s => s.id !== svc.id));
+    else setSelectedServices([...selectedServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
   }
 
   function updateAmount(id: number, value: string) {
     setSelectedServices(selectedServices.map(s => s.id === id ? { ...s, amount: parseInt(value) || 0 } : s));
+  }
+
+  function updateDiscount(id: number, value: string) {
+    const discount = parseInt(value) || 0;
+    setSelectedServices(selectedServices.map(s => s.id === id ? { ...s, discount, amount: Math.max(0, s.original_amount - discount) } : s));
   }
 
   function addMaterial() { setMaterials([...materials, { name: "", quantity: "", unit: "g", cost: "" }]); }
@@ -83,11 +98,8 @@ export default function DesignerTransaction() {
 
   function toggleProduct(product: Product) {
     const exists = productUsage.find(p => p.product.id === product.id);
-    if (exists) {
-      setProductUsage(productUsage.filter(p => p.product.id !== product.id));
-    } else {
-      setProductUsage([...productUsage, { product, quantity: 1 }]);
-    }
+    if (exists) setProductUsage(productUsage.filter(p => p.product.id !== product.id));
+    else setProductUsage([...productUsage, { product, quantity: 1 }]);
   }
 
   function updateProductQty(id: number, qty: number) {
@@ -145,27 +157,145 @@ export default function DesignerTransaction() {
     setTab("history");
   }
 
+  // 帳務報表計算
+  const monthlyData = (() => {
+    const months: Record<string, number> = {};
+    history.forEach((t) => {
+      const month = t.created_at?.slice(0, 7);
+      if (month) months[month] = (months[month] || 0) + (t.total_amount || 0);
+    });
+    return Object.entries(months).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6).reverse();
+  })();
+
+  const maxMonthly = Math.max(...monthlyData.map(([, v]) => v), 1);
+
+  const filteredHistory = history.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
+  const filteredTotal = filteredHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={() => router.push("/designer/dashboard")} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>‹</button>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>交易明細</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>帳務</div>
         <div style={{ marginLeft: "auto", background: "#2C2840", borderRadius: 10, padding: "4px 12px" }}>
           <div style={{ fontSize: 10, color: "#888780" }}>本月收入</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#C8C4F8" }}>${monthTotal.toLocaleString()}</div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 6, padding: "14px 16px 8px" }}>
-        {[{ key: "new", label: "新增明細" }, { key: "history", label: "交易紀錄" }].map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key as "new" | "history")} style={{ padding: "6px 16px", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
+      <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
+        {[{ key: "history", label: "交易紀錄" }, { key: "report", label: "收入報表" }, { key: "new", label: "新增明細" }].map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key as "new" | "history" | "report")} style={{ flex: 1, padding: "6px 0", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
             {t.label}
           </button>
         ))}
       </div>
 
       <div style={{ padding: "0 16px 32px" }}>
-        {tab === "new" ? (
+        {tab === "report" && (
+          <>
+            {/* 月收入圖表 */}
+            <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>近6個月收入</div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[{ key: "bar", label: "長條" }, { key: "pie", label: "圓餅" }].map((c) => (
+                    <button key={c.key} onClick={() => setChartType(c.key as "bar" | "pie")} style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: chartType === c.key ? "#534AB7" : "#F1EFE8", color: chartType === c.key ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}>{c.label}</button>
+                  ))}
+                </div>
+              </div>
+              {chartType === "bar" ? (
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 120 }}>
+                  {monthlyData.map(([month, amount]) => (
+                    <div key={month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div style={{ fontSize: 9, color: "#534AB7", fontWeight: 600 }}>${(amount/1000).toFixed(1)}k</div>
+                      <div style={{ width: "100%", background: "#534AB7", borderRadius: "4px 4px 0 0", height: `${Math.max((amount / maxMonthly) * 90, 4)}px`, transition: "height 0.3s" }} />
+                      <div style={{ fontSize: 9, color: "#888780" }}>{month.slice(5)}月</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {monthlyData.slice().reverse().map(([month, amount], i) => {
+                    const colors = ["#534AB7","#7B6FD4","#A89FE8","#1D9E75","#BA7517","#E24B4A"];
+                    return (
+                      <div key={month} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 12, height: 12, borderRadius: "50%", background: colors[i % colors.length], flexShrink: 0 }} />
+                        <div style={{ fontSize: 11, color: "#5F5E5A", width: 40 }}>{month.slice(5)}月</div>
+                        <div style={{ flex: 1, height: 16, background: "#F1EFE8", borderRadius: 8, overflow: "hidden" }}>
+                          <div style={{ height: "100%", background: colors[i % colors.length], width: `${(amount / maxMonthly) * 100}%`, borderRadius: 8, transition: "width 0.3s" }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, width: 60, textAlign: "right" }}>${amount.toLocaleString()}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 月份選擇明細 */}
+            <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>月份明細</div>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none" }}
+                />
+              </div>
+              <div style={{ background: "#2C2840", borderRadius: 10, padding: "10px 14px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: "#888780" }}>{selectedMonth} 總收入</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#C8C4F8" }}>${filteredTotal.toLocaleString()}</span>
+              </div>
+              {filteredHistory.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px 0", color: "#888780", fontSize: 13 }}>本月尚無交易紀錄</div>
+              ) : (
+                filteredHistory.map((t) => (
+                  <div key={t.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #F1EFE8" }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: "#2C2C2A" }}>{t.customer_name}</div>
+                      <div style={{ fontSize: 11, color: "#888780" }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
+                      {t.service_items && (
+                        <div style={{ fontSize: 11, color: "#5F5E5A" }}>{t.service_items.map((s) => s.name).join("、")}</div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {tab === "history" && (
+          <>
+            <div style={{ background: "#2C2840", borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>本月總收入</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "#C8C4F8" }}>${monthTotal.toLocaleString()}</div>
+            </div>
+            {history.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無交易紀錄</div>
+            ) : (
+              history.map((t) => (
+                <div key={t.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{t.customer_name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888780" }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
+                  {t.service_items && (
+                    <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 4 }}>
+                      {t.service_items.map((s) => `${s.name} $${s.amount}`).join("、")}
+                    </div>
+                  )}
+                  {t.note && <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>備註：{t.note}</div>}
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {tab === "new" && (
           <>
             {/* 連結預約 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
@@ -212,9 +342,20 @@ export default function DesignerTransaction() {
                                 </div>
                               </div>
                               {picked && (
-                                <div style={{ padding: "6px 12px 10px", background: cat.color, borderTop: `0.5px solid ${cat.text_color}20` }}>
-                                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>實際收費金額</div>
-                                  <input value={picked.amount || ""} onChange={(e) => updateAmount(svc.id, e.target.value)} placeholder="輸入金額" type="number" style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                                <div style={{ padding: "6px 12px 10px", background: cat.color }}>
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>收費金額</div>
+                                      <input value={picked.amount || ""} onChange={(e) => updateAmount(svc.id, e.target.value)} placeholder="金額" type="number" style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>折扣（元）</div>
+                                      <input value={picked.discount || ""} onChange={(e) => updateDiscount(svc.id, e.target.value)} placeholder="0" type="number" style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #FAC775", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#FAEEDA" }} />
+                                    </div>
+                                  </div>
+                                  {picked.discount > 0 && (
+                                    <div style={{ fontSize: 10, color: "#BA7517", marginTop: 4 }}>原價 ${picked.original_amount} - 折扣 ${picked.discount} = ${picked.amount}</div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -287,7 +428,7 @@ export default function DesignerTransaction() {
               )}
             </div>
 
-            {/* 自領材料 */}
+            {/* 自領耗材 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 4 }}>自領耗材（選填）</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10 }}>染膏、雙氧水等耗材</div>
@@ -344,34 +485,9 @@ export default function DesignerTransaction() {
               {saving ? "建立中..." : "確認建立交易明細"}
             </button>
           </>
-        ) : (
-          <>
-            <div style={{ background: "#2C2840", borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>本月總收入</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: "#C8C4F8" }}>${monthTotal.toLocaleString()}</div>
-            </div>
-            {history.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無交易紀錄</div>
-            ) : (
-              history.map((t: any) => (
-                <div key={t.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{t.customer_name}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "#888780" }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
-                  {t.service_items && (
-                    <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 4 }}>
-                      {t.service_items.map((s: any) => `${s.name} $${s.amount}`).join("、")}
-                    </div>
-                  )}
-                  {t.note && <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>備註：{t.note}</div>}
-                </div>
-              ))
-            )}
-          </>
         )}
       </div>
+
       <BottomNav current="transaction" />
     </div>
   );
