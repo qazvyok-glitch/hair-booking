@@ -5,7 +5,7 @@ import { supabase } from "../../../lib/supabase";
 import BottomNav from "../components/BottomNav";
 
 type DesignerSession = { id: number; name: string; nickname: string };
-type Booking = { id: number; customer_name: string; booking_date: string; booking_time: string };
+type Booking = { id: number; customer_name: string; customer_phone: string; booking_date: string; booking_time: string };
 type Service = { id: number; name: string; category_id: number; default_price: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
 type SelectedService = { id: number; name: string; amount: number; original_amount: number; discount: number };
@@ -39,6 +39,8 @@ export default function DesignerTransaction() {
   const [tab, setTab] = useState<"new" | "history" | "report">("history");
   const [showPhotoPrompt, setShowPhotoPrompt] = useState(false);
   const [completedCustomerName, setCompletedCustomerName] = useState("");
+  const [completedCustomerPhone, setCompletedCustomerPhone] = useState("");
+  const [completedNoteId, setCompletedNoteId] = useState<number | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoNote, setPhotoNote] = useState("");
   const [history, setHistory] = useState<Transaction[]>([]);
@@ -158,9 +160,39 @@ export default function DesignerTransaction() {
     setProductUsage([]);
     setNote("");
 
-    // 詢問是否上傳髮型照
+    // 自動建立或更新顧客備忘
     const customerName = selectedBooking?.customer_name || "現場客人";
+    const customerPhone = selectedBooking?.customer_phone || "";
+    let noteId: number | null = null;
+
+    if (customerPhone) {
+      const { data: existingNote } = await supabase
+        .from("customer_notes")
+        .select("id")
+        .eq("designer_id", designer.id)
+        .eq("customer_phone", customerPhone)
+        .single();
+
+      if (existingNote) {
+        noteId = existingNote.id;
+        await supabase.from("customer_notes").update({
+          last_visit: new Date().toISOString().split("T")[0],
+          updated_at: new Date().toISOString(),
+        }).eq("id", existingNote.id);
+      } else {
+        const { data: newNote } = await supabase.from("customer_notes").insert({
+          designer_id: designer.id,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          last_visit: new Date().toISOString().split("T")[0],
+        }).select().single();
+        if (newNote) noteId = newNote.id;
+      }
+    }
+
     setCompletedCustomerName(customerName);
+    setCompletedCustomerPhone(customerPhone);
+    setCompletedNoteId(noteId);
     setShowPhotoPrompt(true);
     setSelectedBooking(null);
   }
@@ -224,15 +256,16 @@ export default function DesignerTransaction() {
       canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
       canvas.toBlob(async (blob) => {
         if (!blob) { setUploadingPhoto(false); return; }
-        const path = `${designer.id}/walk-in/${Date.now()}.jpg`;
+        const folder = completedNoteId ? `${designer.id}/${completedNoteId}` : `${designer.id}/walk-in`;
+        const path = `${folder}/${Date.now()}.jpg`;
         const { error } = await supabase.storage.from("customer-photos").upload(path, blob, { contentType: "image/jpeg" });
         if (!error) {
           const { data: { publicUrl } } = supabase.storage.from("customer-photos").getPublicUrl(path);
           await supabase.from("customer_photos").insert({
             designer_id: designer.id,
-            customer_note_id: null,
+            customer_note_id: completedNoteId,
             customer_name: completedCustomerName,
-            customer_phone: "",
+            customer_phone: completedCustomerPhone,
             photo_url: publicUrl,
             note: photoNote,
             taken_at: new Date().toISOString().split("T")[0],
