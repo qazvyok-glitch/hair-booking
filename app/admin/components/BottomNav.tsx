@@ -15,9 +15,10 @@ export default function AdminBottomNav({ current }: { current: string }) {
 
   const items = [
     { key: "dashboard", label: "總覽", icon: "📊", path: "/admin/dashboard" },
-    { key: "bookings", label: "預約管理", icon: "📅", path: "/admin/bookings" },
-    { key: "services", label: "服務管理", icon: "✂️", path: "/admin/services" },
-    { key: "products", label: "商品管理", icon: "🛍️", path: "/admin/products" },
+    { key: "bookings", label: "預約", icon: "📅", path: "/admin/bookings" },
+    { key: "services", label: "服務", icon: "✂️", path: "/admin/services" },
+    { key: "products", label: "商品", icon: "🛍️", path: "/admin/products" },
+    { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
   ];
 
   if (isDesktop) {
