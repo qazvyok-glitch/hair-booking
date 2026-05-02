@@ -701,34 +701,55 @@ export default function DesignerTransaction() {
                 </div>
               )}
 
-              {/* 服務選擇 */}
+              {/* 服務選擇 - 折疊式 */}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>新增 / 移除服務</div>
                 {categories.map((cat) => {
                   const catServices = services.filter(s => s.category_id === cat.id);
+                  const pickedCount = catServices.filter(s => editServices.find(es => es.id === s.id)).length;
+                  const isOpen = openCategory === cat.id;
                   return (
-                    <div key={cat.id} style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 11, color: cat.text_color, background: cat.color, borderRadius: 6, padding: "3px 10px", display: "inline-block", marginBottom: 6, fontWeight: 600 }}>{cat.label}</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {catServices.map(svc => {
-                          const picked = editServices.find(s => s.id === svc.id);
-                          return (
-                            <button
-                              key={svc.id}
-                              onClick={() => {
-                                if (picked) {
-                                  setEditServices(editServices.filter(s => s.id !== svc.id));
-                                } else {
-                                  setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
-                                }
-                              }}
-                              style={{ padding: "7px 12px", borderRadius: 20, border: "none", background: picked ? cat.text_color : "#F1EFE8", color: picked ? "#fff" : "#5F5E5A", fontSize: 12, cursor: "pointer", fontWeight: picked ? 600 : 400 }}
-                            >
-                              {picked ? "✓ " : ""}{svc.name}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    <div key={cat.id} style={{ marginBottom: 6 }}>
+                      <button
+                        onClick={() => setOpenCategory(isOpen ? null : cat.id)}
+                        style={{ width: "100%", padding: "12px 14px", background: pickedCount > 0 ? cat.color : "#F1EFE8", border: `1px solid ${pickedCount > 0 ? cat.text_color + "40" : "#D3D1C7"}`, borderRadius: isOpen ? "10px 10px 0 0" : 10, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{cat.label}</span>
+                          {pickedCount > 0 && (
+                            <span style={{ fontSize: 11, background: cat.text_color, color: "#fff", borderRadius: 10, padding: "1px 8px", fontWeight: 600 }}>{pickedCount}</span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 13, color: "#888780" }}>{isOpen ? "▲" : "▼"}</span>
+                      </button>
+                      {isOpen && (
+                        <div style={{ border: `1px solid ${pickedCount > 0 ? cat.text_color + "40" : "#D3D1C7"}`, borderTop: "none", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
+                          {catServices.map(svc => {
+                            const picked = editServices.find(s => s.id === svc.id);
+                            return (
+                              <div
+                                key={svc.id}
+                                onClick={() => {
+                                  if (picked) {
+                                    setEditServices(editServices.filter(s => s.id !== svc.id));
+                                  } else {
+                                    setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
+                                  }
+                                }}
+                                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}
+                              >
+                                <div>
+                                  <div style={{ fontSize: 13, color: "#2C2C2A" }}>{svc.name}</div>
+                                  {svc.default_price > 0 && <div style={{ fontSize: 11, color: "#888780" }}>${svc.default_price.toLocaleString()}</div>}
+                                </div>
+                                <div style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${picked ? cat.text_color : "#D3D1C7"}`, background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                  {picked && <span style={{ color: "#fff", fontSize: 13 }}>✓</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
