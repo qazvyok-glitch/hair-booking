@@ -44,6 +44,7 @@ export default function DesignerTransaction() {
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   });
   const [chartType, setChartType] = useState<"bar" | "pie">("bar");
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
 
   useEffect(() => {
     const session = sessionStorage.getItem("designerSession");
@@ -158,6 +159,24 @@ export default function DesignerTransaction() {
   }
 
   // 帳務報表計算
+  const yearlyData = (() => {
+    const months: Record<string, number> = {};
+    for (let m = 1; m <= 12; m++) {
+      const key = `${selectedYear}-${String(m).padStart(2,"0")}`;
+      months[key] = 0;
+    }
+    history.forEach((t) => {
+      const month = t.created_at?.slice(0, 7);
+      if (month && month.startsWith(String(selectedYear))) {
+        months[month] = (months[month] || 0) + (t.total_amount || 0);
+      }
+    });
+    return Object.entries(months).sort((a, b) => a[0].localeCompare(b[0]));
+  })();
+
+  const yearTotal = yearlyData.reduce((sum, [, v]) => sum + v, 0);
+  const maxMonthly = Math.max(...yearlyData.map(([, v]) => v), 1);
+
   const monthlyData = (() => {
     const months: Record<string, number> = {};
     history.forEach((t) => {
@@ -167,10 +186,18 @@ export default function DesignerTransaction() {
     return Object.entries(months).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6).reverse();
   })();
 
-  const maxMonthly = Math.max(...monthlyData.map(([, v]) => v), 1);
-
   const filteredHistory = history.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
   const filteredTotal = filteredHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+
+  const availableYears = (() => {
+    const years = new Set<number>();
+    history.forEach(t => {
+      const y = parseInt(t.created_at?.slice(0, 4) || "0");
+      if (y > 2020) years.add(y);
+    });
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+  })();
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
@@ -193,10 +220,34 @@ export default function DesignerTransaction() {
       <div style={{ padding: "0 16px 32px" }}>
         {tab === "report" && (
           <>
+            {/* 年度選擇 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>年度：</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {availableYears.map(y => (
+                  <button key={y} onClick={() => setSelectedYear(y)} style={{ padding: "5px 14px", borderRadius: 20, border: "none", background: selectedYear === y ? "#534AB7" : "#fff", color: selectedYear === y ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: selectedYear === y ? 600 : 400, cursor: "pointer" }}>
+                    {y}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 年度總收入 */}
+            <div style={{ background: "#2C2840", borderRadius: 14, padding: "12px 16px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 11, color: "#888780" }}>{selectedYear} 年度總收入</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#C8C4F8" }}>${yearTotal.toLocaleString()}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 11, color: "#888780" }}>月均收入</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: "#C8C4F8" }}>${Math.round(yearTotal / 12).toLocaleString()}</div>
+              </div>
+            </div>
+
             {/* 月收入圖表 */}
             <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>近6個月收入</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>{selectedYear} 各月收入</div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {[{ key: "bar", label: "長條" }, { key: "pie", label: "圓餅" }].map((c) => (
                     <button key={c.key} onClick={() => setChartType(c.key as "bar" | "pie")} style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: chartType === c.key ? "#534AB7" : "#F1EFE8", color: chartType === c.key ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}>{c.label}</button>
@@ -204,27 +255,27 @@ export default function DesignerTransaction() {
                 </div>
               </div>
               {chartType === "bar" ? (
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 120 }}>
-                  {monthlyData.map(([month, amount]) => (
-                    <div key={month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                      <div style={{ fontSize: 9, color: "#534AB7", fontWeight: 600 }}>${(amount/1000).toFixed(1)}k</div>
-                      <div style={{ width: "100%", background: "#534AB7", borderRadius: "4px 4px 0 0", height: `${Math.max((amount / maxMonthly) * 90, 4)}px`, transition: "height 0.3s" }} />
-                      <div style={{ fontSize: 9, color: "#888780" }}>{month.slice(5)}月</div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 120 }}>
+                  {yearlyData.map(([month, amount]) => (
+                    <div key={month} onClick={() => setSelectedMonth(month)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                      <div style={{ fontSize: 8, color: selectedMonth === month ? "#534AB7" : "#888780", fontWeight: 600 }}>{amount > 0 ? `${(amount/1000).toFixed(0)}k` : ""}</div>
+                      <div style={{ width: "100%", background: selectedMonth === month ? "#534AB7" : "#AFA9EC", borderRadius: "4px 4px 0 0", height: `${Math.max((amount / maxMonthly) * 90, 2)}px`, transition: "height 0.3s" }} />
+                      <div style={{ fontSize: 8, color: selectedMonth === month ? "#534AB7" : "#888780", fontWeight: selectedMonth === month ? 600 : 400 }}>{month.slice(5)}月</div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {monthlyData.slice().reverse().map(([month, amount], i) => {
-                    const colors = ["#534AB7","#7B6FD4","#A89FE8","#1D9E75","#BA7517","#E24B4A"];
+                  {yearlyData.filter(([, amount]) => amount > 0).map(([month, amount], i) => {
+                    const colors = ["#534AB7","#7B6FD4","#1D9E75","#BA7517","#E24B4A","#0C447C","#085041","#633806"];
                     return (
-                      <div key={month} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div key={month} onClick={() => setSelectedMonth(month)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: colors[i % colors.length], flexShrink: 0 }} />
-                        <div style={{ fontSize: 11, color: "#5F5E5A", width: 40 }}>{month.slice(5)}月</div>
+                        <div style={{ fontSize: 11, color: selectedMonth === month ? "#534AB7" : "#5F5E5A", width: 40, fontWeight: selectedMonth === month ? 600 : 400 }}>{month.slice(5)}月</div>
                         <div style={{ flex: 1, height: 16, background: "#F1EFE8", borderRadius: 8, overflow: "hidden" }}>
-                          <div style={{ height: "100%", background: colors[i % colors.length], width: `${(amount / maxMonthly) * 100}%`, borderRadius: 8, transition: "width 0.3s" }} />
+                          <div style={{ height: "100%", background: colors[i % colors.length], width: `${(amount / maxMonthly) * 100}%`, borderRadius: 8 }} />
                         </div>
-                        <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, width: 60, textAlign: "right" }}>${amount.toLocaleString()}</div>
+                        <div style={{ fontSize: 11, color: colors[i % colors.length], fontWeight: 600, width: 65, textAlign: "right" }}>${amount.toLocaleString()}</div>
                       </div>
                     );
                   })}
