@@ -5,7 +5,7 @@ import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
 
 type Service = { id: number; name: string; duration: string; note: string; category_id: number; is_active: boolean; sort_order: number; default_price: number };
-type ServiceCategory = { id: number; name: string; label: string; color: string; text_color: string; is_active: boolean };
+type ServiceCategory = { id: number; name: string; label: string; color: string; text_color: string; is_active: boolean; sort_order: number };
 
 export default function AdminServices() {
   const router = useRouter();
