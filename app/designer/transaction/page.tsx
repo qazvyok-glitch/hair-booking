@@ -232,6 +232,19 @@ export default function DesignerTransaction() {
   const filteredHistory = history.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
   const filteredTotal = filteredHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
 
+  // 當月各服務項目統計
+  const serviceStats = (() => {
+    const stats: Record<string, number> = {};
+    filteredHistory.forEach(t => {
+      (t.service_items || []).forEach((s: SelectedService) => {
+        if (s.name) stats[s.name] = (stats[s.name] || 0) + (s.amount || 0);
+      });
+    });
+    return Object.entries(stats).sort((a, b) => b[1] - a[1]);
+  })();
+  const maxServiceAmount = Math.max(...serviceStats.map(([, v]) => v), 1);
+  const serviceColors = ["#534AB7","#7B6FD4","#1D9E75","#BA7517","#E24B4A","#0C447C","#085041","#A32D2D","#633806","#3C3489"];
+
   const availableYears = (() => {
     const years = new Set<number>();
     history.forEach(t => {
@@ -385,6 +398,59 @@ export default function DesignerTransaction() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+
+            {/* 當月服務項目統計 */}
+            <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>
+                  {selectedMonth.replace("-", " 年 ")} 月服務統計
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[{ key: "bar", label: "長條" }, { key: "pie", label: "圓餅" }].map((c) => (
+                    <button key={c.key} onClick={() => setChartType(c.key as "bar" | "pie")} style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: chartType === c.key ? "#534AB7" : "#F1EFE8", color: chartType === c.key ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}>{c.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              {serviceStats.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px 0", color: "#888780", fontSize: 13 }}>本月尚無服務紀錄</div>
+              ) : chartType === "bar" ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {serviceStats.map(([name, amount], i) => (
+                    <div key={name}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, color: "#2C2C2A" }}>{name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: serviceColors[i % serviceColors.length] }}>${amount.toLocaleString()}</span>
+                      </div>
+                      <div style={{ height: 10, background: "#F1EFE8", borderRadius: 6, overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: serviceColors[i % serviceColors.length], width: `${(amount / maxServiceAmount) * 100}%`, borderRadius: 6, transition: "width 0.3s" }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "0.5px solid #F1EFE8" }}>
+                    <span style={{ fontSize: 13, color: "#888780" }}>本月服務總計</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${filteredTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {serviceStats.map(([name, amount], i) => (
+                    <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <div style={{ width: 14, height: 14, borderRadius: "50%", background: serviceColors[i % serviceColors.length], flexShrink: 0 }} />
+                      <div style={{ flex: 1, fontSize: 12, color: "#2C2C2A" }}>{name}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: serviceColors[i % serviceColors.length] }}>${amount.toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: "#888780", width: 36, textAlign: "right" }}>
+                        {Math.round((amount / filteredTotal) * 100)}%
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "0.5px solid #F1EFE8" }}>
+                    <span style={{ fontSize: 13, color: "#888780" }}>本月服務總計</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${filteredTotal.toLocaleString()}</span>
+                  </div>
                 </div>
               )}
             </div>
