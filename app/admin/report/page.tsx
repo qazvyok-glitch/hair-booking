@@ -250,13 +250,6 @@ export default function AdminReport() {
                         <span style={{ color: "#5F5E5A" }}>服務抽成 ({Math.round((d.commission_rate || 0) * 100)}%)</span>
                         <span style={{ color: "#534AB7", fontWeight: 500 }}>+${report.serviceCommission.toLocaleString()}</span>
                       </div>
-
-                      {report.designerDiscount > 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                          <span style={{ color: "#5F5E5A" }}>折扣吸收 ({Math.round((d.discount_absorption || 1) * 100)}%)</span>
-                          <span style={{ color: "#A32D2D" }}>-${report.designerDiscount.toLocaleString()}</span>
-                        </div>
-                      )}
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, paddingTop: 6, borderTop: "0.5px solid #F1EFE8", marginTop: 2 }}>
                         <span style={{ color: "#2C2C2A" }}>應付抽成</span>
                         <span style={{ color: "#534AB7" }}>${report.totalCommission.toLocaleString()}</span>
