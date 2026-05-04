@@ -25,6 +25,7 @@ type Transaction = {
   service_items: { id: number; name: string; amount: number; discount: number }[];
   total_amount: number;
   created_at: string;
+  payment_method: string;
 };
 
 type ProductUsage = {
