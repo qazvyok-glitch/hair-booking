@@ -566,21 +566,21 @@ export default function DesignerTransaction() {
               <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無交易紀錄</div>
             ) : (
               history.map((t) => (
-                <div key={t.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{t.customer_name}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${t.total_amount?.toLocaleString()}</div>
-                      <button onClick={() => openEditTransaction(t)} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>編輯</button>
-                    </div>
+                <div key={t.id} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 6, border: "0.5px solid #D3D1C7" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: t.service_items?.length ? 4 : 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", flexShrink: 0 }}>{t.customer_name}</span>
+                    <span style={{ fontSize: 11, color: "#888780", flexShrink: 0 }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#534AB7", flexShrink: 0 }}>${t.total_amount?.toLocaleString()}</span>
+                    {t.payment_method && <span style={{ fontSize: 10, background: "#F1EFE8", color: "#5F5E5A", borderRadius: 6, padding: "1px 6px", flexShrink: 0 }}>{t.payment_method}</span>}
+                    <button onClick={() => openEditTransaction(t)} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", flexShrink: 0 }}>編輯</button>
                   </div>
-                  <div style={{ fontSize: 11, color: "#888780" }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
-                  {t.service_items && (
-                    <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 4 }}>
-                      {t.service_items.map((s) => `${s.name} $${s.amount}`).join("、")}
+                  {t.service_items && t.service_items.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#5F5E5A" }}>
+                      {t.service_items.map((s: SelectedService) => `${s.name} $${s.amount?.toLocaleString()}`).join(" ・ ")}
                     </div>
                   )}
-                  {t.note && <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>備註：{t.note}</div>}
+                  {t.note && <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>備註：{t.note}</div>}
                 </div>
               ))
             )}
