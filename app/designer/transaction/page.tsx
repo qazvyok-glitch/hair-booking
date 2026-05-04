@@ -19,6 +19,8 @@ type Transaction = {
   total_amount: number;
   note: string;
   created_at: string;
+  payment_method: string;
+  designer_id: number;
 };
 
 export default function DesignerTransaction() {
@@ -35,6 +37,8 @@ export default function DesignerTransaction() {
   const [productUsage, setProductUsage] = useState<ProductUsageItem[]>([]);
   const [showProducts, setShowProducts] = useState(false);
   const [note, setNote] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("現金");
+  const [customPayment, setCustomPayment] = useState("");
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"new" | "history" | "report">("history");
   const [showPhotoPrompt, setShowPhotoPrompt] = useState(false);
@@ -131,6 +135,7 @@ export default function DesignerTransaction() {
       service_items: selectedServices,
       total_amount: totalAmount,
       note,
+      payment_method: paymentMethod === "其他" ? (customPayment || "其他") : paymentMethod,
     });
     if (materials.some(m => m.name)) {
       await supabase.from("material_usage").insert(
@@ -736,6 +741,19 @@ export default function DesignerTransaction() {
                 </div>
               ))}
               <button onClick={addMaterial} style={{ width: "100%", padding: "8px 0", background: "#F1EFE8", border: "0.5px dashed #D3D1C7", borderRadius: 8, fontSize: 12, color: "#5F5E5A", cursor: "pointer" }}>＋ 新增耗材</button>
+            </div>
+
+            {/* 支付方式 */}
+            <div style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 10 }}>支付方式</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {["現金", "轉帳", "電子支付", "其他"].map(m => (
+                  <button key={m} onClick={() => setPaymentMethod(m)} style={{ padding: "8px 16px", borderRadius: 20, border: "none", background: paymentMethod === m ? "#534AB7" : "#F1EFE8", color: paymentMethod === m ? "#fff" : "#5F5E5A", fontSize: 13, fontWeight: paymentMethod === m ? 600 : 400, cursor: "pointer" }}>{m}</button>
+                ))}
+              </div>
+              {paymentMethod === "其他" && (
+                <input value={customPayment} onChange={(e) => setCustomPayment(e.target.value)} placeholder="請輸入支付方式..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginTop: 10 }} />
+              )}
             </div>
 
             {/* 備註 */}
