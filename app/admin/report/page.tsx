@@ -91,20 +91,15 @@ export default function AdminReport() {
 
   function calcDesignerReport(d: Designer) {
     const dTransactions = monthlyTransactions.filter(t => t.designer_id === d.id);
-    const dProductUsages = monthlyProductUsages.filter(p => p.designer_id === d.id);
 
-    // 服務業績
+    // 服務業績（已含折扣後的實際金額）
     const serviceRevenue = dTransactions.reduce((sum, t) => sum + (t.total_amount || 0), 0);
 
-    // 折扣總額
+    // 折扣總額（僅顯示用）
     const totalDiscount = dTransactions.reduce((sum, t) => {
-      const discount = (t.service_items || []).reduce((s, si) => s + (si.discount || 0), 0);
+      const discount = (t.service_items || []).reduce((s: number, si: any) => s + (si.discount || 0), 0);
       return sum + discount;
     }, 0);
-
-    // 設計師吸收的折扣
-    const absorptionRate = d.discount_absorption ?? 1.0;
-    const designerDiscount = Math.round(totalDiscount * absorptionRate);
 
     // 底扣
     const baseDeduction = d.commission_base_deduction || 0;
@@ -113,26 +108,15 @@ export default function AdminReport() {
     const commissionBase = Math.max(0, serviceRevenue - baseDeduction);
     const serviceCommission = Math.round(commissionBase * (d.commission_rate || 0));
 
-    // 商品業績（設計師賣出）
-    const productRevenue = dProductUsages.reduce((sum, p) => sum + (p.total_cost || 0), 0);
-    const productCommission = Math.round(productRevenue * (d.product_commission_rate || 0));
-
-    // 總抽成
-    const totalCommission = serviceCommission + productCommission - designerDiscount;
-
     return {
       serviceRevenue,
       totalDiscount,
-      designerDiscount,
       baseDeduction,
       commissionBase,
       serviceCommission,
-      productRevenue,
-      productCommission,
-      totalCommission: Math.max(0, totalCommission),
+      totalCommission: serviceCommission,
       transactionCount: dTransactions.length,
       transactions: dTransactions,
-      productUsages: dProductUsages,
     };
   }
 
