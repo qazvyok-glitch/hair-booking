@@ -442,12 +442,42 @@ export default function DesignerTransaction() {
                 </div>
               ) : (
                 <div>
+                  {/* SVG 圓餅圖 */}
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                    <svg width="160" height="160" viewBox="0 0 160 160">
+                      {(() => {
+                        let cumulative = 0;
+                        return serviceStats.map(([name, amount], i) => {
+                          const pct = amount / filteredTotal;
+                          const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                          cumulative += pct;
+                          const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                          const r = 70;
+                          const cx = 80, cy = 80;
+                          const x1 = cx + r * Math.cos(startAngle);
+                          const y1 = cy + r * Math.sin(startAngle);
+                          const x2 = cx + r * Math.cos(endAngle);
+                          const y2 = cy + r * Math.sin(endAngle);
+                          const largeArc = pct > 0.5 ? 1 : 0;
+                          const d = pct >= 1
+                            ? `M ${cx} ${cy} m -${r} 0 a ${r} ${r} 0 1 1 ${r*2} 0 a ${r} ${r} 0 1 1 -${r*2} 0`
+                            : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                          return <path key={name} d={d} fill={serviceColors[i % serviceColors.length]} stroke="#fff" strokeWidth="2" />;
+                        });
+                      })()}
+                      <circle cx="80" cy="80" r="35" fill="#fff" />
+                      <text x="80" y="76" textAnchor="middle" fontSize="11" fill="#888780">總計</text>
+                      <text x="80" y="92" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#534AB7">${(filteredTotal/1000).toFixed(1)}k</text>
+                    </svg>
+                  </div>
+
+                  {/* 圖例 */}
                   {serviceStats.map(([name, amount], i) => (
                     <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <div style={{ width: 14, height: 14, borderRadius: "50%", background: serviceColors[i % serviceColors.length], flexShrink: 0 }} />
+                      <div style={{ width: 14, height: 14, borderRadius: 4, background: serviceColors[i % serviceColors.length], flexShrink: 0 }} />
                       <div style={{ flex: 1, fontSize: 12, color: "#2C2C2A" }}>{name}</div>
                       <div style={{ fontSize: 12, fontWeight: 600, color: serviceColors[i % serviceColors.length] }}>${amount.toLocaleString()}</div>
-                      <div style={{ fontSize: 11, color: "#888780", width: 36, textAlign: "right" }}>
+                      <div style={{ fontSize: 11, color: "#888780", background: "#F1EFE8", borderRadius: 6, padding: "1px 6px", minWidth: 36, textAlign: "center" }}>
                         {Math.round((amount / filteredTotal) * 100)}%
                       </div>
                     </div>
