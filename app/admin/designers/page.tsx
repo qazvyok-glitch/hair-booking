@@ -75,6 +75,7 @@ export default function AdminDesigners() {
       commission_base_deduction: 0,
       commission_threshold: 0,
       commission_rate_after: 0.5,
+      brand_fee_rate: 0,
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, status: "active",
       work_hours: defaultWorkHours,
@@ -92,6 +93,7 @@ export default function AdminDesigners() {
       commission_base_deduction: (d as any).commission_base_deduction ?? 0,
       commission_threshold: (d as any).commission_threshold ?? 0,
       commission_rate_after: (d as any).commission_rate_after ?? 0.5,
+      brand_fee_rate: (d as any).brand_fee_rate ?? 0,
       joined_date: d.joined_date || "", left_date: d.left_date || "",
       can_view_members: d.can_view_members ?? true, status: d.status || "active",
       work_hours: d.work_hours || defaultWorkHours,
@@ -308,6 +310,32 @@ export default function AdminDesigners() {
               </div>
               <div onClick={() => setForm({ ...form, can_view_members: !form.can_view_members })} style={{ width: 44, height: 24, borderRadius: 12, background: form.can_view_members ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.can_view_members ? 22 : 2, transition: "left 0.2s" }} />
+              </div>
+            </div>
+
+            {/* 品牌社群資源共享費 */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>品牌社群資源共享費</div>
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
+                計算方式：總服務業績 × %<br/>
+                從抽成中扣除
+              </div>
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>費率</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={Math.round((form.brand_fee_rate || 0) * 100) || ""}
+                    onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })}
+                    type="number" min="0" max="100" placeholder="0"
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
+                </div>
+                {(form.brand_fee_rate || 0) > 0 && (
+                  <div style={{ fontSize: 10, color: "#888780", marginTop: 4 }}>
+                    預覽：業績 $100,000 → 品牌費 ${Math.round(100000 * (form.brand_fee_rate || 0)).toLocaleString()}
+                  </div>
+                )}
               </div>
             </div>
 

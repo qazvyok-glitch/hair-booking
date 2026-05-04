@@ -108,13 +108,22 @@ export default function AdminReport() {
     const commissionBase = Math.max(0, serviceRevenue - baseDeduction);
     const serviceCommission = Math.round(commissionBase * (d.commission_rate || 0));
 
+    // 品牌社群資源共享費：總業績 × %
+    const brandFeeRate = (d as any).brand_fee_rate || 0;
+    const brandFee = Math.round(serviceRevenue * brandFeeRate);
+
+    // 實際應付抽成
+    const totalCommission = Math.max(0, serviceCommission - brandFee);
+
     return {
       serviceRevenue,
       totalDiscount,
       baseDeduction,
       commissionBase,
       serviceCommission,
-      totalCommission: serviceCommission,
+      brandFee,
+      brandFeeRate,
+      totalCommission,
       transactionCount: dTransactions.length,
       transactions: dTransactions,
     };
