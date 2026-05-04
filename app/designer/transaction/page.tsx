@@ -484,7 +484,7 @@ export default function DesignerTransaction() {
                                   fill={serviceColors[i % serviceColors.length]}
                                 >
                                   <tspan x={lx} dy="-5">{name.replace(/[✂💈🎨]/g, "").trim().slice(0, 4)}</tspan>
-                                  <tspan x={lx} dy="12">{pctText}%</tspan>
+                                  <tspan x={lx} dy="12">${(amount/1000).toFixed(1)}k</tspan>
                                 </text>
                               )}
                             </g>
