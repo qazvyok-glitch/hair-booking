@@ -444,7 +444,7 @@ export default function DesignerTransaction() {
                 <div>
                   {/* SVG 圓餅圖 */}
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                    <svg width="160" height="160" viewBox="0 0 160 160">
+                    <svg width="260" height="260" viewBox="0 0 260 260">
                       {(() => {
                         let cumulative = 0;
                         return serviceStats.map(([name, amount], i) => {
@@ -452,8 +452,9 @@ export default function DesignerTransaction() {
                           const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
                           cumulative += pct;
                           const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-                          const r = 70;
-                          const cx = 80, cy = 80;
+                          const midAngle = (startAngle + endAngle) / 2;
+                          const r = 90;
+                          const cx = 130, cy = 130;
                           const x1 = cx + r * Math.cos(startAngle);
                           const y1 = cy + r * Math.sin(startAngle);
                           const x2 = cx + r * Math.cos(endAngle);
@@ -462,12 +463,37 @@ export default function DesignerTransaction() {
                           const d = pct >= 1
                             ? `M ${cx} ${cy} m -${r} 0 a ${r} ${r} 0 1 1 ${r*2} 0 a ${r} ${r} 0 1 1 -${r*2} 0`
                             : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                          return <path key={name} d={d} fill={serviceColors[i % serviceColors.length]} stroke="#fff" strokeWidth="2" />;
+
+                          // 標籤位置（只顯示超過5%的標籤）
+                          const labelR = r + 22;
+                          const lx = cx + labelR * Math.cos(midAngle);
+                          const ly = cy + labelR * Math.sin(midAngle);
+                          const pctText = Math.round(pct * 100);
+
+                          return (
+                            <g key={name}>
+                              <path d={d} fill={serviceColors[i % serviceColors.length]} stroke="#fff" strokeWidth="2" />
+                              {pct >= 0.05 && (
+                                <text
+                                  x={lx}
+                                  y={ly}
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                  fontSize="9"
+                                  fontWeight="600"
+                                  fill={serviceColors[i % serviceColors.length]}
+                                >
+                                  <tspan x={lx} dy="-5">{name.replace(/[✂💈🎨]/g, "").trim().slice(0, 4)}</tspan>
+                                  <tspan x={lx} dy="12">{pctText}%</tspan>
+                                </text>
+                              )}
+                            </g>
+                          );
                         });
                       })()}
-                      <circle cx="80" cy="80" r="35" fill="#fff" />
-                      <text x="80" y="76" textAnchor="middle" fontSize="11" fill="#888780">總計</text>
-                      <text x="80" y="92" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#534AB7">${(filteredTotal/1000).toFixed(1)}k</text>
+                      <circle cx="130" cy="130" r="48" fill="#fff" />
+                      <text x="130" y="124" textAnchor="middle" fontSize="11" fill="#888780">總計</text>
+                      <text x="130" y="142" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#534AB7">${(filteredTotal/1000).toFixed(1)}k</text>
                     </svg>
                   </div>
 
