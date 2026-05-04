@@ -232,12 +232,17 @@ export default function DesignerTransaction() {
   const filteredHistory = history.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
   const filteredTotal = filteredHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
 
-  // 當月各服務項目統計
+  // 當月各服務分類統計
   const serviceStats = (() => {
     const stats: Record<string, number> = {};
     filteredHistory.forEach(t => {
       (t.service_items || []).forEach((s: SelectedService) => {
-        if (s.name) stats[s.name] = (stats[s.name] || 0) + (s.amount || 0);
+        if (!s.name) return;
+        // 根據服務名稱找對應分類
+        const svc = services.find(sv => sv.id === s.id);
+        const cat = svc ? categories.find(c => c.id === svc.category_id) : null;
+        const key = cat ? cat.label : s.name;
+        stats[key] = (stats[key] || 0) + (s.amount || 0);
       });
     });
     return Object.entries(stats).sort((a, b) => b[1] - a[1]);
