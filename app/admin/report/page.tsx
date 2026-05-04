@@ -25,7 +25,7 @@ type Transaction = {
   service_items: { id: number; name: string; amount: number; discount: number }[];
   total_amount: number;
   created_at: string;
-  payment_method: string;
+
 };
 
 type ProductUsage = {
@@ -267,7 +267,7 @@ export default function AdminReport() {
                           <span style={{ fontSize: 12, fontWeight: 600, color: "#2C2C2A", flexShrink: 0 }}>{t.customer_name}</span>
                           <span style={{ fontSize: 11, color: "#5F5E5A", flexShrink: 0 }}>{t.service_items?.map((s: any) => s.name + " $" + s.amount?.toLocaleString()).join(" ・ ")}</span>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#534AB7", flexShrink: 0 }}>${t.total_amount?.toLocaleString()}</span>
-                          {(t as any).payment_method && <span style={{ fontSize: 10, background: "#F1EFE8", color: "#5F5E5A", borderRadius: 6, padding: "1px 6px", flexShrink: 0 }}>{(t as any).payment_method}</span>}
+
                         </div>
                       ))}
                     </div>
