@@ -104,12 +104,13 @@ export default function AdminDesigners() {
     if (!form.name) { alert("請填寫設計師姓名"); return; }
     setSaving(true);
     const isActive = form.status === "active";
+    const saveData = { ...form, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null };
     if (editing) {
-      await supabase.from("designers").update({ ...form, is_active: isActive }).eq("id", editing.id);
+      await supabase.from("designers").update(saveData).eq("id", editing.id);
       await supabase.from("designer_auth").update({ username: form.name.toLowerCase() }).eq("designer_id", editing.id);
       setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...form, is_active: isActive } : d));
     } else {
-      const { data } = await supabase.from("designers").insert({ ...form, is_active: isActive }).select().single();
+      const { data } = await supabase.from("designers").insert(saveData).select().single();
       if (data) {
         setDesigners([...designers, data]);
         await supabase.from("designer_auth").insert({
