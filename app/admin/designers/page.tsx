@@ -104,11 +104,14 @@ export default function AdminDesigners() {
     if (!form.name) { alert("請填寫設計師姓名"); return; }
     setSaving(true);
     const isActive = form.status === "active";
-    if (editing) {
-      await supabase.from("designers").update({ ...form, is_active: isActive }).eq("id", editing.id);
+    if (editing.id) {
       await supabase.from("designers").update({ ...form, is_active: isActive }).eq("id", editing.id);
       await supabase.from("designer_auth").update({ username: form.name.toLowerCase() }).eq("designer_id", editing.id);
-      setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...form, is_active: isActive } : d));
+      setDesigners(designer.map(d => d.id === editing.id ? { ...d, ...form, is_active: isActive } : d));
+    } else {
+
+
+
       const { data } = await supabase.from("designers").insert({ ...form, is_active: isActive }).select().single();
       if (data) {
         setDesigners([...designers, data]);
@@ -128,7 +131,7 @@ export default function AdminDesigners() {
     const isActive = newStatus === "active";
     const leftDate = newStatus === "inactive" ? new Date().toISOString().split("T")[0] : null;
     await supabase.from("designers").update({ status: newStatus, is_active: isActive, left_date: leftDate }).eq("id", d.id);
-    setDesigners(designers.map(x => x.id === d.id ? { ...x, status: newStatus, is_active: isActive, left_date: leftDate || "" } : x));
+    setDesignersdesigners.map(x => x.id === d.id ? { ...x, status: newStatus, is_active: isActive, left_date: leftDate || "" } : x));
   }
 
   async function toggleMemberAccess(d: Designer) {
