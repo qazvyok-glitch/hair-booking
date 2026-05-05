@@ -106,9 +106,9 @@ export default function AdminDesigners() {
     const isActive = form.status === "active";
     if (editing) {
       await supabase.from("designers").update({ ...form, is_active: isActive }).eq("id", editing.id);
+      await supabase.from("designers").update({ ...form, is_active: isActive }).eq("id", editing.id);
       await supabase.from("designer_auth").update({ username: form.name.toLowerCase() }).eq("designer_id", editing.id);
       setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...form, is_active: isActive } : d));
-    } else {
       const { data } = await supabase.from("designers").insert({ ...form, is_active: isActive }).select().single();
       if (data) {
         setDesigners([...designers, data]);
