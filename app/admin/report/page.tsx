@@ -115,44 +115,6 @@ export default function AdminReport() {
     } catch(e) { alert("Excel 導出失敗"); }
   }
 
-  function exportPDF() {
-    try {
-      const { jsPDF } = require("jspdf");
-      const autoTable = require("jspdf-autotable").default;
-      const doc = new jsPDF({ orientation: "landscape" });
-      doc.setFontSize(14);
-      doc.text("Bing Cherry Hair Salon - " + selectedMonth + " 月報表", 14, 15);
-      doc.setFontSize(11);
-      doc.text("設計師抽成明細", 14, 26);
-      autoTable(doc, {
-        startY: 30,
-        head: [["設計師","服務業績","底扣","抽成%","服務抽成","品牌費","應付抽成"]],
-        body: designers.map((d: any) => {
-          const r = calcDesignerReport(d);
-          return [d.name, "$"+r.serviceRevenue.toLocaleString(), "$"+r.baseDeduction.toLocaleString(), Math.round((d.commission_rate||0)*100)+"%", "$"+r.serviceCommission.toLocaleString(), "$"+r.brandFee.toLocaleString(), "$"+r.totalCommission.toLocaleString()];
-        }),
-        headStyles: { fillColor: [83,74,183] }, styles: { fontSize: 9 },
-      });
-      const y1 = (doc as any).lastAutoTable.finalY + 10;
-      doc.text("交易明細", 14, y1);
-      autoTable(doc, {
-        startY: y1 + 4,
-        head: [["日期","設計師","會員編號","客人","服務項目","購買商品","總金額","支付"]],
-        body: monthlyTransactions.map((t: any) => [
-          t.created_at?.slice(0,10)||"",
-          designers.find((d: any) => d.id === t.designer_id)?.name||"-",
-          getCustomerNo(t.customer_phone||""),
-          t.customer_name,
-          t.service_items?.map((s: any) => s.name).join(",").slice(0,30)||"-",
-          t.product_items?.map((p: any) => p.name).join(",").slice(0,20)||"-",
-          "$"+t.total_amount?.toLocaleString(),
-          t.payment_method||"-",
-        ]),
-        headStyles: { fillColor: [83,74,183] }, styles: { fontSize: 8 },
-      });
-      doc.save("BC_報表_" + selectedMonth + ".pdf");
-    } catch(e) { alert("PDF 導出失敗"); }
-  }
 
 
   useEffect(() => {
@@ -261,8 +223,7 @@ export default function AdminReport() {
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>收入報表</div>
         <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, cursor: "pointer" }}>Excel</button>
-          <button onClick={exportPDF} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, cursor: "pointer" }}>PDF</button>
+          <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>導出 Excel ▼</button>
         </div>
       </div>
 
