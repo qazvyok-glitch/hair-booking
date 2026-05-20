@@ -47,6 +47,7 @@ export default function DesignerDashboard() {
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+  const [newBookingServices, setNewBookingServices] = useState<number[]>([]);
   const [addingSaving, setAddingSaving] = useState(false);
 
   useEffect(() => {
@@ -88,12 +89,13 @@ export default function DesignerDashboard() {
       booking_time: newBooking.booking_time,
       note: newBooking.note,
       status: "confirmed",
-      service_ids: [],
+      service_ids: newBookingServices,
     }).select().single();
     if (data) setBookings([...bookings, data]);
     setAddingSaving(false);
     setShowAddBooking(false);
     setNewBooking({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+    setNewBookingServices([]);
   }
 
   async function updateStatus(id: number, status: string) {
@@ -210,6 +212,20 @@ export default function DesignerDashboard() {
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 8 }}>服務項目</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {services.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setNewBookingServices(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                    style={{ padding: "6px 12px", borderRadius: 20, border: "none", background: newBookingServices.includes(s.id) ? "#534AB7" : "#F1EFE8", color: newBookingServices.includes(s.id) ? "#fff" : "#5F5E5A", fontSize: 12, cursor: "pointer" }}
+                  >
+                    {s.name}
+                  </button>
+                ))}
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
