@@ -45,6 +45,9 @@ export default function DesignerDashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
+  const [showAddBooking, setShowAddBooking] = useState(false);
+  const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+  const [addingSaving, setAddingSaving] = useState(false);
 
   useEffect(() => {
     const session = sessionStorage.getItem("designerSession");
@@ -74,6 +77,25 @@ export default function DesignerDashboard() {
   const upcomingBookings = bookings.filter((b) => b.booking_date > today);
   const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : bookings;
 
+  async function handleAddBooking() {
+    if (!newBooking.customer_name || !newBooking.booking_date) { alert("請填寫客人姓名及日期"); return; }
+    setAddingSaving(true);
+    const { data } = await supabase.from("bookings").insert({
+      designer_id: designer!.id,
+      customer_name: newBooking.customer_name,
+      customer_phone: newBooking.customer_phone,
+      booking_date: newBooking.booking_date,
+      booking_time: newBooking.booking_time,
+      note: newBooking.note,
+      status: "confirmed",
+      service_ids: [],
+    }).select().single();
+    if (data) setBookings([...bookings, data]);
+    setAddingSaving(false);
+    setShowAddBooking(false);
+    setNewBooking({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+  }
+
   async function updateStatus(id: number, status: string) {
     await supabase.from("bookings").update({ status }).eq("id", id);
     setBookings((prev) => prev.map((b) => b.id === id ? { ...b, status } : b));
@@ -97,6 +119,7 @@ export default function DesignerDashboard() {
           </div>
         </div>
         <div style={{ fontSize: 12, color: "#888780" }}>{today.replace(/-/g, "/")}</div>
+        <button onClick={() => setShowAddBooking(true)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增預約</button>
       </div>
 
       {/* 統計卡 */}
@@ -159,6 +182,46 @@ export default function DesignerDashboard() {
           ))
         )}
       </div>
+
+      {showAddBooking && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 390, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>新增預約</div>
+              <button onClick={() => setShowAddBooking(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>客人姓名 *</div>
+              <input value={newBooking.customer_name} onChange={(e) => setNewBooking({ ...newBooking, customer_name: e.target.value })} placeholder="王小明" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>電話</div>
+              <input value={newBooking.customer_phone} onChange={(e) => setNewBooking({ ...newBooking, customer_phone: e.target.value })} placeholder="09xx-xxx-xxx" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>日期 *</div>
+                <input type="date" value={newBooking.booking_date} onChange={(e) => setNewBooking({ ...newBooking, booking_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>時期</div>
+                <select value={newBooking.booking_time} onChange={(e) => setNewBooking({ ...newBooking, booking_time: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}>
+                  {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00"].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
+              <textarea value={newBooking.note} onChange={(e) => setNewBooking({ ...newBooking, note: e.target.value })} placeholder="服務項目、特殊需求..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", height: 60, resize: "none", boxSizing: "border-box" }} />
+            </div>
+            <button onClick={handleAddBooking} disabled={addingSaving} style={{ width: "100%", padding: "13px 0", background: addingSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: addingSaving ? "default" : "pointer" }}>
+              {addingSaving ? "建立中..." : "確認新增預約"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <BottomNav current="dashboard" />
     </div>
