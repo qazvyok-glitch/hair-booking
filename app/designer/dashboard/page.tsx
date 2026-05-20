@@ -14,7 +14,8 @@ type Booking = {
   status: string;
 };
 
-type Service = { id: number; name: string };
+type Service = { id: number; name: string; category_id: number };
+type ServiceCategory = { id: number; label: string; color: string; text_color: string };
 type DesignerSession = { id: number; name: string; nickname: string };
 
 function BottomNav({ current }: { current: string }) {
@@ -43,11 +44,13 @@ export default function DesignerDashboard() {
   const [designer, setDesigner] = useState<DesignerSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
   const [newBookingServices, setNewBookingServices] = useState<number[]>([]);
+  const [openCat, setOpenCat] = useState<number | null>(null);
   const [addingSaving, setAddingSaving] = useState(false);
 
   useEffect(() => {
@@ -57,12 +60,15 @@ export default function DesignerDashboard() {
     setDesigner(d);
 
     async function fetchData() {
-      const [{ data: bookingData }, { data: serviceData }] = await Promise.all([
+      const [{ data: bookingData }, { data: serviceData }, { data: catData }] = await Promise.all([
         supabase.from("bookings").select("*").eq("designer_id", d.id).order("booking_date").order("booking_time"),
-        supabase.from("services").select("id, name"),
+        supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
+        supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
       ]);
       if (bookingData) setBookings(bookingData);
       if (serviceData) setServices(serviceData);
+      if (catData) setCategories(catData);
+      if (results[2].data) setCategories(results[2].data);
       setLoading(false);
     }
     fetchData();
@@ -216,17 +222,37 @@ export default function DesignerDashboard() {
             </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 8 }}>服務項目</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {services.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setNewBookingServices(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}
-                    style={{ padding: "6px 12px", borderRadius: 20, border: "none", background: newBookingServices.includes(s.id) ? "#534AB7" : "#F1EFE8", color: newBookingServices.includes(s.id) ? "#fff" : "#5F5E5A", fontSize: 12, cursor: "pointer" }}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
+              {categories.map(cat => {
+                const catServices = services.filter(s => s.category_id === cat.id);
+                const pickedCount = catServices.filter(s => newBookingServices.includes(s.id)).length;
+                const isOpen = openCat === cat.id;
+                return (
+                  <div key={cat.id} style={{ marginBottom: 6 }}>
+                    <div onClick={() => setOpenCat(isOpen ? null : cat.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: pickedCount > 0 ? cat.color : "#F1EFE8", borderRadius: isOpen ? "8px 8px 0 0" : 8, cursor: "pointer", border: "0.5px solid #D3D1C7" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{cat.label}</span>
+                        {pickedCount > 0 && <span style={{ fontSize: 10, background: cat.text_color, color: "#fff", borderRadius: 10, padding: "1px 7px" }}>{pickedCount}</span>}
+                      </div>
+                      <span style={{ fontSize: 11, color: "#888780" }}>{isOpen ? "▲" : "▼"}</span>
+                    </div>
+                    {isOpen && (
+                      <div style={{ border: "0.5px solid #D3D1C7", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+                        {catServices.map(s => {
+                          const picked = newBookingServices.includes(s.id);
+                          return (
+                            <div key={s.id} onClick={() => setNewBookingServices(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}>
+                              <span style={{ fontSize: 12, color: "#2C2C2A" }}>{s.name}</span>
+                              <div style={{ width: 20, height: 20, borderRadius: 6, border: "1.5px solid " + (picked ? cat.text_color : "#D3D1C7"), background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {picked && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
