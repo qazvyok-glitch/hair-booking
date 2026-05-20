@@ -37,7 +37,7 @@ export default function DesignerTransaction() {
   const [productUsage, setProductUsage] = useState<ProductUsageItem[]>([]);
   const [showProducts, setShowProducts] = useState(false);
   const [showClientProducts, setShowClientProducts] = useState(false);
-  const [clientProductUsage, setClientProductUsage] = useState([]);
+  const [clientProductUsage, setClientProductUsage] = useState<ProductUsageItem[]>([]);
   const [note, setNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("現金");
   const [customPayment, setCustomPayment] = useState("");
@@ -113,13 +113,13 @@ export default function DesignerTransaction() {
     setMaterials(materials.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
   }
 
-  function toggleClientProduct(product) {
+  function toggleClientProduct(product: Product) {
     const exists = clientProductUsage.find(p => p.product.id === product.id);
     if (exists) setClientProductUsage(clientProductUsage.filter(p => p.product.id !== product.id));
     else setClientProductUsage([...clientProductUsage, { product, quantity: 1 }]);
   }
 
-  function updateClientProductQty(id, qty) {
+  function updateClientProductQty(id: number, qty: number) {
     setClientProductUsage(clientProductUsage.map(p => p.product.id === id ? { ...p, quantity: qty } : p));
   }
 
