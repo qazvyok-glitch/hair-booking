@@ -68,7 +68,6 @@ export default function DesignerDashboard() {
       if (bookingData) setBookings(bookingData);
       if (serviceData) setServices(serviceData);
       if (catData) setCategories(catData);
-      if (results[2].data) setCategories(results[2].data);
       setLoading(false);
     }
     fetchData();
