@@ -1,5 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
@@ -162,6 +165,10 @@ export default function AdminReport() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>收入報表</div>
         <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, cursor: "pointer" }}>Excel</button>
+          <button onClick={exportPDF} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 11, cursor: "pointer" }}>PDF</button>
+        </div>
       </div>
 
       <div style={{ padding: 16 }}>
