@@ -48,6 +48,10 @@ export default function AdminReport() {
   const [productUsages, setProductUsages] = useState<ProductUsage[]>([]);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [exportMode, setExportMode] = useState<"month" | "year" | "range">("month");
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
+  const [showExportPanel, setShowExportPanel] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -68,16 +72,33 @@ export default function AdminReport() {
     return (customers as any[])?.find((c: any) => c.phone === phone)?.customer_no || "-";
   }
 
+  function getExportTransactions() {
+    if (exportMode === "month") return monthlyTransactions;
+    if (exportMode === "year") return transactions.filter((t: any) => t.created_at?.startsWith(String(selectedYear)));
+    if (exportMode === "range" && exportStartDate && exportEndDate) {
+      return transactions.filter((t: any) => t.created_at >= exportStartDate && t.created_at <= exportEndDate + "T23:59:59");
+    }
+    return monthlyTransactions;
+  }
+
+  function getExportLabel() {
+    if (exportMode === "month") return selectedMonth;
+    if (exportMode === "year") return String(selectedYear) + "年";
+    if (exportMode === "range") return exportStartDate + "_" + exportEndDate;
+    return selectedMonth;
+  }
+
   function exportExcel() {
     try {
       const XLSX = require("xlsx");
+      const exportTx = getExportTransactions();
       const wb = XLSX.utils.book_new();
       const dr = designers.map((d: any) => {
         const r = calcDesignerReport(d);
         return { "設計師": d.name, "服務業績": r.serviceRevenue, "底扣金額": r.baseDeduction, "抽成比例": Math.round((d.commission_rate||0)*100)+"%", "服務抽成": r.serviceCommission, "品牌共享費": r.brandFee, "應付抽成": r.totalCommission };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "設計師抽成");
-      const tr = monthlyTransactions.map((t: any) => ({
+      const tr = exportTx.map((t: any) => ({
         "日期": t.created_at?.slice(0,10), "時間": t.created_at?.slice(11,16),
         "設計師": designers.find((d: any) => d.id === t.designer_id)?.name||"-",
         "會員編號": getCustomerNo(t.customer_phone||""), "客人姓名": t.customer_name,
@@ -90,7 +111,7 @@ export default function AdminReport() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "交易明細");
       const yr = yearlyData.map(([month, amount]: any) => ({ "月份": month, "總業績": amount }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yr), "年度統計");
-      XLSX.writeFile(wb, "BC_報表_" + selectedMonth + ".xlsx");
+      XLSX.writeFile(wb, "BC_報表_" + getExportLabel() + ".xlsx");
     } catch(e) { alert("Excel 導出失敗"); }
   }
 
@@ -246,7 +267,35 @@ export default function AdminReport() {
       </div>
 
       <div style={{ padding: 16 }}>
-        {/* 年度選擇 */}
+        {/* 導出面板 */}
+      {showExportPanel && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #1D9E75" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 10 }}>選擇導出範圍</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {[{ key: "month", label: "月份" }, { key: "year", label: "年度" }, { key: "range", label: "自訂區間" }].map(m => (
+              <button key={m.key} onClick={() => setExportMode(m.key as any)} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", background: exportMode === m.key ? "#1D9E75" : "#F1EFE8", color: exportMode === m.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: exportMode === m.key ? 600 : 400, cursor: "pointer" }}>{m.label}</button>
+            ))}
+          </div>
+          {exportMode === "month" && (
+            <div style={{ fontSize: 12, color: "#888780" }}>導出月份：{selectedMonth}（可在上方月份圖表點選切換）</div>
+          )}
+          {exportMode === "year" && (
+            <div style={{ fontSize: 12, color: "#888780" }}>導出年度：{selectedYear} 年（可在上方年度按鈕切換）</div>
+          )}
+          {exportMode === "range" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+              <span style={{ color: "#888780" }}>至</span>
+              <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+            </div>
+          )}
+          <button onClick={() => { exportExcel(); setShowExportPanel(false); }} style={{ width: "100%", padding: "10px 0", background: "#1D9E75", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
+            確認導出 Excel
+          </button>
+        </div>
+      )}
+
+      {/* 年度選擇 */}
         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
           {availableYears.map(y => (
             <button key={y} onClick={() => { setSelectedYear(y); setSelectedMonth(`${y}-${selectedMonth.slice(5)}`); }} style={{ padding: "5px 14px", borderRadius: 20, border: "none", background: selectedYear === y ? "#534AB7" : "#fff", color: selectedYear === y ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: selectedYear === y ? 600 : 400, cursor: "pointer" }}>
