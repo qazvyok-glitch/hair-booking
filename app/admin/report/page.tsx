@@ -62,6 +62,60 @@ export default function AdminReport() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+
+  function exportExcel() {
+    try {
+      const XLSX = require("xlsx");
+      const wb = XLSX.utils.book_new();
+      const dr = designers.map((d: any) => {
+        const r = calcDesignerReport(d);
+        return { name: d.name, revenue: r.serviceRevenue, base: r.baseDeduction, rate: Math.round((d.commission_rate||0)*100)+"%", commission: r.serviceCommission, brand: r.brandFee, total: r.totalCommission };
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "designers");
+      const tr = monthlyTransactions.map((t: any) => ({
+        date: t.created_at?.slice(0,10),
+        designer: designers.find((d: any) => d.id === t.designer_id)?.name||"-",
+        customer: t.customer_name,
+        amount: t.total_amount,
+        payment: t.payment_method||"-"
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "transactions");
+      XLSX.writeFile(wb, "report_" + selectedMonth + ".xlsx");
+    } catch(e) { alert("Excel error"); }
+  }
+
+  function exportPDF() {
+    try {
+      const { jsPDF } = require("jspdf");
+      const autoTable = require("jspdf-autotable").default;
+      const doc = new jsPDF();
+      doc.text("BC Hair Salon " + selectedMonth, 14, 15);
+      autoTable(doc, {
+        startY: 22,
+        head: [["Name","Revenue","Base","Rate","Commission","Brand","Total"]],
+        body: designers.map((d: any) => {
+          const r = calcDesignerReport(d);
+          return [d.name, r.serviceRevenue, r.baseDeduction, Math.round((d.commission_rate||0)*100)+"%", r.serviceCommission, r.brandFee, r.totalCommission];
+        }),
+        headStyles: { fillColor: [83,74,183] }
+      });
+      const y = (doc as any).lastAutoTable.finalY + 8;
+      autoTable(doc, {
+        startY: y,
+        head: [["Date","Designer","Customer","Amount","Payment"]],
+        body: monthlyTransactions.map((t: any) => [
+          t.created_at?.slice(0,10)||"",
+          designers.find((d: any) => d.id === t.designer_id)?.name||"-",
+          t.customer_name,
+          t.total_amount,
+          t.payment_method||"-"
+        ]),
+        headStyles: { fillColor: [83,74,183] }
+      });
+      doc.save("report_" + selectedMonth + ".pdf");
+    } catch(e) { alert("PDF error"); }
+  }
+
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
