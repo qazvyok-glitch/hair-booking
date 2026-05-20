@@ -47,6 +47,7 @@ export default function AdminReport() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [productUsages, setProductUsages] = useState<ProductUsage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<any[]>([]);
   const [isDesktop, setIsDesktop] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -63,72 +64,91 @@ export default function AdminReport() {
   }, []);
 
 
+  function getCustomerNo(phone: string) {
+    return (customers as any[])?.find((c: any) => c.phone === phone)?.customer_no || "-";
+  }
+
   function exportExcel() {
     try {
       const XLSX = require("xlsx");
       const wb = XLSX.utils.book_new();
       const dr = designers.map((d: any) => {
         const r = calcDesignerReport(d);
-        return { name: d.name, revenue: r.serviceRevenue, base: r.baseDeduction, rate: Math.round((d.commission_rate||0)*100)+"%", commission: r.serviceCommission, brand: r.brandFee, total: r.totalCommission };
+        return { "設計師": d.name, "服務業績": r.serviceRevenue, "底扣金額": r.baseDeduction, "抽成比例": Math.round((d.commission_rate||0)*100)+"%", "服務抽成": r.serviceCommission, "品牌共享費": r.brandFee, "應付抽成": r.totalCommission };
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "designers");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "設計師抽成");
       const tr = monthlyTransactions.map((t: any) => ({
-        date: t.created_at?.slice(0,10),
-        designer: designers.find((d: any) => d.id === t.designer_id)?.name||"-",
-        customer: t.customer_name,
-        amount: t.total_amount,
-        payment: t.payment_method||"-"
+        "日期": t.created_at?.slice(0,10), "時間": t.created_at?.slice(11,16),
+        "設計師": designers.find((d: any) => d.id === t.designer_id)?.name||"-",
+        "會員編號": getCustomerNo(t.customer_phone||""), "客人姓名": t.customer_name,
+        "服務項目": t.service_items?.map((s: any) => s.name).join("、")||"-",
+        "購買商品": t.product_items?.map((p: any) => p.name + " x" + p.quantity).join("、")||"-",
+        "服務金額": t.service_items?.reduce((sum: number, s: any) => sum + (s.amount||0), 0)||0,
+        "商品金額": t.product_items?.reduce((sum: number, p: any) => sum + (p.amount||0), 0)||0,
+        "總金額": t.total_amount, "支付方式": t.payment_method||"-",
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "transactions");
-      XLSX.writeFile(wb, "report_" + selectedMonth + ".xlsx");
-    } catch(e) { alert("Excel error"); }
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "交易明細");
+      const yr = yearlyData.map(([month, amount]: any) => ({ "月份": month, "總業績": amount }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yr), "年度統計");
+      XLSX.writeFile(wb, "BC_報表_" + selectedMonth + ".xlsx");
+    } catch(e) { alert("Excel 導出失敗"); }
   }
 
   function exportPDF() {
     try {
       const { jsPDF } = require("jspdf");
       const autoTable = require("jspdf-autotable").default;
-      const doc = new jsPDF();
-      doc.text("BC Hair Salon " + selectedMonth, 14, 15);
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(14);
+      doc.text("Bing Cherry Hair Salon - " + selectedMonth + " 月報表", 14, 15);
+      doc.setFontSize(11);
+      doc.text("設計師抽成明細", 14, 26);
       autoTable(doc, {
-        startY: 22,
-        head: [["Name","Revenue","Base","Rate","Commission","Brand","Total"]],
+        startY: 30,
+        head: [["設計師","服務業績","底扣","抽成%","服務抽成","品牌費","應付抽成"]],
         body: designers.map((d: any) => {
           const r = calcDesignerReport(d);
-          return [d.name, r.serviceRevenue, r.baseDeduction, Math.round((d.commission_rate||0)*100)+"%", r.serviceCommission, r.brandFee, r.totalCommission];
+          return [d.name, "$"+r.serviceRevenue.toLocaleString(), "$"+r.baseDeduction.toLocaleString(), Math.round((d.commission_rate||0)*100)+"%", "$"+r.serviceCommission.toLocaleString(), "$"+r.brandFee.toLocaleString(), "$"+r.totalCommission.toLocaleString()];
         }),
-        headStyles: { fillColor: [83,74,183] }
+        headStyles: { fillColor: [83,74,183] }, styles: { fontSize: 9 },
       });
-      const y = (doc as any).lastAutoTable.finalY + 8;
+      const y1 = (doc as any).lastAutoTable.finalY + 10;
+      doc.text("交易明細", 14, y1);
       autoTable(doc, {
-        startY: y,
-        head: [["Date","Designer","Customer","Amount","Payment"]],
+        startY: y1 + 4,
+        head: [["日期","設計師","會員編號","客人","服務項目","購買商品","總金額","支付"]],
         body: monthlyTransactions.map((t: any) => [
           t.created_at?.slice(0,10)||"",
           designers.find((d: any) => d.id === t.designer_id)?.name||"-",
+          getCustomerNo(t.customer_phone||""),
           t.customer_name,
-          t.total_amount,
-          t.payment_method||"-"
+          t.service_items?.map((s: any) => s.name).join(",").slice(0,30)||"-",
+          t.product_items?.map((p: any) => p.name).join(",").slice(0,20)||"-",
+          "$"+t.total_amount?.toLocaleString(),
+          t.payment_method||"-",
         ]),
-        headStyles: { fillColor: [83,74,183] }
+        headStyles: { fillColor: [83,74,183] }, styles: { fontSize: 8 },
       });
-      doc.save("report_" + selectedMonth + ".pdf");
-    } catch(e) { alert("PDF error"); }
+      doc.save("BC_報表_" + selectedMonth + ".pdf");
+    } catch(e) { alert("PDF 導出失敗"); }
   }
+
 
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: dData }, { data: tData }, { data: pData }] = await Promise.all([
+      const [{ data: dData }, { data: tData }, { data: pData }, { data: cData }] = await Promise.all([
         supabase.from("designers").select("*").order("id"),
         supabase.from("transactions").select("*").order("created_at", { ascending: false }),
         supabase.from("product_usage").select("*").order("used_at", { ascending: false }),
+        supabase.from("customers").select("id, phone, customer_no"),
       ]);
       if (dData) setDesigners(dData);
       if (tData) setTransactions(tData);
       if (pData) setProductUsages(pData);
+      if (cData) setCustomers(cData);
       setLoading(false);
     }
     fetchData();
