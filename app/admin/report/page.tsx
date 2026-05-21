@@ -52,6 +52,7 @@ export default function AdminReport() {
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
   const [showExportPanel, setShowExportPanel] = useState(false);
+  const [chartType, setChartType] = useState<"bar" | "pie">("bar");
   const [isDesktop, setIsDesktop] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -209,6 +210,20 @@ export default function AdminReport() {
   const maxMonthly = Math.max(...yearlyData.map(([, v]) => v), 1);
 
   const monthTotalRevenue = monthlyTransactions.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+
+  // 服務分類統計
+  const serviceStats = (() => {
+    const stats: Record<string, number> = {};
+    monthlyTransactions.forEach((t: any) => {
+      (t.service_items || []).forEach((s: any) => {
+        if (!s.name) return;
+        stats[s.name] = (stats[s.name] || 0) + (s.amount || 0);
+      });
+    });
+    return Object.entries(stats).sort((a, b) => b[1] - a[1]);
+  })();
+  const maxServiceAmount = Math.max(...serviceStats.map(([, v]) => v), 1);
+  const serviceColors = ["#534AB7","#7B6FD4","#1D9E75","#BA7517","#E24B4A","#0C447C","#085041","#A32D2D","#633806","#3C3489"];
   const monthTotalCommission = designers.reduce((sum, d) => sum + calcDesignerReport(d).totalCommission, 0);
 
   if (loading) return (
@@ -292,6 +307,89 @@ export default function AdminReport() {
             <div style={{ fontSize: 11, color: "#888780" }}>本月總抽成</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "#6DDBB4", marginTop: 4 }}>${monthTotalCommission.toLocaleString()}</div>
           </div>
+        </div>
+
+        {/* 服務分類統計圖表 */}
+        <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>
+              {selectedMonth.replace("-", " 年 ")} 月服務統計
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[{ key: "bar", label: "長條" }, { key: "pie", label: "圓餅" }].map((c) => (
+                <button key={c.key} onClick={() => setChartType(c.key as "bar" | "pie")} style={{ padding: "3px 10px", borderRadius: 8, border: "none", background: chartType === c.key ? "#534AB7" : "#F1EFE8", color: chartType === c.key ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer" }}>{c.label}</button>
+              ))}
+            </div>
+          </div>
+          {serviceStats.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "20px 0", color: "#888780", fontSize: 13 }}>本月尚無服務紀錄</div>
+          ) : chartType === "bar" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {serviceStats.map(([name, amount], i) => (
+                <div key={name}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 12, color: "#2C2C2A" }}>{name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: serviceColors[i % serviceColors.length] }}>${amount.toLocaleString()}</span>
+                  </div>
+                  <div style={{ height: 10, background: "#F1EFE8", borderRadius: 6, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: serviceColors[i % serviceColors.length], width: `${(amount / maxServiceAmount) * 100}%`, borderRadius: 6 }} />
+                  </div>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "0.5px solid #F1EFE8" }}>
+                <span style={{ fontSize: 13, color: "#888780" }}>本月服務總計</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${monthTotalRevenue.toLocaleString()}</span>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+                <svg width="260" height="260" viewBox="0 0 260 260">
+                  {(() => {
+                    let cumulative = 0;
+                    return serviceStats.map(([name, amount], i) => {
+                      const pct = amount / monthTotalRevenue;
+                      const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                      cumulative += pct;
+                      const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+                      const midAngle = (startAngle + endAngle) / 2;
+                      const r = 90, cx = 130, cy = 130;
+                      const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
+                      const x2 = cx + r * Math.cos(endAngle), y2 = cy + r * Math.sin(endAngle);
+                      const largeArc = pct > 0.5 ? 1 : 0;
+                      const d = pct >= 1 ? `M ${cx} ${cy} m -${r} 0 a ${r} ${r} 0 1 1 ${r*2} 0 a ${r} ${r} 0 1 1 -${r*2} 0` : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                      const labelR = r + 22;
+                      const lx = cx + labelR * Math.cos(midAngle), ly = cy + labelR * Math.sin(midAngle);
+                      return (
+                        <g key={name}>
+                          <path d={d} fill={serviceColors[i % serviceColors.length]} stroke="#fff" strokeWidth="2" />
+                          {pct >= 0.05 && (
+                            <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="600" fill={serviceColors[i % serviceColors.length]}>
+                              <tspan x={lx} dy="-5">{name.slice(0, 4)}</tspan>
+                              <tspan x={lx} dy="12">${(amount/1000).toFixed(1)}k</tspan>
+                            </text>
+                          )}
+                        </g>
+                      );
+                    });
+                  })()}
+                  <circle cx="130" cy="130" r="48" fill="#fff" />
+                  <text x="130" y="124" textAnchor="middle" fontSize="11" fill="#888780">總計</text>
+                  <text x="130" y="142" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#534AB7">${(monthTotalRevenue/1000).toFixed(1)}k</text>
+                </svg>
+              </div>
+              {serviceStats.map(([name, amount], i) => (
+                <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 4, background: serviceColors[i % serviceColors.length], flexShrink: 0 }} />
+                  <div style={{ flex: 1, fontSize: 12, color: "#2C2C2A" }}>{name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: serviceColors[i % serviceColors.length] }}>${amount.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: "#888780", background: "#F1EFE8", borderRadius: 6, padding: "1px 6px", minWidth: 36, textAlign: "center" }}>
+                    {Math.round((amount / monthTotalRevenue) * 100)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 各設計師報表 */}

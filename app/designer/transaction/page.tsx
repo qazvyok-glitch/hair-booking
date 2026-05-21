@@ -426,8 +426,6 @@ export default function DesignerTransaction() {
               )}
             </div>
 
-            {/* 當月服務項目統計 */}
-            <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>
                   {selectedMonth.replace("-", " 年 ")} 月服務統計
