@@ -45,6 +45,11 @@ export default function AdminBottomNav({ current }: { current: string }) {
             <span style={{ fontSize: 13, color: current === item.key ? "#C8C4F8" : "#fff", fontWeight: current === item.key ? 600 : 400 }}>{item.label}</span>
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", background: "none", border: "none", cursor: "pointer", borderLeft: "3px solid transparent", textAlign: "left", width: "100%" }}>
+          <span style={{ fontSize: 20 }}>⏏</span>
+          <span style={{ fontSize: 13, color: "#888780" }}>登出</span>
+        </button>
       </div>
     );
   }
