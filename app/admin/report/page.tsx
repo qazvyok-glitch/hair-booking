@@ -100,16 +100,35 @@ export default function AdminReport() {
         return { "設計師": d.name, "服務業績": r.serviceRevenue, "底扣金額": r.baseDeduction, "抽成比例": Math.round((d.commission_rate||0)*100)+"%", "服務抽成": r.serviceCommission, "品牌共享費": r.brandFee, "應付抽成": r.totalCommission };
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "設計師抽成");
-      const tr = exportTx.map((t: any) => ({
-        "日期": t.created_at?.slice(0,10), "時間": t.created_at?.slice(11,16),
-        "設計師": designers.find((d: any) => d.id === t.designer_id)?.name||"-",
-        "會員編號": getCustomerNo(t.customer_phone||""), "客人姓名": t.customer_name,
-        "服務項目": t.service_items?.map((s: any) => s.name).join("、")||"-",
-        "購買商品": t.product_items?.map((p: any) => p.name + " x" + p.quantity).join("、")||"-",
-        "服務金額": t.service_items?.reduce((sum: number, s: any) => sum + (s.amount||0), 0)||0,
-        "商品金額": t.product_items?.reduce((sum: number, p: any) => sum + (p.amount||0), 0)||0,
-        "總金額": t.total_amount, "支付方式": t.payment_method||"-",
-      }));
+      const tr: any[] = [];
+      exportTx.forEach((t: any) => {
+        const date = t.created_at?.slice(0,10).replace(/-/g, "/") || "";
+        const time = t.created_at?.slice(11,16) || "";
+        const designer = designers.find((d: any) => d.id === t.designer_id)?.name || "-";
+        const memberNo = getCustomerNo(t.customer_phone||"");
+        const customer = t.customer_name || "";
+        const allItems = [
+          ...(t.service_items||[]).map((s: any) => ({ name: s.name, amount: s.amount })),
+          ...(t.product_items||[]).map((p: any) => ({ name: p.name, amount: p.amount })),
+        ];
+        if (allItems.length === 0) {
+          tr.push({ "日期": date, "時間": time, "設計師": designer, "會員編號": memberNo, "客人姓名": customer, "項目": "-", "金額": "", "總金額": t.total_amount, "支付方式": t.payment_method||"-" });
+        } else {
+          allItems.forEach((item: any, idx: number) => {
+            tr.push({
+              "日期": idx === 0 ? date : "",
+              "時間": idx === 0 ? time : "",
+              "設計師": idx === 0 ? designer : "",
+              "會員編號": idx === 0 ? memberNo : "",
+              "客人姓名": idx === 0 ? customer : "",
+              "項目": item.name,
+              "金額": item.amount,
+              "總金額": idx === allItems.length - 1 ? t.total_amount : "",
+              "支付方式": idx === allItems.length - 1 ? (t.payment_method||"-") : "",
+            });
+          });
+        }
+      });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "交易明細");
       const yr = yearlyData.map(([month, amount]: any) => ({ "月份": month, "總業績": amount }));
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yr), "年度統計");
