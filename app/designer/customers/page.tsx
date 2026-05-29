@@ -165,7 +165,6 @@ export default function DesignerCustomers() {
   }
 
   async function handleDeletePhoto(photoId: number, photoUrl: string) {
-    if (!confirm("確定刪除這張照片？")) return;
     const path = photoUrl.split("/customer-photos/")[1];
     await supabase.storage.from("customer-photos").remove([path]);
     await supabase.from("customer_photos").delete().eq("id", photoId);
@@ -209,7 +208,6 @@ export default function DesignerCustomers() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => openEdit(c)} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer" }}>編輯</button>
-                    <button onClick={() => handleDelete(c.id)} style={{ background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer" }}>刪除</button>
                   </div>
                 </div>
 
