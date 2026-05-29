@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
-  const [announcements, setAnnouncements] = (require("react") as any).useState([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
 
-  (require("react") as any).useEffect(() => {
+  useEffect(() => {
     supabase.from("announcements").select("*").eq("is_active", true).in("target", ["all", "customer"]).order("created_at", { ascending: false }).limit(3).then(({ data }: any) => {
       if (data) setAnnouncements(data);
     });
@@ -41,6 +41,18 @@ export default function Home() {
 
         {/* 按鈕區 */}
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* 公告 */}
+          {announcements.length > 0 && (
+            <div style={{ width: "100%", marginBottom: 16 }}>
+              {announcements.map((a: any) => (
+                <div key={a.id} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 14px", marginBottom: 8, borderLeft: "3px solid #C8C4F8", textAlign: "left" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#C8C4F8" }}>📢 {a.title}</div>
+                  {a.content && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{a.content}</div>}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 立即預約 */}
           <button
