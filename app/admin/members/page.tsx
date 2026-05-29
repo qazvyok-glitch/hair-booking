@@ -56,6 +56,9 @@ export default function AdminMembers() {
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{success: number, skip: number, errors: string[]} | null>(null);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", phone: "", email: "" });
+  const [addSaving, setAddSaving] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", phone: "" });
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,6 +99,31 @@ export default function AdminMembers() {
     (m.email || "").includes(search) ||
     (m.customer_no || "").includes(search)
   );
+
+  async function handleAddMember() {
+    if (!addForm.name || !addForm.phone) { alert("請填寫姓名和電話"); return; }
+    setAddSaving(true);
+    const { error } = await supabase.from("customers").insert({
+      name: addForm.name,
+      phone: addForm.phone,
+      email: addForm.email || null,
+    });
+    if (error) {
+      alert("新增失敗：" + error.message);
+    } else {
+      setAddForm({ name: "", phone: "", email: "" });
+      setShowAddMember(false);
+      fetchData();
+    }
+    setAddSaving(false);
+  }
+
+  async function handleDeleteMember(id: string, name: string) {
+    if (!confirm(`確定刪除會員「${name}」？此操作無法復原。`)) return;
+    await supabase.from("customers").delete().eq("id", id);
+    setMembers(members.filter(m => m.id !== id));
+    if (selectedMember?.id === id) setSelectedMember(null);
+  }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -208,7 +236,10 @@ export default function AdminMembers() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>會員管理</div>
         <div style={{ fontSize: 12, color: "#888780" }}>共 {filtered.length} 位</div>
-        <button onClick={() => setShowImport(!showImport)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>匯入會員</button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setShowAddMember(true)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
+          <button onClick={() => setShowImport(!showImport)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>匯入</button>
+        </div>
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
@@ -248,7 +279,7 @@ export default function AdminMembers() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["編號", "姓名", "電話", "Email", "預約次數", "加入日期"].map(h => (
+                  {["編號", "姓名", "電話", "Email", "預約次數", "加入日期", "操作"].map(h => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
@@ -264,6 +295,9 @@ export default function AdminMembers() {
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.email || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getMemberBookings(m.id).length} 次</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.created_at?.slice(0, 10).replace(/-/g, "/")}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteMember(m.id, m.name||""); }} style={{ background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>刪除</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -283,9 +317,10 @@ export default function AdminMembers() {
                     <div style={{ fontSize: 12, color: "#888780" }}>{m.phone || "—"}</div>
                     <div style={{ fontSize: 11, color: "#888780" }}>{m.email || "—"}</div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#534AB7" }}>{memberBookings.length} 次</div>
                     <div style={{ fontSize: 10, color: "#888780" }}>預約紀錄</div>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteMember(m.id, m.name||""); }} style={{ background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, padding: "2px 8px", fontSize: 10, cursor: "pointer" }}>刪除</button>
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: "#888780", marginTop: 6 }}>加入：{m.created_at?.slice(0, 10).replace(/-/g, "/")}</div>
@@ -294,6 +329,33 @@ export default function AdminMembers() {
           })
         )}
       </div>
+
+      {/* 新增會員 Modal */}
+      {showAddMember && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>新增會員</div>
+              <button onClick={() => setShowAddMember(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>姓名 *</div>
+              <input value={addForm.name} onChange={e => setAddForm({...addForm, name: e.target.value})} placeholder="王小明" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>電話 *</div>
+              <input value={addForm.phone} onChange={e => setAddForm({...addForm, phone: e.target.value})} placeholder="0912-345-678" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>Email（選填）</div>
+              <input value={addForm.email} onChange={e => setAddForm({...addForm, email: e.target.value})} placeholder="email@example.com" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <button onClick={handleAddMember} disabled={addSaving} style={{ width: "100%", padding: "12px 0", background: addSaving ? "#D3D1C7" : "#1D9E75", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: addSaving ? "default" : "pointer" }}>
+              {addSaving ? "新增中..." : "確認新增"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 會員詳情 Modal */}
       {selectedMember && (
