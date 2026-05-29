@@ -22,6 +22,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
     { key: "services", label: "服務", icon: "✂️", path: "/admin/services" },
     { key: "products", label: "商品", icon: "🛍️", path: "/admin/products" },
     { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
+    { key: "inventory", label: "庫存", icon: "📦", path: "/admin/inventory" },
   ];
 
   if (isDesktop) {
