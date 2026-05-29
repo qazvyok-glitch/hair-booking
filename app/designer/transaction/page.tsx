@@ -175,6 +175,38 @@ export default function DesignerTransaction() {
           used_at: new Date().toISOString().split("T")[0],
         }))
       );
+      // 自領商品自動扣庫存
+      for (const pu of productUsage) {
+        const { data: p } = await supabase.from("products").select("stock_quantity").eq("id", pu.product.id).single();
+        if (p) {
+          const newStock = Math.max(0, (p.stock_quantity || 0) - pu.quantity);
+          await supabase.from("products").update({ stock_quantity: newStock }).eq("id", pu.product.id);
+          await supabase.from("stock_records").insert({
+            product_id: pu.product.id,
+            product_name: pu.product.name,
+            quantity: -pu.quantity,
+            type: "out",
+            note: "設計師自領 - " + designer.name,
+          });
+        }
+      }
+    }
+    // 客人購買商品自動扣庫存
+    if (clientProductUsage.length > 0) {
+      for (const pu of clientProductUsage) {
+        const { data: p } = await supabase.from("products").select("stock_quantity").eq("id", pu.product.id).single();
+        if (p) {
+          const newStock = Math.max(0, (p.stock_quantity || 0) - pu.quantity);
+          await supabase.from("products").update({ stock_quantity: newStock }).eq("id", pu.product.id);
+          await supabase.from("stock_records").insert({
+            product_id: pu.product.id,
+            product_name: pu.product.name,
+            quantity: -pu.quantity,
+            type: "out",
+            note: "客人購買",
+          });
+        }
+      }
     }
     setSaving(false);
     setSelectedServices([]);
