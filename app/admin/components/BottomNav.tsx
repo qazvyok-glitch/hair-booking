@@ -11,10 +11,6 @@ export default function AdminBottomNav({ current }: { current: string }) {
     router.push("/admin/login");
   }
 
-  function logout() {
-    sessionStorage.removeItem("adminSession");
-    router.push("/admin/login");
-  }
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
