@@ -53,6 +53,9 @@ export default function AdminMembers() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{success: number, skip: number, errors: string[]} | null>(null);
   const [editForm, setEditForm] = useState({ name: "", phone: "" });
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -93,6 +96,74 @@ export default function AdminMembers() {
     (m.email || "").includes(search) ||
     (m.customer_no || "").includes(search)
   );
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const XLSX = require("xlsx");
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws);
+
+      let success = 0, skip = 0;
+      const errors: string[] = [];
+
+      for (const row of rows) {
+        const name = row["姓名"] || row["name"] || row["Name"] || "";
+        const phone = String(row["電話"] || row["phone"] || row["Phone"] || row["手機"] || "").trim();
+        const email = row["Email"] || row["email"] || row["郵件"] || "";
+
+        if (!name || !phone) {
+          errors.push(`跳過：${JSON.stringify(row)}（缺少姓名或電話）`);
+          skip++;
+          continue;
+        }
+
+        // 檢查是否已存在
+        const { data: existing } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("phone", phone)
+          .single();
+
+        if (existing) {
+          skip++;
+          continue;
+        }
+
+        // 建立 auth user
+        const { data: authData, error: authError } = await supabase.auth.admin?.createUser({
+          email: email || `${phone}@noemail.bc`,
+          phone: phone,
+          user_metadata: { full_name: name, phone },
+        }).catch(() => ({ data: null, error: new Error("no admin") })) || { data: null, error: null };
+
+        // 直接插入 customers
+        const { error } = await supabase.from("customers").insert({
+          name,
+          phone,
+          email: email || null,
+        });
+
+        if (error) {
+          errors.push(`${name}（${phone}）：${error.message}`);
+        } else {
+          success++;
+        }
+      }
+
+      setImportResult({ success, skip, errors });
+      if (success > 0) fetchData();
+    } catch(e: any) {
+      setImportResult({ success: 0, skip: 0, errors: ["匯入失敗：" + e.message] });
+    }
+    setImporting(false);
+  }
 
   function getMemberBookings(userId: string) {
     return bookings.filter(b => b.user_id === userId);
@@ -137,9 +208,39 @@ export default function AdminMembers() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>會員管理</div>
         <div style={{ fontSize: 12, color: "#888780" }}>共 {filtered.length} 位</div>
+        <button onClick={() => setShowImport(!showImport)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>匯入會員</button>
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
+        {showImport && (
+          <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #534AB7" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8 }}>匯入會員資料</div>
+            <div style={{ fontSize: 11, color: "#888780", marginBottom: 12, lineHeight: 1.7 }}>
+              支援 Excel（.xlsx）或 CSV 格式<br/>
+              必填欄位：<strong>姓名</strong>、<strong>電話</strong><br/>
+              選填欄位：Email<br/>
+              已存在的電話號碼會自動跳過
+            </div>
+            <label style={{ display: "block", width: "100%", padding: "12px 0", background: importing ? "#D3D1C7" : "#534AB7", color: "#fff", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer", textAlign: "center", boxSizing: "border-box" }}>
+              {importing ? "匯入中..." : "選擇檔案匯入"}
+              <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} style={{ display: "none" }} disabled={importing} />
+            </label>
+            {importResult && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ background: "#E1F5EE", borderRadius: 8, padding: "8px 12px", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: "#085041", fontWeight: 600 }}>✓ 成功匯入 {importResult.success} 筆</span>
+                  {importResult.skip > 0 && <span style={{ fontSize: 12, color: "#888780", marginLeft: 8 }}>跳過 {importResult.skip} 筆</span>}
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div style={{ background: "#FCEBEB", borderRadius: 8, padding: "8px 12px" }}>
+                    <div style={{ fontSize: 12, color: "#A32D2D", fontWeight: 600, marginBottom: 4 }}>錯誤記錄：</div>
+                    {importResult.errors.map((e, i) => <div key={i} style={{ fontSize: 11, color: "#A32D2D" }}>{e}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋姓名、電話、Email、編號..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
         {isDesktop ? (
