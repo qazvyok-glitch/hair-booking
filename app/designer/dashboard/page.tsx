@@ -132,6 +132,16 @@ export default function DesignerDashboard() {
         <button onClick={() => setShowAddBooking(true)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增預約</button>
       </div>
 
+      {announcements.length > 0 && (
+        <div style={{ padding: "8px 16px 0" }}>
+          {announcements.map((a: any) => (
+            <div key={a.id} style={{ background: a.type === "promotion" ? "#FCEBEB" : a.type === "new_product" ? "#E1F5EE" : a.type === "event" ? "#FAEEDA" : "#EEEDFE", borderRadius: 12, padding: "10px 14px", marginBottom: 8, borderLeft: "3px solid #534AB7" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#2C2C2A" }}>📢 {a.title}</div>
+              {a.content && <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{a.content}</div>}
+            </div>
+          ))}
+        </div>
+      )}
       {/* 統計卡 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "12px 16px 0" }}>
         {[
