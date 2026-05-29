@@ -133,7 +133,6 @@ export default function DesignerDashboard() {
       </div>
 
       {announcements.length > 0 && (
-      {announcements.length > 0 && (
         <div style={{ padding: "12px 16px 4px" }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>最新公告</div>
           {announcements.map((a: any) => (
