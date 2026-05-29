@@ -43,6 +43,7 @@ export default function DesignerDashboard() {
   const router = useRouter();
   const [designer, setDesigner] = useState<DesignerSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +67,8 @@ export default function DesignerDashboard() {
         supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
       ]);
       if (bookingData) setBookings(bookingData);
+      const { data: annoData } = await supabase.from("announcements").select("*").eq("is_active", true).in("target", ["all", "designer"]).order("created_at", { ascending: false }).limit(5);
+      if (annoData) setAnnouncements(annoData);
       if (serviceData) setServices(serviceData);
       if (catData) setCategories(catData);
       setLoading(false);

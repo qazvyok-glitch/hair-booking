@@ -29,6 +29,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
     { key: "products", label: "商品", icon: "🛍️", path: "/admin/products" },
     { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
     { key: "inventory", label: "庫存", icon: "📦", path: "/admin/inventory" },
+    { key: "announcements", label: "公告", icon: "📢", path: "/admin/announcements" },
   ];
 
   if (isDesktop) {

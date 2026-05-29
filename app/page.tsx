@@ -4,6 +4,13 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
+  const [announcements, setAnnouncements] = (require("react") as any).useState([]);
+
+  (require("react") as any).useEffect(() => {
+    supabase.from("announcements").select("*").eq("is_active", true).in("target", ["all", "customer"]).order("created_at", { ascending: false }).limit(3).then(({ data }: any) => {
+      if (data) setAnnouncements(data);
+    });
+  }, []);
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
