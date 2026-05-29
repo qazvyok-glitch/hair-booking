@@ -133,11 +133,24 @@ export default function DesignerDashboard() {
       </div>
 
       {announcements.length > 0 && (
-        <div style={{ padding: "8px 16px 0" }}>
+      {announcements.length > 0 && (
+        <div style={{ padding: "12px 16px 4px" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>最新公告</div>
           {announcements.map((a: any) => (
-            <div key={a.id} style={{ background: a.type === "promotion" ? "#FCEBEB" : a.type === "new_product" ? "#E1F5EE" : a.type === "event" ? "#FAEEDA" : "#EEEDFE", borderRadius: 12, padding: "10px 14px", marginBottom: 8, borderLeft: "3px solid #534AB7" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#2C2C2A" }}>📢 {a.title}</div>
-              {a.content && <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{a.content}</div>}
+            <div key={a.id} style={{ background: "#fff", borderRadius: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+              {a.image_url && (
+                <img src={a.image_url} alt={a.title} style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} />
+              )}
+              <div style={{ padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, background: a.type === "promotion" ? "#FCEBEB" : a.type === "new_product" ? "#E1F5EE" : a.type === "event" ? "#FAEEDA" : "#EEEDFE", color: a.type === "promotion" ? "#A32D2D" : a.type === "new_product" ? "#085041" : a.type === "event" ? "#BA7517" : "#534AB7", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
+                    {a.type === "promotion" ? "優惠活動" : a.type === "new_product" ? "新商品" : a.type === "event" ? "活動" : "公告"}
+                  </span>
+                  <span style={{ fontSize: 10, color: "#888780" }}>{a.created_at?.slice(0,10).replace(/-/g,"/")}</span>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A", marginBottom: 6 }}>📢 {a.title}</div>
+                {a.content && <div style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{a.content}</div>}
+              </div>
             </div>
           ))}
         </div>
