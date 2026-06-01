@@ -7,6 +7,7 @@ import AdminBottomNav from "../components/BottomNav";
 type Designer = {
   id: number;
   name: string;
+  display_name: string;
   nickname: string;
   initials: string;
   style: string;
@@ -34,7 +35,7 @@ export default function AdminDesigners() {
   const [editing, setEditing] = useState<Designer | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    name: "", nickname: "", initials: "", style: "", ig: "",
+    name: "", display_name: "", nickname: "", initials: "", style: "", ig: "",
     bg_color: "#EEEDFE", text_color: "#3C3489",
     commission_rate: 0.5,
     commission_base_deduction: 0,
@@ -68,7 +69,7 @@ export default function AdminDesigners() {
   function openNew() {
     setEditing(null);
     setForm({
-      name: "", nickname: "", initials: "", style: "", ig: "",
+      name: "", display_name: "", nickname: "", initials: "", style: "", ig: "",
       bg_color: "#EEEDFE", text_color: "#3C3489",
       commission_rate: 0.5,
       commission_base_deduction: 0,
@@ -85,16 +86,23 @@ export default function AdminDesigners() {
   function openEdit(d: Designer) {
     setEditing(d);
     setForm({
-      name: d.name, nickname: d.nickname || "", initials: d.initials || "",
-      style: d.style || "", ig: d.ig || "",
-      bg_color: d.bg_color || "#EEEDFE", text_color: d.text_color || "#3C3489",
+      name: d.name,
+      display_name: d.display_name || "",
+      nickname: d.nickname || "",
+      initials: d.initials || "",
+      style: d.style || "",
+      ig: d.ig || "",
+      bg_color: d.bg_color || "#EEEDFE",
+      text_color: d.text_color || "#3C3489",
       commission_rate: d.commission_rate ?? 0.5,
       commission_base_deduction: (d as any).commission_base_deduction ?? 0,
       commission_threshold: (d as any).commission_threshold ?? 0,
       commission_rate_after: (d as any).commission_rate_after ?? 0.5,
       brand_fee_rate: (d as any).brand_fee_rate ?? 0,
-      joined_date: d.joined_date || "", left_date: d.left_date || "",
-      can_view_members: d.can_view_members ?? true, status: d.status || "active",
+      joined_date: d.joined_date || "",
+      left_date: d.left_date || "",
+      can_view_members: d.can_view_members ?? true,
+      status: d.status || "active",
       work_hours: d.work_hours || defaultWorkHours,
     });
     setShowForm(true);
@@ -155,14 +163,18 @@ export default function AdminDesigners() {
         {designers.map((d) => (
           <div key={d.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", opacity: d.status === "active" ? 1 : 0.7 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              {/* 頭像 */}
               <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, flexShrink: 0, overflow: "hidden" }}>
                 {d.avatar_url ? <img src={d.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>{d.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>
+                      {d.name}
+                      {d.display_name && (
+                        <span style={{ fontSize: 13, color: "#7B6FD4", marginLeft: 6 }}>（{d.display_name}）</span>
+                      )}
+                    </div>
                     {d.nickname && <div style={{ fontSize: 11, color: "#7B6FD4" }}>{d.nickname}</div>}
                     <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{d.style}</div>
                   </div>
@@ -171,7 +183,6 @@ export default function AdminDesigners() {
                   </span>
                 </div>
 
-                {/* 抽成與加入日期 */}
                 <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 11, color: "#5F5E5A", flexWrap: "wrap" }}>
                   <span style={{ background: "#EEEDFE", color: "#534AB7", padding: "2px 8px", borderRadius: 6 }}>
                     服務抽成 {Math.round((d.commission_rate || 0) * 100)}%
@@ -182,25 +193,18 @@ export default function AdminDesigners() {
                       商品抽成 {Math.round(((d as any).product_commission_rate || 0) * 100)}%
                     </span>
                   )}
-                  {(d as any).discount_absorption < 1 && (
-                    <span style={{ background: "#FAEEDA", color: "#BA7517", padding: "2px 8px", borderRadius: 6 }}>
-                      折扣吸收 {Math.round(((d as any).discount_absorption || 1) * 100)}%
-                    </span>
-                  )}
                 </div>
                 <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "#888780" }}>
                   {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
                   {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
                 </div>
 
-                {/* 權限標籤 */}
                 <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", color: d.can_view_members ? "#085041" : "#A32D2D" }}>
                     {d.can_view_members ? "✓ 可查看會員" : "✕ 禁止查看會員"}
                   </span>
                 </div>
 
-                {/* 操作按鈕 */}
                 <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                   <button onClick={() => openEdit(d)} style={{ padding: "5px 10px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
                   <button onClick={() => toggleStatus(d)} style={{ padding: "5px 10px", background: d.status === "active" ? "#FCEBEB" : "#E1F5EE", color: d.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
@@ -225,10 +229,10 @@ export default function AdminDesigners() {
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
 
-            {/* 基本資料 */}
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>基本資料</div>
             {[
-              { key: "name", label: "姓名 *", placeholder: "Cherry" },
+              { key: "name", label: "英文名 *", placeholder: "Cherry" },
+              { key: "display_name", label: "中文名", placeholder: "林亮瑩" },
               { key: "nickname", label: "暱稱", placeholder: "扁頭救星" },
               { key: "initials", label: "縮寫", placeholder: "C" },
               { key: "style", label: "專長", placeholder: "日系、剪髮、染髮" },
@@ -236,11 +240,15 @@ export default function AdminDesigners() {
             ].map(f => (
               <div key={f.key} style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>{f.label}</div>
-                <input value={(form as any)[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <input
+                  value={(form as any)[f.key]}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
               </div>
             ))}
 
-            {/* 顏色 */}
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>背景色</div>
@@ -252,43 +260,27 @@ export default function AdminDesigners() {
               </div>
             </div>
 
-            {/* 抽成設定 */}
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>服務業績抽成</div>
-
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
                 計算方式：(業績 - 底扣) × 抽成%<br/>
                 例：業績 10萬，底扣 5萬，抽 20% → (10萬-5萬)×20% = 1萬
               </div>
-
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>每月底扣金額（元）</div>
-                <input
-                  value={form.commission_base_deduction || ""}
-                  onChange={(e) => setForm({ ...form, commission_base_deduction: parseInt(e.target.value) || 0 })}
-                  type="number" placeholder="0"
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                />
+                <input value={form.commission_base_deduction || ""} onChange={(e) => setForm({ ...form, commission_base_deduction: parseInt(e.target.value) || 0 })} type="number" placeholder="0" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
-
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>抽成比例（底扣後）</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    value={Math.round(form.commission_rate * 100) || ""}
-                    onChange={(e) => setForm({ ...form, commission_rate: (parseInt(e.target.value) || 0) / 100 })}
-                    type="number" min="0" max="100" placeholder="0"
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                  />
+                  <input value={Math.round(form.commission_rate * 100) || ""} onChange={(e) => setForm({ ...form, commission_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
                 </div>
               </div>
-
               <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#534AB7" }}>
                 預覽：業績 $100,000 → 抽成 ${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}
               </div>
             </div>
-
 
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
@@ -301,7 +293,6 @@ export default function AdminDesigners() {
               </div>
             </div>
 
-            {/* 權限設定 */}
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>權限設定</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "#F1EFE8", borderRadius: 10, marginBottom: 10 }}>
               <div>
@@ -313,29 +304,14 @@ export default function AdminDesigners() {
               </div>
             </div>
 
-            {/* 品牌社群資源共享費 */}
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>品牌社群資源共享費</div>
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
-                計算方式：總服務業績 × %<br/>
-                從抽成中扣除
+                計算方式：總服務業績 × %<br/>從抽成中扣除
               </div>
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>費率</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    value={Math.round((form.brand_fee_rate || 0) * 100) || ""}
-                    onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })}
-                    type="number" min="0" max="100" placeholder="0"
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                  />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
-                </div>
-                {(form.brand_fee_rate || 0) > 0 && (
-                  <div style={{ fontSize: 10, color: "#888780", marginTop: 4 }}>
-                    預覽：業績 $100,000 → 品牌費 ${Math.round(100000 * (form.brand_fee_rate || 0)).toLocaleString()}
-                  </div>
-                )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input value={Math.round((form.brand_fee_rate || 0) * 100) || ""} onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
 
