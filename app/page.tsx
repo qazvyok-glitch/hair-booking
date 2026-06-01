@@ -85,6 +85,12 @@ export default function Home() {
           )}
 
           <button
+            onClick={() => router.push("/news")}
+            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
+          >
+            最新消息
+          </button>
+          <button
             onClick={() => router.push("/about")}
             style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
           >
