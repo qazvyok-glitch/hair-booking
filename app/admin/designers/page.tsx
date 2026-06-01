@@ -76,6 +76,7 @@ export default function AdminDesigners() {
       commission_threshold: 0,
       commission_rate_after: 0.5,
       brand_fee_rate: 0,
+      product_commission_rate: 0,
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, status: "active",
       work_hours: defaultWorkHours,
@@ -99,6 +100,7 @@ export default function AdminDesigners() {
       commission_threshold: (d as any).commission_threshold ?? 0,
       commission_rate_after: (d as any).commission_rate_after ?? 0.5,
       brand_fee_rate: (d as any).brand_fee_rate ?? 0,
+      product_commission_rate: (d as any).product_commission_rate ?? 0,
       joined_date: d.joined_date || "",
       left_date: d.left_date || "",
       can_view_members: d.can_view_members ?? true,
@@ -311,6 +313,22 @@ export default function AdminDesigners() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input value={Math.round((form.brand_fee_rate || 0) * 100) || ""} onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>商品抽成</div>
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
+                計算方式：商品銷售額 × %
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  value={Math.round((form.product_commission_rate || 0) * 100) || ""}
+                  onChange={(e) => setForm({ ...form, product_commission_rate: (parseInt(e.target.value) || 0) / 100 })}
+                  type="number" min="0" max="100" placeholder="0"
+                  style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
