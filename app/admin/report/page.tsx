@@ -637,7 +637,6 @@ export default function AdminReport() {
                       <svg width="400" height="400" viewBox="-70 -70 400 400">
                         {(() => {
                           const r = 90, cx = 130, cy = 130;
-                          // 先算出每個區塊的角度和路徑
                           let cum = 0;
                           const slices = entries.map(([name, amount], i) => {
                             const pct = amount / total;
@@ -651,49 +650,60 @@ export default function AdminReport() {
                             const dPath = pct >= 1
                               ? `M ${cx} ${cy} m -${r} 0 a ${r} ${r} 0 1 1 ${r*2} 0 a ${r} ${r} 0 1 1 -${r*2} 0`
                               : `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                            const lx1 = cx + (r + 4) * Math.cos(midAngle);
-                            const ly1 = cy + (r + 4) * Math.sin(midAngle);
-                            const lx2 = cx + (r + 20) * Math.cos(midAngle);
-                            const ly2 = cy + (r + 20) * Math.sin(midAngle);
-                            const isRight = Math.cos(midAngle) > 0;
-                            const lx3 = lx2 + (isRight ? 24 : -24);
-                            return { name, amount, pct, i, dPath, lx1, ly1, lx2, ly2: ly2, lx3, isRight, midAngle };
+                            const outerR = r + 16;
+                            const lx1 = cx + (r + 2) * Math.cos(midAngle);
+                            const ly1 = cy + (r + 2) * Math.sin(midAngle);
+                            const lx2 = cx + outerR * Math.cos(midAngle);
+                            const ly2 = cy + outerR * Math.sin(midAngle);
+                            const isRight = Math.cos(midAngle) >= 0;
+                            return { name, amount, pct, i, dPath, lx1, ly1, lx2, ly2, isRight, midAngle };
                           });
-                          // 防重疊：分左右兩組，按 ly2 排序後均勻分配 y
-                          const minGap = 22;
-                          // 小區塊（pct<0.08）交錯左右，大區塊依角度自然分
-                          slices.forEach((s, idx) => {
-                            if (s.pct < 0.08) {
-                              s.isRight = idx % 2 === 0;
-                              // 重新計算 lx2 往外拉，避免指引線穿入圓內
-                              const pullR = r + 20 + (1 - s.pct) * 10;
-                              s.lx2 = cx + pullR * Math.cos(s.midAngle);
-                              s.ly2 = cy + pullR * Math.sin(s.midAngle);
-                              s.lx3 = s.lx2 + (s.isRight ? 28 : -28);
+                          // 先依區塊實際位置決定左右
+                          // 若某邊超過一半數量，把最小的區塊換到另一邊
+                          const minGap = 24;
+                          const rebalance = () => {
+                            const rightCount = slices.filter(s => s.isRight).length;
+                            const leftCount = slices.length - rightCount;
+                            const half = Math.ceil(slices.length / 2);
+                            if (rightCount > half) {
+                              // 右邊太多，把右邊最小的移到左邊
+                              const rightSlices = slices.filter(s => s.isRight).sort((a, b) => a.pct - b.pct);
+                              for (let k = 0; k < rightCount - half; k++) rightSlices[k].isRight = false;
+                            } else if (leftCount > half) {
+                              // 左邊太多，把左邊最小的移到右邊
+                              const leftSlices = slices.filter(s => !s.isRight).sort((a, b) => a.pct - b.pct);
+                              for (let k = 0; k < leftCount - half; k++) leftSlices[k].isRight = true;
                             }
-                          });
-                          ["left", "right"].forEach(side => {
-                            const group = slices
-                              .filter(s => side === "right" ? s.isRight : !s.isRight)
-                              .sort((a, b) => a.ly2 - b.ly2);
-                            for (let pass = 0; pass < 10; pass++) {
+                          };
+                          rebalance();
+                          const spreadY = (group: typeof slices) => {
+                            group.sort((a, b) => a.ly2 - b.ly2);
+                            for (let pass = 0; pass < 20; pass++) {
                               for (let k = 1; k < group.length; k++) {
-                                const prev = group[k-1], cur = group[k];
-                                if (cur.ly2 - prev.ly2 < minGap) {
-                                  const mid = (prev.ly2 + cur.ly2) / 2;
-                                  prev.ly2 = mid - minGap / 2;
-                                  cur.ly2 = mid + minGap / 2;
+                                if (group[k].ly2 - group[k-1].ly2 < minGap) {
+                                  const mid = (group[k-1].ly2 + group[k].ly2) / 2;
+                                  group[k-1].ly2 = mid - minGap / 2;
+                                  group[k].ly2 = mid + minGap / 2;
                                 }
                               }
                             }
-                          });
-                          return slices.map(({ name, amount, i, dPath, lx1, ly1, lx2, ly2, lx3, isRight }) => {
+                          };
+                          spreadY(slices.filter(s => s.isRight));
+                          spreadY(slices.filter(s => !s.isRight));
+                          const edgeX = 56; // 標籤統一對齊到左右邊緣
+                          return slices.map(({ name, amount, i, dPath, lx1, ly1, lx2, ly2, isRight }) => {
+                            const lx3 = isRight ? cx + r + 46 : cx - r - 46;
                             const anchor = isRight ? "start" : "end";
-                            const textX = lx3 + (isRight ? 3 : -3);
+                            const textX = isRight ? lx3 + 3 : lx3 - 3;
                             return (
                               <g key={name}>
                                 <path d={dPath} fill={serviceColors[i % serviceColors.length]} stroke="#fff" strokeWidth="2" />
-                                <polyline points={`${lx1},${ly1} ${lx2},${ly2} ${lx3},${ly2}`} fill="none" stroke={serviceColors[i % serviceColors.length]} strokeWidth="1" />
+                                <polyline
+                                  points={`${lx1},${ly1} ${lx2},${ly2} ${lx3},${ly2}`}
+                                  fill="none"
+                                  stroke={serviceColors[i % serviceColors.length]}
+                                  strokeWidth="1"
+                                />
                                 <text x={textX} y={ly2} textAnchor={anchor} dominantBaseline="middle" fontSize="9" fontWeight="600" fill={serviceColors[i % serviceColors.length]}>
                                   <tspan x={textX} dy="-5">{name}</tspan>
                                   <tspan x={textX} dy="13">${amount.toLocaleString()}</tspan>
