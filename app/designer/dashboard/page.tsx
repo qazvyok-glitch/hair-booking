@@ -86,6 +86,30 @@ export default function DesignerDashboard() {
   const upcomingBookings = bookings.filter((b) => b.booking_date > today);
   const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : bookings;
 
+  function renderAnnouncements() {
+    if (announcements.length === 0) return null;
+    return (
+      <div style={{ padding: "12px 16px 4px" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>最新公告</div>
+        {announcements.map((a: any) => (
+          <div key={a.id} style={{ background: "#fff", borderRadius: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+            {a.image_url && <img src={a.image_url} alt={a.title} style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} />}
+            <div style={{ padding: "12px 14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 10, background: a.type === "promotion" ? "#FCEBEB" : a.type === "new_product" ? "#E1F5EE" : a.type === "event" ? "#FAEEDA" : "#EEEDFE", color: a.type === "promotion" ? "#A32D2D" : a.type === "new_product" ? "#085041" : a.type === "event" ? "#BA7517" : "#534AB7", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
+                  {a.type === "promotion" ? "優惠活動" : a.type === "new_product" ? "新商品" : a.type === "event" ? "活動" : "公告"}
+                </span>
+                <span style={{ fontSize: 10, color: "#888780" }}>{a.created_at?.slice(0,10).replace(/-/g,"/")}</span>
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A", marginBottom: 6 }}>📢 {a.title}</div>
+              {a.content && <div style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{a.content}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   async function handleAddBooking() {
     if (!newBooking.customer_name || !newBooking.booking_date) { alert("請填寫客人姓名及日期"); return; }
     setAddingSaving(true);
@@ -132,28 +156,7 @@ export default function DesignerDashboard() {
         <button onClick={() => setShowAddBooking(true)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增預約</button>
       </div>
 
-      {announcements.length > 0 ? (
-        <div style={{ padding: "12px 16px 4px" }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>最新公告</div>
-          {announcements.map((a: any) => (
-            <div key={a.id} style={{ background: "#fff", borderRadius: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
-              {a.image_url && (
-                <img src={a.image_url} alt={a.title} style={{ width: "100%", maxHeight: 200, objectFit: "cover" }} />
-              )}
-              <div style={{ padding: "12px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, background: a.type === "promotion" ? "#FCEBEB" : a.type === "new_product" ? "#E1F5EE" : a.type === "event" ? "#FAEEDA" : "#EEEDFE", color: a.type === "promotion" ? "#A32D2D" : a.type === "new_product" ? "#085041" : a.type === "event" ? "#BA7517" : "#534AB7", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>
-                    {a.type === "promotion" ? "優惠活動" : a.type === "new_product" ? "新商品" : a.type === "event" ? "活動" : "公告"}
-                  </span>
-                  <span style={{ fontSize: 10, color: "#888780" }}>{a.created_at?.slice(0,10).replace(/-/g,"/")}</span>
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A", marginBottom: 6 }}>📢 {a.title}</div>
-                {a.content && <div style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{a.content}</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      {renderAnnouncements()}
       {/* 統計卡 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "12px 16px 0" }}>
         {[
