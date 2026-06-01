@@ -159,7 +159,7 @@ export default function About() {
             </div>
             <span style={{ fontSize: 12, color: "#1500ff" }}>預約</span>
           </a>
-          <a href="/member/login" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
+          <a href="/member/profile" style={{ flex: 1, padding: "8px 0", textDecoration: "none", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3 }}>
             <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="11" fill="#ffffff" stroke="#000000" strokeWidth="1.5"/>
