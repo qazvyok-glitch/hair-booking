@@ -149,14 +149,26 @@ export default function AdminReport() {
         const orderNo = dateStr.replace(/-/g,"").slice(2) + String(txIdx+1).padStart(8,"0");
         const payMethod = t.payment_method ? `${t.payment_method}：${t.total_amount}` : "";
 
+        const productBrandsExport = ["Oright", "O'right", "Sumuzu", "哥德式", "善詩", "威傑式", "沂樂"];
+        const getItemCategory = (name: string) => {
+          if (name.startsWith("[商品]")) return "商品";
+          if (productBrandsExport.some(b => name.includes(b))) return "商品";
+          if (/剪髮|單剪/.test(name)) return "美髮-剪髮";
+          if (/燙|髮根燙/.test(name)) return "美髮-燙髮";
+          if (/染|補染/.test(name)) return "美髮-染髮";
+          if (/護髮/.test(name)) return "美髮-護髮";
+          if (/洗髮|髮浴洗/.test(name)) return "美髮-洗髮";
+          if (/頭皮/.test(name)) return "美髮-頭皮";
+          return "美髮-服務";
+        };
         const allItems = [
           ...(t.service_items||[]).map((s: any) => ({
-            category: "服務",
-            name: s.name,
+            category: getItemCategory(s.name),
+            name: s.name.startsWith("[商品]") ? s.name.replace("[商品] ", "") : s.name,
             qty: 1,
             price: s.amount,
             discount: s.discount || 0,
-            performance: s.amount || 0,
+            performance: s.name.startsWith("[商品]") ? 0 : (s.amount || 0),
           })),
           ...(t.product_items||[]).map((p: any) => ({
             category: "商品",
