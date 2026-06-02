@@ -42,6 +42,7 @@ export default function AdminDesigners() {
     commission_threshold: 0,
     commission_rate_after: 0.5,
     brand_fee_rate: 0,
+    product_commission_rate: 0,
     joined_date: "", left_date: "",
     can_view_members: true, status: "active",
     work_hours: defaultWorkHours,
