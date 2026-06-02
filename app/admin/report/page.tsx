@@ -288,30 +288,29 @@ export default function AdminReport() {
           continue;
         }
 
-        // 解析時間 "2026-05-01 15:27" → ISO
+        // 解析時間 "2026-01-01 12:53" → ISO
         const createdAt = order.orderTime.replace(" ", "T") + ":00";
 
-        // 拆分 service_items 與 product_items
-        const serviceItems = order.items
-          .filter(i => i.category.startsWith("美髮") || i.category === "服務")
-          .map(i => ({ name: i.name, amount: i.price, discount: i.discount }));
+        // 所有品項合併進 service_items（一張訂單一筆）
+        const serviceItems = order.items.map((i: any) => ({
+          name: i.name,
+          amount: i.performance > 0 ? i.performance : i.price,
+          discount: i.discount || 0,
+        }));
 
-        const productItems = order.items
-          .filter(i => !i.category.startsWith("美髮") && i.category !== "服務")
-          .map(i => ({ name: i.name, amount: i.price, quantity: i.qty }));
-
-        // 總金額：從 payMethod 欄解析，或加總 price
+        // 總金額：從支付方式欄解析（如「現金：2700」）
         let totalAmount = 0;
-        const payStr = order.payMethod;
+        const payStr = order.payMethod.trim();
         const payMatch = payStr.match(/[：:]\s*(\d+)/);
         if (payMatch) {
           totalAmount = parseInt(payMatch[1]);
         } else {
-          totalAmount = order.items.reduce((s, i) => s + i.price - i.discount, 0);
+          // 若無支付方式欄，用業績加總
+          totalAmount = order.items.reduce((s: number, i: any) => s + (i.performance > 0 ? i.performance : i.price), 0);
         }
 
-        // 支付方式
-        const payMethod = payStr.replace(/[：:]\s*\d+.*/, "").trim() || "現金";
+        // 支付方式文字（去掉金額部分）
+        const payMethod = payStr.replace(/[：:]\s*\d+[\s\S]*/, "").trim() || "現金";
 
         const txData = {
           designer_id: designer.id,
@@ -390,7 +389,13 @@ export default function AdminReport() {
     return Array.from(years).sort((a, b) => b - a);
   })();
 
-  const monthlyTransactions = transactions.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
+  const monthlyTransactions = transactions.filter(t => {
+    const m = t.created_at?.slice(0, 7);
+    return m === selectedMonth;
+  });
+  if (typeof window !== "undefined") {
+    console.log("selectedMonth:", selectedMonth, "total tx:", transactions.length, "monthly:", monthlyTransactions.length, "sample:", transactions.slice(0,2).map(t => t.created_at));
+  }
 
   function calcDesignerReport(d: Designer) {
     const dTransactions = monthlyTransactions.filter(t => t.designer_id === d.id);
