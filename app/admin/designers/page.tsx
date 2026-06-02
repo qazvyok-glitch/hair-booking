@@ -81,7 +81,7 @@ export default function AdminDesigners() {
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, status: "active",
       work_hours: defaultWorkHours,
-    });
+    } as any);
     setShowForm(true);
   }
 
