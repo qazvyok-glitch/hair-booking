@@ -292,10 +292,12 @@ export default function AdminReport() {
         const createdAt = order.orderTime.replace(" ", "T") + ":00";
 
         // 所有品項合併進 service_items（一張訂單一筆）
+        // 非美髮分類的品項標記為商品
         const serviceItems = order.items.map((i: any) => ({
-          name: i.name,
+          name: i.category && !i.category.startsWith("美髮") ? `[商品] ${i.name}` : i.name,
           amount: i.performance > 0 ? i.performance : i.price,
           discount: i.discount || 0,
+          is_product: i.category && !i.category.startsWith("美髮"),
         }));
 
         // 總金額：從支付方式欄解析（如「現金：2700」）
