@@ -291,13 +291,17 @@ export default function AdminReport() {
         // 解析時間 "2026-01-01 12:53" → ISO
         const createdAt = order.orderTime.replace(" ", "T") + ":00";
 
+        // 商品品牌關鍵字
+        const productBrands = ["Oright", "O'right", "Sumuzu", "哥德式", "善詩", "威傑式", "沂樂"];
+        const isProduct = (name: string, category: string) => {
+          if (category && !category.startsWith("美髮")) return true;
+          return productBrands.some(b => name.includes(b));
+        };
         // 所有品項合併進 service_items（一張訂單一筆）
-        // 非美髮分類的品項標記為商品
         const serviceItems = order.items.map((i: any) => ({
-          name: i.category && !i.category.startsWith("美髮") ? `[商品] ${i.name}` : i.name,
+          name: isProduct(i.name, i.category) ? `[商品] ${i.name}` : i.name,
           amount: i.performance > 0 ? i.performance : i.price,
           discount: i.discount || 0,
-          is_product: i.category && !i.category.startsWith("美髮"),
         }));
 
         // 總金額：從支付方式欄解析（如「現金：2700」）
@@ -633,6 +637,7 @@ export default function AdminReport() {
                 const dTx = monthlyTransactions.filter((t: any) => t.designer_id === selectedDesigner);
                 const stats: Record<string, number> = {};
                 function getCategory(name: string): string {
+                  if (name.startsWith("[商品]")) return "商品";
                   if (/剪髮|單剪/.test(name)) return "剪髮";
                   if (/燙|髮根燙/.test(name)) return "燙髮";
                   if (/染|補染/.test(name)) return "染髮";
