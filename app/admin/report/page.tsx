@@ -350,16 +350,31 @@ export default function AdminReport() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: dData }, { data: tData }, { data: pData }, { data: cData }] = await Promise.all([
+      const [{ data: dData }, { data: pData }, { data: cData }] = await Promise.all([
         supabase.from("designers").select("*").order("id"),
-        supabase.from("transactions").select("*").order("created_at", { ascending: false }),
         supabase.from("product_usage").select("*").order("used_at", { ascending: false }),
         supabase.from("customers").select("id, phone, customer_no"),
       ]);
       if (dData) setDesigners(dData);
-      if (tData) setTransactions(tData);
       if (pData) setProductUsages(pData);
       if (cData) setCustomers(cData);
+
+      // 分頁載入所有 transactions
+      let allTransactions: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data: tPage } = await supabase
+          .from("transactions")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (!tPage || tPage.length === 0) break;
+        allTransactions = [...allTransactions, ...tPage];
+        if (tPage.length < pageSize) break;
+        from += pageSize;
+      }
+      setTransactions(allTransactions);
       setLoading(false);
     }
     fetchData();
