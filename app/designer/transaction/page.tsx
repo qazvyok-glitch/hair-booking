@@ -417,7 +417,7 @@ export default function DesignerTransaction() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70 }}>
+    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 88 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>帳務</div>
         <div style={{ marginLeft: "auto", background: "#2C2840", borderRadius: 10, padding: "4px 12px" }}>
