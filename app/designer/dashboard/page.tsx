@@ -106,6 +106,10 @@ export default function DesignerDashboard() {
     return `${date.replace(/-/g, "/")}（${weekday}）`;
   }
 
+  function getTranslateUrl(text: string) {
+    return `https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(text)}&op=translate`;
+  }
+
   function renderAnnouncements() {
     if (announcements.length === 0) return null;
     return (
@@ -462,7 +466,14 @@ export default function DesignerDashboard() {
               </div>
 
               <div style={{ background: "#FBFAF7", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12, marginBottom: 12 }}>
-                <div style={{ fontSize: 11, color: "#888780", marginBottom: 6 }}>備註</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, color: "#888780" }}>備註</div>
+                  {selectedBooking.note && (
+                    <a href={getTranslateUrl(selectedBooking.note)} target="_blank" rel="noreferrer" style={{ flex: "0 0 auto", background: "#1A1A1A", color: "#fff", borderRadius: 999, padding: "5px 10px", fontSize: 11, fontWeight: 800, textDecoration: "none" }}>
+                      翻譯成中文
+                    </a>
+                  )}
+                </div>
                 <div style={{ fontSize: 14, color: selectedBooking.note ? "#2C2C2A" : "#AAA69D", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{selectedBooking.note || "沒有備註"}</div>
               </div>
 
