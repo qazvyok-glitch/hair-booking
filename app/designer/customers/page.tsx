@@ -71,6 +71,16 @@ export default function DesignerCustomers() {
       if (cData) setCustomers(cData);
       if (pData) setPhotos(pData);
       if (bData) setBookings(bData);
+
+      const uploadCustomerId = Number(new URLSearchParams(window.location.search).get("uploadCustomer") || 0);
+      if (uploadCustomerId && cData) {
+        const targetCustomer = cData.find((c: CustomerNote) => c.id === uploadCustomerId);
+        if (targetCustomer) {
+          setSelectedCustomer(targetCustomer);
+          setPhotoTakenAt(new Date().toISOString().split("T")[0]);
+          setShowPhotoModal(true);
+        }
+      }
       setLoading(false);
     }
     fetchData();

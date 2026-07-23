@@ -1142,6 +1142,9 @@ export default function DesignerTransaction() {
               <div style={{ fontSize: 13, color: "#888780", marginTop: 4 }}>
                 {completedCustomerName} 的服務完成
               </div>
+              <div style={{ fontSize: 12, color: "#5F5E5A", marginTop: 8, lineHeight: 1.6 }}>
+                髮型照可先跳過，之後也能到顧客備忘補上傳。
+              </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -1159,11 +1162,23 @@ export default function DesignerTransaction() {
               <input type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: "none" }} disabled={uploadingPhoto} />
             </label>
 
+            {completedNoteId && (
+              <button
+                onClick={() => {
+                  setShowPhotoPrompt(false);
+                  router.push(`/designer/customers?uploadCustomer=${completedNoteId}`);
+                }}
+                style={{ width: "100%", padding: "12px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}
+              >
+                稍後補上傳
+              </button>
+            )}
+
             <button
               onClick={() => { setShowPhotoPrompt(false); setTab("history"); }}
               style={{ width: "100%", padding: "12px 0", background: "#F1EFE8", color: "#5F5E5A", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 500, cursor: "pointer" }}
             >
-              跳過，不上傳
+              跳過，回交易紀錄
             </button>
           </div>
         </div>
