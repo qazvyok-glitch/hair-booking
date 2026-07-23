@@ -12,7 +12,7 @@ type DesignerPriceItem = { id: number; designer_id: number; name: string; price_
 type SelectedService = { id: number; name: string; amount: number; original_amount: number; discount: number };
 type Material = { name: string; quantity: string; unit: string; cost: string };
 type Product = { id: number; name: string; unit: string; unit_price: number; category: string };
-type ProductUsageItem = { product: Product; quantity: number };
+type ProductUsageItem = { product: Product; quantity: number; discount?: number };
 type Transaction = {
   id: number;
   customer_name: string;
@@ -155,11 +155,20 @@ export default function DesignerTransaction() {
   function toggleClientProduct(product: Product) {
     const exists = clientProductUsage.find(p => p.product.id === product.id);
     if (exists) setClientProductUsage(clientProductUsage.filter(p => p.product.id !== product.id));
-    else setClientProductUsage([...clientProductUsage, { product, quantity: 1 }]);
+    else setClientProductUsage([...clientProductUsage, { product, quantity: 1, discount: 0 }]);
   }
 
   function updateClientProductQty(id: number, qty: number) {
     setClientProductUsage(clientProductUsage.map(p => p.product.id === id ? { ...p, quantity: qty } : p));
+  }
+
+  function updateClientProductDiscount(id: number, value: string) {
+    const discount = Math.max(0, parseInt(value) || 0);
+    setClientProductUsage(clientProductUsage.map(p => {
+      if (p.product.id !== id) return p;
+      const originalTotal = p.product.unit_price * p.quantity;
+      return { ...p, discount: Math.min(discount, originalTotal) };
+    }));
   }
 
   function toggleProduct(product: Product) {
@@ -174,7 +183,8 @@ export default function DesignerTransaction() {
 
   const totalAmount = selectedServices.reduce((sum, s) => sum + (s.amount || 0), 0);
   const totalDiscount = selectedServices.reduce((sum, s) => sum + (s.discount || 0), 0);
-  const clientProductTotal = clientProductUsage.reduce((sum, p) => sum + (p.product.unit_price * p.quantity), 0);
+  const clientProductDiscountTotal = clientProductUsage.reduce((sum, p) => sum + (p.discount || 0), 0);
+  const clientProductTotal = clientProductUsage.reduce((sum, p) => sum + Math.max(0, (p.product.unit_price * p.quantity) - (p.discount || 0)), 0);
   const checkoutTotal = totalAmount + clientProductTotal;
   const totalMaterialCost = materials.reduce((sum, m) => sum + (parseInt(m.cost) || 0), 0);
   const totalProductCost = productUsage.reduce((sum, p) => sum + (p.product.unit_price * p.quantity), 0);
@@ -190,7 +200,11 @@ export default function DesignerTransaction() {
       total_amount: checkoutTotal,
       note: [
         note,
-        clientProductUsage.length > 0 ? `客人購買商品：${clientProductUsage.map(p => `${p.product.name} x${p.quantity}`).join("、")}` : "",
+        clientProductUsage.length > 0 ? `客人購買商品：${clientProductUsage.map(p => {
+          const originalTotal = p.product.unit_price * p.quantity;
+          const finalTotal = Math.max(0, originalTotal - (p.discount || 0));
+          return `${p.product.name} x${p.quantity}${p.discount ? ` 折扣NT$${p.discount.toLocaleString()}` : ""} 小計NT$${finalTotal.toLocaleString()}`;
+        }).join("、")}` : "",
       ].filter(Boolean).join("\n"),
       payment_method: paymentMethod === "其他" ? (customPayment || "其他") : paymentMethod,
     });
@@ -779,12 +793,24 @@ export default function DesignerTransaction() {
                           </div>
                         </div>
                         {picked && (
-                          <div style={{ padding: "6px 12px 10px", background: "#E1F5EE", display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, color: "#888780" }}>數量：</span>
-                            <button onClick={() => updateClientProductQty(p.id, Math.max(1, picked.quantity - 1))} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 14 }}>-</button>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", minWidth: 20, textAlign: "center" }}>{picked.quantity}</span>
-                            <button onClick={() => updateClientProductQty(p.id, picked.quantity + 1)} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 14 }}>+</button>
-                            <span style={{ fontSize: 12, color: "#1D9E75", marginLeft: "auto" }}>小計 ${(p.unit_price * picked.quantity).toLocaleString()}</span>
+                          <div style={{ padding: "8px 12px 11px", background: "#E1F5EE" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                              <span style={{ fontSize: 11, color: "#888780" }}>數量：</span>
+                              <button onClick={() => updateClientProductQty(p.id, Math.max(1, picked.quantity - 1))} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 14 }}>-</button>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", minWidth: 20, textAlign: "center" }}>{picked.quantity}</span>
+                              <button onClick={() => updateClientProductQty(p.id, picked.quantity + 1)} style={{ width: 24, height: 24, borderRadius: 6, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 14 }}>+</button>
+                              <span style={{ fontSize: 12, color: "#888780", marginLeft: "auto" }}>原價 ${(p.unit_price * picked.quantity).toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "end" }}>
+                              <div>
+                                <div style={{ fontSize: 11, color: "#888780", marginBottom: 5 }}>折扣金額</div>
+                                <input value={picked.discount || ""} onChange={(e) => updateClientProductDiscount(p.id, e.target.value)} placeholder="0" type="number" style={{ width: "100%", padding: "9px 10px", borderRadius: 10, border: "1px solid #FAC775", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#FAEEDA", fontWeight: 700 }} />
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: 11, color: "#888780", marginBottom: 5 }}>商品小計</div>
+                                <div style={{ fontSize: 14, color: "#1D9E75", fontWeight: 850 }}>NT$ {Math.max(0, (p.unit_price * picked.quantity) - (picked.discount || 0)).toLocaleString()}</div>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -797,11 +823,17 @@ export default function DesignerTransaction() {
                   {clientProductUsage.map(pu => (
                     <div key={pu.product.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#5F5E5A", marginBottom: 3 }}>
                       <span>{pu.product.name} x{pu.quantity}</span>
-                      <span style={{ color: "#1D9E75" }}>+${(pu.product.unit_price * pu.quantity).toLocaleString()}</span>
+                      <span style={{ color: "#1D9E75" }}>+NT$ {Math.max(0, (pu.product.unit_price * pu.quantity) - (pu.discount || 0)).toLocaleString()}</span>
                     </div>
                   ))}
+                  {clientProductDiscountTotal > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#BA7517", marginBottom: 3 }}>
+                      <span>商品折扣</span>
+                      <span>-NT$ {clientProductDiscountTotal.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, color: "#1D9E75", marginTop: 6, paddingTop: 6, borderTop: "0.5px solid #F1EFE8" }}>
-                    <span>商品小計</span>
+                    <span>商品實收小計</span>
                     <span>+NT$ {clientProductTotal.toLocaleString()}</span>
                   </div>
                 </div>
@@ -844,6 +876,12 @@ export default function DesignerTransaction() {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>客人購買商品</span>
                   <span style={{ fontSize: 13, color: "#B8F0D9", fontWeight: 700 }}>+NT$ {clientProductTotal.toLocaleString()}</span>
+                </div>
+              )}
+              {clientProductDiscountTotal > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>商品折扣</span>
+                  <span style={{ fontSize: 13, color: "#FAC775", fontWeight: 700 }}>已折 NT$ {clientProductDiscountTotal.toLocaleString()}</span>
                 </div>
               )}
               {totalProductCost > 0 && (
