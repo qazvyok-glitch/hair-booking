@@ -113,6 +113,18 @@ export default function DesignerDashboard() {
     return item?.display_name || item?.name || "未指定設計師";
   }
 
+  function getStatusMeta(status: string) {
+    if (status === "confirmed") return { label: "已確認", background: "#E1F5EE", color: "#085041", border: "#BFE6D7" };
+    if (status === "cancelled") return { label: "已取消", background: "#FCEBEB", color: "#A32D2D", border: "#F5C4C4" };
+    return { label: "待確認", background: "#FAEEDA", color: "#633806", border: "#FAC775" };
+  }
+
+  function formatBookingDate(date: string) {
+    const parsed = new Date(date + "T00:00:00");
+    const weekday = ["日", "一", "二", "三", "四", "五", "六"][parsed.getDay()];
+    return `${date.replace(/-/g, "/")}（${weekday}）`;
+  }
+
   function renderAnnouncements() {
     if (announcements.length === 0) return null;
     return (
@@ -234,56 +246,88 @@ export default function DesignerDashboard() {
       </div>
 
       {/* Tab */}
-      <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
+      <div style={{ padding: "16px 16px 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#2C2C2A" }}>預約清單</div>
+            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>依時間排序，待確認預約會優先提醒</div>
+          </div>
+          <div style={{ fontSize: 11, color: "#888780" }}>{displayBookings.length} 筆</div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
         {[
-          { key: "today", label: "今日" },
-          { key: "upcoming", label: "即將到來" },
-          { key: "all", label: "全部" },
+          { key: "today", label: "今日", count: todayBookings.length },
+          { key: "upcoming", label: "即將到來", count: upcomingBookings.length },
+          { key: "all", label: "全部", count: filteredByDesigner.length },
         ].map((t) => (
           <button key={t.key} onClick={() => setTab(t.key as "today" | "upcoming" | "all")} style={{ padding: "6px 14px", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
-            {t.label}
+            {t.label} {t.count}
           </button>
         ))}
+        </div>
       </div>
 
       {/* 預約列表 */}
       <div style={{ padding: "0 16px" }}>
         {displayBookings.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>沒有預約紀錄</div>
+          <div style={{ textAlign: "center", padding: "42px 16px", color: "#888780", fontSize: 14, background: "#fff", borderRadius: 16, border: "0.5px solid #D3D1C7" }}>目前沒有預約紀錄</div>
         ) : (
-          displayBookings.map((b) => (
-            <div key={b.id} style={{ background: "#fff", borderRadius: 14, padding: "14px", marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>{b.customer_name || "訪客"}</div>
-                  <div style={{ fontSize: 12, color: "#888780", marginTop: 2 }}>{b.customer_phone}</div>
+          displayBookings.map((b) => {
+            const statusMeta = getStatusMeta(b.status);
+            return (
+            <div key={b.id} style={{ background: "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: b.status === "pending" ? "#FFF8EA" : "#FBFAF7", borderBottom: "0.5px solid #ECE8DF" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <div style={{ fontSize: 22, fontWeight: 850, color: "#7A1F1F", letterSpacing: "-0.02em" }}>{b.booking_time}</div>
+                  <div style={{ fontSize: 12, color: "#888780" }}>{formatBookingDate(b.booking_date)}</div>
                 </div>
-                <div style={{
-                  fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 500,
-                  background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA",
-                  color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806",
-                }}>
-                  {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
+                <div style={{ fontSize: 11, padding: "4px 9px", borderRadius: 999, fontWeight: 700, background: statusMeta.background, color: statusMeta.color, border: "1px solid " + statusMeta.border }}>
+                  {statusMeta.label}
                 </div>
               </div>
-              <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 3 }}>📅 {b.booking_date.replace(/-/g, "/")} {b.booking_time}</div>
-              {designer?.is_manager && <div style={{ fontSize: 12, color: "#534AB7", marginBottom: 3 }}>設計師：{b.designers?.display_name || b.designers?.name || getDesignerName(b.designer_id)}</div>}
-              <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: b.note ? 4 : 0 }}>✂ {getServiceNames(b.service_ids || [])}</div>
-              {b.note && <div style={{ fontSize: 11, color: "#888780", background: "#F1EFE8", borderRadius: 6, padding: "4px 8px", marginTop: 4 }}>備註：{b.note}</div>}
-              {b.reference_image_url && (
-                <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 8, textDecoration: "none" }}>
-                  <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, marginBottom: 5 }}>查看參考圖片</div>
-                  <img src={b.reference_image_url} alt="參考圖片" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10, border: "0.5px solid #D3D1C7" }} />
-                </a>
-              )}
-              {b.status === "pending" && (
-                <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                  <button onClick={() => updateStatus(b.id, "confirmed")} style={{ flex: 1, padding: "8px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>接受預約</button>
-                  <button onClick={() => updateStatus(b.id, "cancelled")} style={{ flex: 1, padding: "8px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>婉拒預約</button>
+
+              <div style={{ padding: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#2C2C2A" }}>{b.customer_name || "訪客"}</div>
+                    <a href={b.customer_phone ? `tel:${b.customer_phone}` : undefined} style={{ display: "inline-block", fontSize: 12, color: "#888780", marginTop: 3, textDecoration: "none" }}>{b.customer_phone || "未留電話"}</a>
+                  </div>
+                  {designer?.is_manager && (
+                    <div style={{ textAlign: "right", minWidth: 82 }}>
+                      <div style={{ fontSize: 10, color: "#888780", marginBottom: 3 }}>設計師</div>
+                      <div style={{ fontSize: 12, color: "#534AB7", fontWeight: 700 }}>{b.designers?.display_name || b.designers?.name || getDesignerName(b.designer_id)}</div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <div style={{ background: "#F7F4EE", borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, color: "#888780", marginBottom: 4 }}>服務項目</div>
+                  <div style={{ fontSize: 13, color: "#2C2C2A", lineHeight: 1.6, fontWeight: 600 }}>{getServiceNames(b.service_ids || [])}</div>
+                </div>
+
+                {b.note && <div style={{ fontSize: 12, color: "#5F5E5A", background: "#FBFAF7", border: "0.5px solid #ECE8DF", borderRadius: 12, padding: "9px 10px", marginBottom: 10, lineHeight: 1.6 }}>備註：{b.note}</div>}
+                {b.reference_image_url && (
+                  <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginBottom: 10, textDecoration: "none" }}>
+                    <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 700, marginBottom: 6 }}>查看參考圖片</div>
+                    <img src={b.reference_image_url} alt="參考圖片" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 12, border: "0.5px solid #D3D1C7" }} />
+                  </a>
+                )}
+
+                {b.status === "pending" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <button onClick={() => updateStatus(b.id, "confirmed")} style={{ padding: "11px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>接受預約</button>
+                    <button onClick={() => updateStatus(b.id, "cancelled")} style={{ padding: "11px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>婉拒預約</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: b.customer_phone ? "1fr 1fr" : "1fr", gap: 8 }}>
+                    {b.customer_phone && <a href={`tel:${b.customer_phone}`} style={{ textAlign: "center", padding: "10px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 12, fontSize: 12, fontWeight: 800, textDecoration: "none" }}>聯絡客人</a>}
+                    {b.status === "confirmed" && <button onClick={() => router.push("/designer/transaction")} style={{ padding: "10px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>}
+                  </div>
+                )}
+                </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
