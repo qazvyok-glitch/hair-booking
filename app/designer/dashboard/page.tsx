@@ -333,16 +333,20 @@ export default function DesignerDashboard() {
 
       {showAddBooking && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 390, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>新增預約</div>
-              <button onClick={() => setShowAddBooking(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
+          <div style={{ width: "100%", maxWidth: 390, maxHeight: "88vh", background: "#fff", borderRadius: "22px 22px 0 0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "18px 16px 14px", borderBottom: "0.5px solid #ECE8DF", background: "#FBFAF7", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 850, color: "#2C2C2A", letterSpacing: "-0.02em" }}>新增預約</div>
+                <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>{designer?.is_manager ? "店長可協助指定設計師與建立預約" : "建立後會直接加入你的預約清單"}</div>
+              </div>
+              <button onClick={() => setShowAddBooking(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 999, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "#5F5E5A" }}>×</button>
             </div>
-            <div style={{ marginBottom: 12 }}>
+
+            <div style={{ padding: "14px 16px", overflowY: "auto" }}>
               {designer?.is_manager && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>指定設計師 *</div>
-                  <select value={newBooking.designer_id} onChange={(e) => setNewBooking({ ...newBooking, designer_id: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", background: "#fff", boxSizing: "border-box" }}>
+                <div style={{ marginBottom: 14, background: "#F7F4EE", borderRadius: 14, padding: 12 }}>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 6, fontWeight: 700 }}>指定設計師 *</div>
+                  <select value={newBooking.designer_id} onChange={(e) => setNewBooking({ ...newBooking, designer_id: e.target.value })} style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", background: "#fff", boxSizing: "border-box", color: "#2C2C2A" }}>
                     <option value="">請選擇設計師</option>
                     {allDesigners.map((d) => (
                       <option key={d.id} value={d.id}>{d.display_name || d.name}{d.nickname ? `（${d.nickname}）` : ""}</option>
@@ -350,68 +354,89 @@ export default function DesignerDashboard() {
                   </select>
                 </div>
               )}
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>客人姓名 *</div>
-              <input value={newBooking.customer_name} onChange={(e) => setNewBooking({ ...newBooking, customer_name: e.target.value })} placeholder="王小明" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>電話</div>
-              <input value={newBooking.customer_phone} onChange={(e) => setNewBooking({ ...newBooking, customer_phone: e.target.value })} placeholder="09xx-xxx-xxx" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-            </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>日期 *</div>
-                <input type="date" value={newBooking.booking_date} onChange={(e) => setNewBooking({ ...newBooking, booking_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+
+              <div style={{ marginBottom: 14, background: "#fff", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12 }}>
+                <div style={{ fontSize: 13, color: "#2C2C2A", marginBottom: 10, fontWeight: 800 }}>客人資料</div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 5 }}>客人姓名 *</div>
+                  <input value={newBooking.customer_name} onChange={(e) => setNewBooking({ ...newBooking, customer_name: e.target.value })} placeholder="王小明" style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 5 }}>電話</div>
+                  <input value={newBooking.customer_phone} onChange={(e) => setNewBooking({ ...newBooking, customer_phone: e.target.value })} placeholder="09xx-xxx-xxx" style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>時期</div>
-                <select value={newBooking.booking_time} onChange={(e) => setNewBooking({ ...newBooking, booking_time: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}>
-                  {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00"].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 8 }}>服務項目</div>
-              {categories.map(cat => {
-                const catServices = services.filter(s => s.category_id === cat.id);
-                const pickedCount = catServices.filter(s => newBookingServices.includes(s.id)).length;
-                const isOpen = openCat === cat.id;
-                return (
-                  <div key={cat.id} style={{ marginBottom: 6 }}>
-                    <div onClick={() => setOpenCat(isOpen ? null : cat.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: pickedCount > 0 ? cat.color : "#F1EFE8", borderRadius: isOpen ? "8px 8px 0 0" : 8, cursor: "pointer", border: "0.5px solid #D3D1C7" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{cat.label}</span>
-                        {pickedCount > 0 && <span style={{ fontSize: 10, background: cat.text_color, color: "#fff", borderRadius: 10, padding: "1px 7px" }}>{pickedCount}</span>}
-                      </div>
-                      <span style={{ fontSize: 11, color: "#888780" }}>{isOpen ? "▲" : "▼"}</span>
-                    </div>
-                    {isOpen && (
-                      <div style={{ border: "0.5px solid #D3D1C7", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
-                        {catServices.map(s => {
-                          const picked = newBookingServices.includes(s.id);
-                          return (
-                            <div key={s.id} onClick={() => setNewBookingServices(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}>
-                              <span style={{ fontSize: 12, color: "#2C2C2A" }}>{s.name}</span>
-                              <div style={{ width: 20, height: 20, borderRadius: 6, border: "1.5px solid " + (picked ? cat.text_color : "#D3D1C7"), background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                {picked && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+
+              <div style={{ marginBottom: 14, background: "#fff", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12 }}>
+                <div style={{ fontSize: 13, color: "#2C2C2A", marginBottom: 10, fontWeight: 800 }}>預約時間</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: "#888780", marginBottom: 5 }}>日期 *</div>
+                    <input type="date" value={newBooking.booking_date} onChange={(e) => setNewBooking({ ...newBooking, booking_date: e.target.value })} style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
                   </div>
-                );
-              })}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: "#888780", marginBottom: 5 }}>時間</div>
+                    <select value={newBooking.booking_time} onChange={(e) => setNewBooking({ ...newBooking, booking_time: e.target.value })} style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", color: "#2C2C2A", background: "#fff" }}>
+                      {["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00"].map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14, background: "#fff", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 800 }}>服務項目</div>
+                  <div style={{ fontSize: 11, color: "#888780" }}>已選 {newBookingServices.length} 項</div>
+                </div>
+                {categories.map(cat => {
+                  const catServices = services.filter(s => s.category_id === cat.id);
+                  const pickedCount = catServices.filter(s => newBookingServices.includes(s.id)).length;
+                  const isOpen = openCat === cat.id;
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 6 }}>
+                      <div onClick={() => setOpenCat(isOpen ? null : cat.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 12px", background: pickedCount > 0 ? cat.color : "#F1EFE8", borderRadius: isOpen ? "10px 10px 0 0" : 10, cursor: "pointer", border: "0.5px solid #D3D1C7" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{cat.label}</span>
+                          {pickedCount > 0 && <span style={{ fontSize: 10, background: cat.text_color, color: "#fff", borderRadius: 10, padding: "2px 8px", fontWeight: 700 }}>{pickedCount} 項</span>}
+                        </div>
+                        <span style={{ fontSize: 11, color: "#888780" }}>{isOpen ? "▲" : "▼"}</span>
+                      </div>
+                      {isOpen && (
+                        <div style={{ border: "0.5px solid #D3D1C7", borderTop: "none", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
+                          {catServices.map(s => {
+                            const picked = newBookingServices.includes(s.id);
+                            return (
+                              <div key={s.id} onClick={() => setNewBookingServices(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "11px 12px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}>
+                                <span style={{ fontSize: 13, color: "#2C2C2A", lineHeight: 1.4 }}>{s.name}</span>
+                                <div style={{ width: 22, height: 22, flex: "0 0 22px", borderRadius: 7, border: "1.5px solid " + (picked ? cat.text_color : "#D3D1C7"), background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  {picked && <span style={{ color: "#fff", fontSize: 13, fontWeight: 800 }}>✓</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginBottom: 8, background: "#fff", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12 }}>
+                <div style={{ fontSize: 13, color: "#2C2C2A", marginBottom: 8, fontWeight: 800 }}>備註</div>
+                <textarea value={newBooking.note} onChange={(e) => setNewBooking({ ...newBooking, note: e.target.value })} placeholder="特殊需求、現場安排、顧客偏好..." style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", height: 76, resize: "none", boxSizing: "border-box", lineHeight: 1.5 }} />
+              </div>
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
-              <textarea value={newBooking.note} onChange={(e) => setNewBooking({ ...newBooking, note: e.target.value })} placeholder="服務項目、特殊需求..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", height: 60, resize: "none", boxSizing: "border-box" }} />
+
+            <div style={{ padding: "12px 16px 18px", borderTop: "0.5px solid #ECE8DF", background: "#fff" }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.5 }}>
+                建立後狀態為「已確認」，適合電話預約、現場加約或店長協助預約。
+              </div>
+              <button onClick={handleAddBooking} disabled={addingSaving} style={{ width: "100%", padding: "14px 0", background: addingSaving ? "#D3D1C7" : "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 850, cursor: addingSaving ? "default" : "pointer" }}>
+                {addingSaving ? "建立中..." : "確認新增預約"}
+              </button>
             </div>
-            <button onClick={handleAddBooking} disabled={addingSaving} style={{ width: "100%", padding: "13px 0", background: addingSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: addingSaving ? "default" : "pointer" }}>
-              {addingSaving ? "建立中..." : "確認新增預約"}
-            </button>
           </div>
         </div>
       )}
