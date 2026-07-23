@@ -162,7 +162,7 @@ export default function DesignerDashboard() {
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 88 }}>
+    <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 76 }}>
       {/* 頂部 */}
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
