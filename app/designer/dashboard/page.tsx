@@ -22,7 +22,7 @@ type Service = { id: number; name: string; category_id: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
 type Designer = { id: number; name: string; display_name?: string; nickname?: string; status?: string; is_active?: boolean };
 type DesignerSession = { id: number; name: string; nickname: string; is_manager?: boolean };
-type Transaction = { designer_id: number; total_amount: number; created_at: string };
+type Transaction = { designer_id: number; total_amount: number; created_at: string; booking_id?: number | null };
 
 export default function DesignerDashboard() {
   const router = useRouter();
@@ -55,7 +55,7 @@ export default function DesignerDashboard() {
     async function fetchData() {
       const bookingQuery = supabase.from("bookings").select("*, designers(name, display_name, nickname)").order("booking_date").order("booking_time");
       const today = new Date().toLocaleDateString("en-CA");
-      const transactionQuery = supabase.from("transactions").select("designer_id, total_amount, created_at").gte("created_at", today);
+      const transactionQuery = supabase.from("transactions").select("designer_id, booking_id, total_amount, created_at").gte("created_at", today);
       const [{ data: bookingData }, { data: transactionData }, { data: serviceData }, { data: catData }, { data: designerData }] = await Promise.all([
         d.is_manager ? bookingQuery : bookingQuery.eq("designer_id", d.id),
         d.is_manager ? transactionQuery : transactionQuery.eq("designer_id", d.id),
@@ -107,6 +107,15 @@ export default function DesignerDashboard() {
     if (status === "confirmed") return { label: "已確認", background: "#E1F5EE", color: "#085041", border: "#BFE6D7" };
     if (status === "cancelled") return { label: "已取消", background: "#FCEBEB", color: "#A32D2D", border: "#F5C4C4" };
     return { label: "待確認", background: "#FAEEDA", color: "#633806", border: "#FAC775" };
+  }
+
+  function isBookingCheckedOut(bookingId: number) {
+    return transactions.some((t) => t.booking_id === bookingId);
+  }
+
+  function getBookingStatusMeta(booking: Booking) {
+    if (isBookingCheckedOut(booking.id)) return { label: "已結帳完成", background: "#ECE8DF", color: "#5F5E5A", border: "#D3D1C7" };
+    return getStatusMeta(booking.status);
   }
 
   function formatBookingDate(date: string) {
@@ -285,12 +294,13 @@ export default function DesignerDashboard() {
           <div style={{ textAlign: "center", padding: "42px 16px", color: "#888780", fontSize: 14, background: "#fff", borderRadius: 16, border: "0.5px solid #D3D1C7" }}>目前沒有預約紀錄</div>
         ) : (
           displayBookings.map((b) => {
-            const statusMeta = getStatusMeta(b.status);
+            const checkedOut = isBookingCheckedOut(b.id);
+            const statusMeta = getBookingStatusMeta(b);
             return (
-            <div key={b.id} onClick={() => setSelectedBooking(b)} style={{ background: "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)", cursor: "pointer" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: b.status === "pending" ? "#FFF8EA" : "#FBFAF7", borderBottom: "0.5px solid #ECE8DF" }}>
+            <div key={b.id} onClick={() => setSelectedBooking(b)} style={{ background: checkedOut ? "#F1EFE8" : "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (checkedOut ? "#D3D1C7" : b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: checkedOut ? "none" : b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)", cursor: "pointer", opacity: checkedOut ? 0.78 : 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: checkedOut ? "#E7E2D8" : b.status === "pending" ? "#FFF8EA" : "#FBFAF7", borderBottom: "0.5px solid #ECE8DF" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <div style={{ fontSize: 22, fontWeight: 850, color: "#7A1F1F", letterSpacing: "-0.02em" }}>{b.booking_time}</div>
+                  <div style={{ fontSize: 22, fontWeight: 850, color: checkedOut ? "#888780" : "#7A1F1F", letterSpacing: "-0.02em" }}>{b.booking_time}</div>
                   <div style={{ fontSize: 12, color: "#888780" }}>{formatBookingDate(b.booking_date)}</div>
                 </div>
                 <div style={{ fontSize: 11, padding: "4px 9px", borderRadius: 999, fontWeight: 700, background: statusMeta.background, color: statusMeta.color, border: "1px solid " + statusMeta.border }}>
@@ -325,7 +335,11 @@ export default function DesignerDashboard() {
                   </a>
                 )}
 
-                {b.status === "pending" ? (
+                {checkedOut ? (
+                  <div style={{ background: "#E7E2D8", color: "#5F5E5A", borderRadius: 12, padding: "10px 12px", fontSize: 12, fontWeight: 800, textAlign: "center" }}>
+                    已結帳完成，此預約僅可查看內容
+                  </div>
+                ) : b.status === "pending" ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <button onClick={(e) => { e.stopPropagation(); updateStatus(b.id, "confirmed"); }} style={{ padding: "11px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>接受預約</button>
                     <button onClick={(e) => { e.stopPropagation(); updateStatus(b.id, "cancelled"); }} style={{ padding: "11px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>婉拒預約</button>
@@ -471,8 +485,8 @@ export default function DesignerDashboard() {
                   <div style={{ fontSize: 20, fontWeight: 850, color: "#2C2C2A" }}>{selectedBooking.customer_name || "訪客"}</div>
                   <div style={{ fontSize: 13, color: "#888780", marginTop: 4 }}>{selectedBooking.customer_phone || "未留電話"}</div>
                 </div>
-                <div style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, fontWeight: 800, background: getStatusMeta(selectedBooking.status).background, color: getStatusMeta(selectedBooking.status).color, border: "1px solid " + getStatusMeta(selectedBooking.status).border }}>
-                  {getStatusMeta(selectedBooking.status).label}
+                <div style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, fontWeight: 800, background: getBookingStatusMeta(selectedBooking).background, color: getBookingStatusMeta(selectedBooking).color, border: "1px solid " + getBookingStatusMeta(selectedBooking).border }}>
+                  {getBookingStatusMeta(selectedBooking).label}
                 </div>
               </div>
 
@@ -524,7 +538,11 @@ export default function DesignerDashboard() {
             </div>
 
             <div style={{ padding: "12px 16px 18px", borderTop: "0.5px solid #ECE8DF", background: "#fff" }}>
-              {selectedBooking.status === "pending" ? (
+              {isBookingCheckedOut(selectedBooking.id) ? (
+                <div style={{ background: "#F1EFE8", color: "#5F5E5A", borderRadius: 14, padding: "13px 14px", fontSize: 13, fontWeight: 800, textAlign: "center", lineHeight: 1.5 }}>
+                  此預約已結帳完成，僅可查看內容。
+                </div>
+              ) : selectedBooking.status === "pending" ? (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <button onClick={() => { updateStatus(selectedBooking.id, "confirmed"); setSelectedBooking({ ...selectedBooking, status: "confirmed" }); }} style={{ padding: "13px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>接受預約</button>
                   <button onClick={() => { updateStatus(selectedBooking.id, "cancelled"); setSelectedBooking({ ...selectedBooking, status: "cancelled" }); }} style={{ padding: "13px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>婉拒預約</button>
