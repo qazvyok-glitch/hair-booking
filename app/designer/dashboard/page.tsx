@@ -169,15 +169,16 @@ export default function DesignerDashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 76 }}>
       {/* 頂部 */}
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <img src="/logo.png" alt="logo" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{designer?.name}</div>
             <div style={{ fontSize: 10, color: "#888780" }}>{designer?.is_manager ? "店長模式" : designer?.nickname}</div>
           </div>
         </div>
-        <div style={{ fontSize: 12, color: "#888780" }}>{today.replace(/-/g, "/")}</div>
+        <div style={{ fontSize: 16, color: "#fff", fontWeight: 850, letterSpacing: "0.02em", textAlign: "center" }}>{today.replace(/-/g, "/")}</div>
+        <div />
       </div>
 
       {renderAnnouncements()}
