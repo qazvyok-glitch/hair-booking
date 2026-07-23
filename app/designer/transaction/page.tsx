@@ -864,6 +864,91 @@ export default function DesignerTransaction() {
               )}
             </div>
 
+            {/* 帳單確認 */}
+            <div style={{ background: "#1A1A1A", borderRadius: 16, padding: "15px 16px", marginBottom: 10, color: "#fff" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 850, color: "#fff" }}>帳單確認</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.52)", marginTop: 3 }}>請先確認服務與商品明細，再選付款方式</div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.52)", marginBottom: 3 }}>應收總額</div>
+                  <div style={{ fontSize: 24, fontWeight: 850, letterSpacing: "-0.03em" }}>NT$ {checkoutTotal.toLocaleString()}</div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: "0.5px solid rgba(255,255,255,0.12)", paddingTop: 10, marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)", fontWeight: 800 }}>服務項目</span>
+                  <span style={{ fontSize: 12, color: "#fff", fontWeight: 800 }}>NT$ {totalAmount.toLocaleString()}</span>
+                </div>
+                {selectedServices.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", lineHeight: 1.6 }}>尚未選擇服務</div>
+                ) : (
+                  selectedServices.map((s) => (
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6, fontSize: 12, lineHeight: 1.5 }}>
+                      <div style={{ color: "rgba(255,255,255,0.78)" }}>
+                        {s.name}
+                        {s.discount > 0 && <span style={{ color: "#FAC775" }}> ｜折扣 NT$ {s.discount.toLocaleString()}</span>}
+                      </div>
+                      <div style={{ color: "#fff", fontWeight: 750, flexShrink: 0 }}>NT$ {s.amount.toLocaleString()}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {clientProductUsage.length > 0 && (
+                <div style={{ borderTop: "0.5px solid rgba(255,255,255,0.12)", paddingTop: 10, marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)", fontWeight: 800 }}>購買商品</span>
+                    <span style={{ fontSize: 12, color: "#B8F0D9", fontWeight: 800 }}>+NT$ {clientProductTotal.toLocaleString()}</span>
+                  </div>
+                  {clientProductUsage.map((p) => {
+                    const originalTotal = p.product.unit_price * p.quantity;
+                    const finalTotal = Math.max(0, originalTotal - (p.discount || 0));
+                    return (
+                      <div key={p.product.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6, fontSize: 12, lineHeight: 1.5 }}>
+                        <div style={{ color: "rgba(255,255,255,0.78)" }}>
+                          {p.product.name} x{p.quantity}
+                          {p.discount ? <span style={{ color: "#FAC775" }}> ｜商品折扣 NT$ {p.discount.toLocaleString()}</span> : null}
+                        </div>
+                        <div style={{ color: "#B8F0D9", fontWeight: 750, flexShrink: 0 }}>NT$ {finalTotal.toLocaleString()}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ borderTop: "0.5px solid rgba(255,255,255,0.16)", paddingTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>服務小計</span>
+                  <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>NT$ {totalAmount.toLocaleString()}</span>
+                </div>
+                {totalDiscount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>服務折扣</span>
+                    <span style={{ fontSize: 13, color: "#FAC775", fontWeight: 700 }}>已折 NT$ {totalDiscount.toLocaleString()}</span>
+                  </div>
+                )}
+                {clientProductTotal > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>商品實收小計</span>
+                    <span style={{ fontSize: 13, color: "#B8F0D9", fontWeight: 700 }}>+NT$ {clientProductTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {clientProductDiscountTotal > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>商品折扣</span>
+                    <span style={{ fontSize: 13, color: "#FAC775", fontWeight: 700 }}>已折 NT$ {clientProductDiscountTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <div style={{ borderTop: "0.5px solid rgba(255,255,255,0.16)", marginTop: 8, paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>客人應收總額</span>
+                  <span style={{ fontSize: 26, fontWeight: 850, color: "#fff", letterSpacing: "-0.03em" }}>NT$ {checkoutTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
 
             {/* 支付方式 */}
             <div style={{ background: "#fff", borderRadius: 16, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
@@ -882,53 +967,6 @@ export default function DesignerTransaction() {
             <div style={{ background: "#fff", borderRadius: 16, padding: 14, marginBottom: 14, border: "0.5px solid #D3D1C7" }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: "#2C2C2A", marginBottom: 8 }}>備註（選填）</div>
               <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="折扣原因、顧客狀況、服務紀錄..." style={{ width: "100%", padding: "11px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", height: 82, resize: "none", boxSizing: "border-box", lineHeight: 1.5 }} />
-            </div>
-
-            {/* 合計 */}
-            <div style={{ background: "#1A1A1A", borderRadius: 16, padding: "15px 16px", marginBottom: 14, color: "#fff" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>服務小計</span>
-                <span style={{ fontSize: 13, color: "#fff", fontWeight: 700 }}>NT$ {totalAmount.toLocaleString()}</span>
-              </div>
-              {totalDiscount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>折扣總額</span>
-                  <span style={{ fontSize: 13, color: "#FAC775", fontWeight: 700 }}>-NT$ {totalDiscount.toLocaleString()}</span>
-                </div>
-              )}
-              {clientProductTotal > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>客人購買商品</span>
-                  <span style={{ fontSize: 13, color: "#B8F0D9", fontWeight: 700 }}>+NT$ {clientProductTotal.toLocaleString()}</span>
-                </div>
-              )}
-              {clientProductDiscountTotal > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>商品折扣</span>
-                  <span style={{ fontSize: 13, color: "#FAC775", fontWeight: 700 }}>已折 NT$ {clientProductDiscountTotal.toLocaleString()}</span>
-                </div>
-              )}
-              {totalProductCost > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>自領商品</span>
-                  <span style={{ fontSize: 13, color: "#F09595", fontWeight: 700 }}>-NT$ {totalProductCost.toLocaleString()}</span>
-                </div>
-              )}
-              {totalMaterialCost > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>耗材成本</span>
-                  <span style={{ fontSize: 13, color: "#F09595", fontWeight: 700 }}>-NT$ {totalMaterialCost.toLocaleString()}</span>
-                </div>
-              )}
-              <div style={{ borderTop: "0.5px solid rgba(255,255,255,0.16)", marginTop: 8, paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#fff" }}>客人應收總額</span>
-                <span style={{ fontSize: 24, fontWeight: 850, color: "#fff", letterSpacing: "-0.03em" }}>NT$ {checkoutTotal.toLocaleString()}</span>
-              </div>
-              {(totalProductCost > 0 || totalMaterialCost > 0) && (
-                <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.52)", lineHeight: 1.5 }}>
-                  自領商品與耗材為內部成本紀錄，不影響客人應收總額。
-                </div>
-              )}
             </div>
 
             <button onClick={handleSubmit} disabled={saving} style={{ width: "100%", padding: "15px 0", background: saving ? "#D3D1C7" : "#7A1F1F", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 850, cursor: saving ? "default" : "pointer", boxShadow: saving ? "none" : "0 8px 18px rgba(122,31,31,0.22)" }}>
