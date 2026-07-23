@@ -93,6 +93,21 @@ export default function DesignerTransaction() {
       if (cData) setCategories(cData);
       if (pData) setProducts(pData);
       if (dpData) setDesignerPrices(dpData);
+      const checkoutBookingId = Number(new URLSearchParams(window.location.search).get("checkout") || 0);
+      if (checkoutBookingId && bData && sData) {
+        const targetBooking = bData.find((b: Booking) => b.id === checkoutBookingId);
+        if (targetBooking) {
+          setTab("new");
+          setSelectedBooking(targetBooking);
+          const bookingServices = (targetBooking.service_ids || [])
+            .map((id: number) => sData.find((svc: Service) => svc.id === id))
+            .filter(Boolean) as Service[];
+          setSelectedServices(bookingServices.map((svc) => {
+            const suggestedPrice = getSuggestedServicePriceFromList(svc, dpData || []);
+            return { id: svc.id, name: svc.name, amount: suggestedPrice, original_amount: suggestedPrice, discount: 0 };
+          }));
+        }
+      }
     }
     fetchData();
   }, [router]);
@@ -109,6 +124,15 @@ export default function DesignerTransaction() {
   function getSuggestedServicePrice(service: Service) {
     const serviceName = normalizeServiceName(service.name);
     const matchedPrice = designerPrices.find((item) => {
+      const priceName = normalizeServiceName(item.name);
+      return priceName === serviceName || priceName.includes(serviceName) || serviceName.includes(priceName);
+    });
+    return matchedPrice ? parsePriceRange(matchedPrice.price_range) : (service.default_price || 0);
+  }
+
+  function getSuggestedServicePriceFromList(service: Service, priceItems: DesignerPriceItem[]) {
+    const serviceName = normalizeServiceName(service.name);
+    const matchedPrice = priceItems.find((item) => {
       const priceName = normalizeServiceName(item.name);
       return priceName === serviceName || priceName.includes(serviceName) || serviceName.includes(priceName);
     });

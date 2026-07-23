@@ -307,7 +307,7 @@ export default function DesignerDashboard() {
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: b.customer_phone ? "1fr 1fr" : "1fr", gap: 8 }}>
                     {b.customer_phone && <a href={`tel:${b.customer_phone}`} onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", padding: "10px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 12, fontSize: 12, fontWeight: 800, textDecoration: "none" }}>聯絡客人</a>}
-                    {b.status === "confirmed" && <button onClick={(e) => { e.stopPropagation(); router.push("/designer/transaction"); }} style={{ padding: "10px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>}
+                    {b.status === "confirmed" && <button onClick={(e) => { e.stopPropagation(); router.push(`/designer/transaction?checkout=${b.id}`); }} style={{ padding: "10px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>}
                   </div>
                 )}
                 <div style={{ marginTop: 10, fontSize: 11, color: "#888780", textAlign: "center" }}>點擊卡片查看預約內容</div>
@@ -495,7 +495,7 @@ export default function DesignerDashboard() {
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: selectedBooking.customer_phone && selectedBooking.status === "confirmed" ? "1fr 1fr" : "1fr", gap: 8 }}>
                   {selectedBooking.customer_phone && <a href={`tel:${selectedBooking.customer_phone}`} style={{ textAlign: "center", padding: "13px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 14, fontSize: 14, fontWeight: 850, textDecoration: "none" }}>聯絡客人</a>}
-                  {selectedBooking.status === "confirmed" && <button onClick={() => router.push("/designer/transaction")} style={{ padding: "13px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>前往結帳</button>}
+                  {selectedBooking.status === "confirmed" && <button onClick={() => router.push(`/designer/transaction?checkout=${selectedBooking.id}`)} style={{ padding: "13px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>前往結帳</button>}
                 </div>
               )}
             </div>
