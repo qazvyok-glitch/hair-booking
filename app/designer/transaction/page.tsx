@@ -8,6 +8,7 @@ type DesignerSession = { id: number; name: string; nickname: string };
 type Booking = { id: number; customer_name: string; customer_phone: string; booking_date: string; booking_time: string };
 type Service = { id: number; name: string; category_id: number; default_price: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
+type DesignerPriceItem = { id: number; designer_id: number; name: string; price_range: string; is_active: boolean };
 type SelectedService = { id: number; name: string; amount: number; original_amount: number; discount: number };
 type Material = { name: string; quantity: string; unit: string; cost: string };
 type Product = { id: number; name: string; unit: string; unit_price: number; category: string };
@@ -28,6 +29,7 @@ export default function DesignerTransaction() {
   const [designer, setDesigner] = useState<DesignerSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [designerPrices, setDesignerPrices] = useState<DesignerPriceItem[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -70,12 +72,13 @@ export default function DesignerTransaction() {
 
     async function fetchData() {
       const today = new Date().toISOString().split("T")[0];
-      const [{ data: bData }, { data: tData }, { data: sData }, { data: cData }, { data: pData }] = await Promise.all([
+      const [{ data: bData }, { data: tData }, { data: sData }, { data: cData }, { data: pData }, { data: dpData }] = await Promise.all([
         supabase.from("bookings").select("*").eq("designer_id", d.id).eq("status", "confirmed").gte("booking_date", today).order("booking_date").order("booking_time"),
         supabase.from("transactions").select("*").eq("designer_id", d.id).order("created_at", { ascending: false }),
         supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("products").select("*").eq("is_active", true).order("sort_order"),
+        supabase.from("designer_price_items").select("*").eq("designer_id", d.id).eq("is_active", true).order("sort_order"),
       ]);
       if (bData) setBookings(bData);
       if (tData) {
@@ -88,14 +91,36 @@ export default function DesignerTransaction() {
       if (sData) setServices(sData);
       if (cData) setCategories(cData);
       if (pData) setProducts(pData);
+      if (dpData) setDesignerPrices(dpData);
     }
     fetchData();
   }, [router]);
 
+  function normalizeServiceName(name: string) {
+    return name.replace(/\s*\([SMLX]+\)$/, "").replace(/\s+/g, "").trim().toLowerCase();
+  }
+
+  function parsePriceRange(priceRange: string) {
+    const match = priceRange.match(/\d[\d,]*/);
+    return match ? parseInt(match[0].replace(/,/g, "")) || 0 : 0;
+  }
+
+  function getSuggestedServicePrice(service: Service) {
+    const serviceName = normalizeServiceName(service.name);
+    const matchedPrice = designerPrices.find((item) => {
+      const priceName = normalizeServiceName(item.name);
+      return priceName === serviceName || priceName.includes(serviceName) || serviceName.includes(priceName);
+    });
+    return matchedPrice ? parsePriceRange(matchedPrice.price_range) : (service.default_price || 0);
+  }
+
   function toggleService(svc: Service & { default_price?: number }) {
     const exists = selectedServices.find(s => s.id === svc.id);
     if (exists) setSelectedServices(selectedServices.filter(s => s.id !== svc.id));
-    else setSelectedServices([...selectedServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
+    else {
+      const suggestedPrice = getSuggestedServicePrice(svc);
+      setSelectedServices([...selectedServices, { id: svc.id, name: svc.name, amount: suggestedPrice, original_amount: suggestedPrice, discount: 0 }]);
+    }
   }
 
   function updateAmount(id: number, value: string) {
@@ -556,7 +581,12 @@ export default function DesignerTransaction() {
                           return (
                             <div key={svc.id}>
                               <div onClick={() => toggleService(svc)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}>
-                                <span style={{ fontSize: 12, color: "#2C2C2A" }}>{svc.name}</span>
+                                <div>
+                                  <div style={{ fontSize: 12, color: "#2C2C2A" }}>{svc.name}</div>
+                                  {getSuggestedServicePrice(svc) > 0 && (
+                                    <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>建議 ${getSuggestedServicePrice(svc).toLocaleString()}</div>
+                                  )}
+                                </div>
                                 <div style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${picked ? cat.text_color : "#D3D1C7"}`, background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                   {picked && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
                                 </div>
@@ -784,14 +814,15 @@ export default function DesignerTransaction() {
                                   if (picked) {
                                     setEditServices(editServices.filter(s => s.id !== svc.id));
                                   } else {
-                                    setEditServices([...editServices, { id: svc.id, name: svc.name, amount: svc.default_price || 0, original_amount: svc.default_price || 0, discount: 0 }]);
+                                    const suggestedPrice = getSuggestedServicePrice(svc);
+                                    setEditServices([...editServices, { id: svc.id, name: svc.name, amount: suggestedPrice, original_amount: suggestedPrice, discount: 0 }]);
                                   }
                                 }}
                                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: picked ? cat.color : "#fff", borderTop: "0.5px solid #F1EFE8", cursor: "pointer" }}
                               >
                                 <div>
                                   <div style={{ fontSize: 13, color: "#2C2C2A" }}>{svc.name}</div>
-                                  {svc.default_price > 0 && <div style={{ fontSize: 11, color: "#888780" }}>${svc.default_price.toLocaleString()}</div>}
+                                  {getSuggestedServicePrice(svc) > 0 && <div style={{ fontSize: 11, color: "#888780" }}>${getSuggestedServicePrice(svc).toLocaleString()}</div>}
                                 </div>
                                 <div style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${picked ? cat.text_color : "#D3D1C7"}`, background: picked ? cat.text_color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                                   {picked && <span style={{ color: "#fff", fontSize: 13 }}>✓</span>}

@@ -13,6 +13,7 @@ type Booking = {
   service_ids: number[];
   note: string;
   status: string;
+  reference_image_url?: string;
   designer_id: number;
   user_id: string;
 };
@@ -49,7 +50,7 @@ export default function AdminBookings() {
     async function fetchData() {
       const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }] = await Promise.all([
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
-        supabase.from("designers").select("id, name"),
+        supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("services").select("id, name"),
         supabase.from("customers").select("id, phone, customer_no"),
       ]);
@@ -131,7 +132,7 @@ export default function AdminBookings() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["日期", "時段", "客人", "電話", "設計師", "服務", "狀態", "操作"].map(h => (
+                  {["日期", "時段", "客人", "電話", "設計師", "服務", "圖片", "狀態", "操作"].map(h => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
@@ -145,6 +146,11 @@ export default function AdminBookings() {
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#888780" }}>{b.customer_phone || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getDesignerName(b.designer_id)}</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A", maxWidth: 200 }}>{getServiceNames(b.service_ids)}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12 }}>
+                      {b.reference_image_url ? (
+                        <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ color: "#534AB7", fontWeight: 600, textDecoration: "none" }}>查看</a>
+                      ) : "—"}
+                    </td>
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 500, background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
                         {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
@@ -181,6 +187,12 @@ export default function AdminBookings() {
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 2 }}>📅 {b.booking_date.replace(/-/g, "/")} {b.booking_time}</div>
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 2 }}>設計師：{getDesignerName(b.designer_id)}</div>
               <div style={{ fontSize: 12, color: "#5F5E5A" }}>服務：{getServiceNames(b.service_ids)}</div>
+              {b.reference_image_url && (
+                <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 8, textDecoration: "none" }}>
+                  <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, marginBottom: 5 }}>查看參考圖片</div>
+                  <img src={b.reference_image_url} alt="參考圖片" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10, border: "0.5px solid #D3D1C7" }} />
+                </a>
+              )}
               {b.status === "pending" && (
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                   <button onClick={() => updateStatus(b.id, "confirmed")} style={{ flex: 1, padding: "8px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>確認</button>

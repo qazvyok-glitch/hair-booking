@@ -2,13 +2,13 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useSettingsStore, fontSizes } from "../../store/settingsStore";
+import { useLanguageStore } from "../../store/languageStore";
 
 const steps = [
-  { label: "電話", path: "/booking",        exact: true },
-  { label: "設計師", path: "/booking/step/1" },
-  { label: "服務",   path: "/booking/step/2" },
-  { label: "時間",   path: "/booking/step/3" },
-  { label: "確認",   path: "/booking/step/4" },
+  { label: { zh: "設計師", en: "Stylist" }, path: "/booking/step/1" },
+  { label: { zh: "服務", en: "Service" }, path: "/booking/step/2" },
+  { label: { zh: "時間", en: "Time" }, path: "/booking/step/3" },
+  { label: { zh: "確認", en: "Confirm" }, path: "/booking/step/4" },
 ];
 
 export default function BookingLayout({ children }: { children: React.ReactNode }) {
@@ -23,9 +23,12 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
   })();
 
   const isSuccess = pathname.includes("/booking/success");
-  const { dark, fsIndex, setDark, setFsIndex } = useSettingsStore();
+  const { fsIndex, setFsIndex } = useSettingsStore();
+  const { language, toggleLanguage } = useLanguageStore();
   const [showSettings, setShowSettings] = useState(false);
+  const isEnglish = language === "en";
   const fs = fontSizes[fsIndex].value;
+  const dark = false;
 
   const bg      = dark ? "#1A1A1A" : "#f0e9e0";
   const cardBg  = dark ? "#2A2A2A" : "#fdfaf7";
@@ -43,18 +46,10 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: 390, background: cardBg, borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: fs * 16, fontWeight: 600, color: textMain }}>顯示設定</div>
+              <div style={{ fontSize: fs * 16, fontWeight: 600, color: textMain }}>{isEnglish ? "Display Settings" : "顯示設定"}</div>
               <button onClick={() => setShowSettings(false)} style={{ background: dark ? "#3A3A3A" : "#f0e9e0", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer", color: textMain }}>✕</button>
             </div>
-            <div style={{ fontSize: fs * 12, color: textSub, marginBottom: 8 }}>色彩模式</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {[{ label: "☀ 亮色", val: false }, { label: "☾ 深色", val: true }].map((m) => (
-                <div key={m.label} onClick={() => setDark(m.val)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, border: `1.5px solid ${dark === m.val ? accent : cardBorder}`, background: dark === m.val ? accentPale : cardBg, cursor: "pointer", fontSize: fs * 13, color: dark === m.val ? accent : textSub, fontWeight: dark === m.val ? 500 : 400 }}>
-                  {m.label}
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: fs * 12, color: textSub, marginBottom: 8 }}>字體大小</div>
+            <div style={{ fontSize: fs * 12, color: textSub, marginBottom: 8 }}>{isEnglish ? "Font Size" : "字體大小"}</div>
             <div style={{ display: "flex", gap: 8 }}>
               {fontSizes.map((f, i) => (
                 <div key={f.label} onClick={() => setFsIndex(i)} style={{ flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 10, border: `1.5px solid ${fsIndex === i ? accent : cardBorder}`, background: fsIndex === i ? accentPale : cardBg, cursor: "pointer", fontSize: f.value * 14, color: fsIndex === i ? accent : textSub, fontWeight: fsIndex === i ? 500 : 400 }}>
@@ -71,7 +66,12 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
         {/* 頂部標題 */}
         <div style={{ padding: "14px 16px", borderBottom: `0.5px solid ${cardBorder}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontSize: fs * 16, fontWeight: 500, color: textMain }}>Bing Cherry Hair Salon</span>
-          <button onClick={() => setShowSettings(true)} style={{ background: dark ? "#333" : "#f0e9e0", border: "none", borderRadius: 20, width: 32, height: 32, fontSize: 15, cursor: "pointer", color: dark ? "#F0EFEA" : "#4a4a4a" }}>⚙</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={toggleLanguage} style={{ background: dark ? "#333" : "#f0e9e0", border: "none", borderRadius: 20, padding: "7px 10px", fontSize: 12, cursor: "pointer", color: dark ? "#F0EFEA" : "#4a4a4a", fontWeight: 700 }}>
+              {isEnglish ? "中文" : "EN"}
+            </button>
+            <button onClick={() => setShowSettings(true)} style={{ background: dark ? "#333" : "#f0e9e0", border: "none", borderRadius: 20, width: 32, height: 32, fontSize: 15, cursor: "pointer", color: dark ? "#F0EFEA" : "#4a4a4a" }}>⚙</button>
+          </div>
         </div>
 
         {/* 進度條 */}
@@ -97,7 +97,7 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
                         {done ? "✓" : num}
                       </div>
                       <span style={{ fontSize: fs * 10, color: active ? accent : done ? "#5a8a4a" : (dark ? "#555" : "#c4b8b0"), fontWeight: active ? 700 : 400, whiteSpace: "nowrap" }}>
-                        {step.label}
+                        {step.label[language]}
                       </span>
                     </div>
                     {i < steps.length - 1 && (

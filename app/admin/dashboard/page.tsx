@@ -31,7 +31,7 @@ export default function AdminDashboard() {
 
       const [{ data: bookings }, { data: des }, { data: transactions }] = await Promise.all([
         supabase.from("bookings").select("*"),
-        supabase.from("designers").select("id, name, nickname").eq("is_active", true),
+        supabase.from("designers").select("id, name, nickname").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("transactions").select("designer_id, total_amount").gte("created_at", monthStart),
       ]);
 

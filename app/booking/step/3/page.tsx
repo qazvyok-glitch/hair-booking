@@ -3,22 +3,28 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
+import { useLanguageStore } from "../../../../store/languageStore";
 
 type OffDay = { designer_id: number; off_date: string };
 type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
 
-const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
+const weekDays = {
+  zh: ["日", "一", "二", "三", "四", "五", "六"],
+  en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+};
 function pad(n: number) { return n < 10 ? "0" + n : "" + n; }
 
 export default function Step3() {
   const router = useRouter();
   const { designer, date, time, setDate, setTime } = useBookingStore();
+  const { language } = useLanguageStore();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [offDays, setOffDays] = useState<OffDay[]>([]);
   const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const isEnglish = language === "en";
 
   useEffect(() => {
     if (!designer) { router.push("/booking/step/1"); return; }
@@ -62,24 +68,38 @@ export default function Step3() {
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
-        <div style={{ color: "#7a1f1f", fontSize: 14 }}>載入中</div>
+        <div style={{ color: "#7a1f1f", fontSize: 14 }}>{isEnglish ? "Loading" : "載入中"}</div>
       </div>
     );
   }
 
   return (
     <div style={{ padding: "20px 16px 120px" }}>
-      <div style={{ fontSize: 20, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>選擇時間</div>
-      <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 20 }}>請選擇預約日期與時段</div>
+      <button
+        onClick={() => router.push("/booking/step/2")}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: "#7a1f1f",
+          fontSize: 13,
+          fontWeight: 700,
+          padding: "0 0 14px",
+          cursor: "pointer",
+        }}
+      >
+        {isEnglish ? "⬅︎ Back" : "⬅︎返回"}
+      </button>
+      <div style={{ fontSize: 20, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>{isEnglish ? "Choose Date & Time" : "選擇時間"}</div>
+      <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 20 }}>{isEnglish ? "Please choose your appointment date and time." : "請選擇預約日期與時段"}</div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <button onClick={prevMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9a6060" }}>‹</button>
-        <span style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>{year} 年 {month} 月</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>{isEnglish ? `${year} / ${pad(month)}` : `${year} 年 ${month} 月`}</span>
         <button onClick={nextMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9a6060" }}>›</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 }}>
-        {weekDays.map((d) => (
+        {weekDays[language].map((d) => (
           <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#9a9188", padding: "2px 0" }}>{d}</div>
         ))}
       </div>
@@ -109,7 +129,7 @@ export default function Step3() {
             >
               {day}
               {isOff && !isPast ? (
-                <div style={{ fontSize: 8, color: "#c4b8b0" }}>休</div>
+                <div style={{ fontSize: 8, color: "#c4b8b0" }}>{isEnglish ? "Off" : "休"}</div>
               ) : null}
             </div>
           );
@@ -119,7 +139,10 @@ export default function Step3() {
       {date ? (
         <div>
           <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 10 }}>
-            選擇時段 — {date.replace(/-/g, "/")}
+            {isEnglish ? "Choose a time" : "選擇時段"} — {date.replace(/-/g, "/")}
+          </div>
+          <div style={{ fontSize: 11, color: "#9a9188", lineHeight: 1.5, marginBottom: 10 }}>
+            {isEnglish ? "🕒 All times are GMT+8 Taiwan Standard Time." : "🕒 所有時間均為 GMT+8 台灣標準時間。"}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
             {(designer?.work_hours || []).map((t) => {
@@ -138,7 +161,7 @@ export default function Step3() {
                   }}
                 >
                   {t}
-                  {off ? <div style={{ fontSize: 9, color: "#c4b8b0" }}>已滿</div> : null}
+                  {off ? <div style={{ fontSize: 9, color: "#c4b8b0" }}>{isEnglish ? "Full" : "已滿"}</div> : null}
                 </div>
               );
             })}
@@ -153,16 +176,6 @@ export default function Step3() {
         display: "flex", gap: 10,
       }}>
         <button
-          onClick={() => router.push("/booking/step/2")}
-          style={{
-            padding: "13px 18px", background: "#f0e9e0",
-            color: "#4a4a4a", border: "none", borderRadius: 12,
-            fontSize: 14, fontWeight: 600, cursor: "pointer",
-          }}
-        >
-          上一步
-        </button>
-        <button
           onClick={() => { if (date && time) router.push("/booking/step/4"); }}
           disabled={!date || !time}
           style={{
@@ -173,7 +186,7 @@ export default function Step3() {
             cursor: date && time ? "pointer" : "default",
           }}
         >
-          {date && time ? "下一步：確認預約" : "請選擇日期與時段"}
+          {date && time ? (isEnglish ? "Next: Confirm Booking" : "下一步：確認預約") : (isEnglish ? "Please choose date and time" : "請選擇日期與時段")}
         </button>
       </div>
     </div>

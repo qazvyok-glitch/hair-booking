@@ -1,107 +1,140 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { useBookingStore } from "../store/bookingStore";
+import { useLanguageStore } from "../store/languageStore";
 
 export default function Home() {
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-
-  useEffect(() => {
-    supabase.from("announcements").select("*").eq("is_active", true).in("target", ["all", "customer"]).order("created_at", { ascending: false }).limit(3).then(({ data }: any) => {
-      if (data) setAnnouncements(data);
-    });
-  }, []);
+  const { language, toggleLanguage } = useLanguageStore();
+  const { setContact, setCustomerName } = useBookingStore();
+  const isEnglish = language === "en";
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const isValid = phone.replace(/\D/g, "").length >= 8;
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setUser(session.user);
-      setLoading(false);
-    });
-  }, []);
+  async function handleBookingStart() {
+    if (!isValid) {
+      alert(isEnglish ? "Please enter a valid phone number" : "請輸入有效的手機號碼");
+      return;
+    }
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#1A1A1A", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ color: "#fff", fontSize: 14 }}>載入中...</div>
-    </div>
-  );
+    setLoading(true);
+    setContact("phone", phone);
+
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("name")
+      .eq("phone", phone)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const { data: booking } = customer?.name ? { data: null } : await supabase
+      .from("bookings")
+      .select("customer_name")
+      .eq("customer_phone", phone)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    setCustomerName(customer?.name || booking?.customer_name || "");
+    setLoading(false);
+    router.push("/booking/step/1");
+  }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#1A1A1A", display: "flex", justifyContent: "center", alignItems: "center", padding: "24px 16px" }}>
-      <div style={{ width: "100%", maxWidth: 390, display: "flex", flexDirection: "column", alignItems: "center", border: "1.5px solid #fff", borderRadius: 24, padding: "40px 24px" }}>
-
-        {/* LOGO */}
-        <img src="/logo.png" alt="logo" style={{ width: 100, height: 100, borderRadius: "50%", objectFit: "cover", marginBottom: 20, border: "2px solid #fff" }} />
-
-        {/* 店名 */}
-        <div style={{ fontSize: 22, fontWeight: 700, color: "#fff", marginBottom: 6, textAlign: "center" }}>Bing Cherry Hair Salon</div>
-        <div style={{ fontSize: 13, color: "#888780", marginBottom: 40, textAlign: "center" }}>台南市中西區西門路二段10號</div>
-
-        {/* 按鈕區 */}
-        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
-
-          {/* 公告 */}
-          {announcements.length > 0 && (
-            <div style={{ width: "100%", marginBottom: 16 }}>
-              {announcements.map((a: any) => (
-                <div key={a.id} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: "10px 14px", marginBottom: 8, borderLeft: "3px solid #C8C4F8", textAlign: "left" }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#C8C4F8" }}>📢 {a.title}</div>
-                  {a.content && <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 3, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{a.content}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 立即預約 */}
-          <button
-            onClick={() => {
-              if (user) {
-                router.push("/booking/step/1");
-              } else {
-                router.push("/member/login");
-              }
-            }}
-            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
-          >
-            立即預約
+    <div style={{ minHeight: "100vh", background: "#121212", display: "flex", justifyContent: "center", alignItems: "center", padding: "20px 14px" }}>
+      <main style={{
+        width: "100%",
+        maxWidth: 430,
+        border: "1.5px solid rgba(255,255,255,0.78)",
+        borderRadius: 28,
+        padding: "26px 22px 28px",
+        background: "linear-gradient(180deg, #191919 0%, #141414 100%)",
+        color: "#fff",
+        boxSizing: "border-box",
+      }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 18 }}>
+          <button onClick={toggleLanguage} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.36)", borderRadius: 999, padding: "7px 13px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+            {isEnglish ? "中文" : "EN"}
           </button>
+        </div>
 
-          {user ? (
-            <button
-              onClick={() => router.push("/member/profile")}
-              style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
-            >
-              {user.user_metadata?.full_name || "會員中心"}
-            </button>
-          ) : (
-            <button
-              onClick={() => router.push("/member/login")}
-              style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
-            >
-              會員登入
-            </button>
-          )}
-
-          <button
-            onClick={() => router.push("/news")}
-            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
-          >
-            最新消息
-          </button>
+        <section style={{ textAlign: "center", padding: "8px 0 28px" }}>
+          <img
+            src="/logo.png"
+            alt="Bing Cherry Hair Salon logo"
+            style={{ display: "block", width: 118, height: 118, borderRadius: "50%", objectFit: "cover", margin: "0 auto 22px", border: "2px solid rgba(255,255,255,0.94)" }}
+          />
+          <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1.12, letterSpacing: "-0.02em" }}>
+            Bing Cherry Hair Salon
+          </div>
           <button
             onClick={() => router.push("/about")}
-            style={{ width: "100%", padding: "16px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 14, fontSize: 18, fontWeight: 600, cursor: "pointer", letterSpacing: "0.05em" }}
+            style={{ background: "transparent", color: "#fff", border: "none", padding: "18px 0 0", fontSize: 13, fontWeight: 800, cursor: "pointer" }}
           >
-            關於我們
+            {isEnglish ? "Shop Information →" : "店家資訊 →"}
           </button>
-        </div>
+        </section>
 
-        <div style={{ marginTop: 32, fontSize: 11, color: "#555", textAlign: "center" }}>
-          © 2024 Bing Cherry Hair Salon
+        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          <div style={{ width: "100%" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.62)", letterSpacing: "0.08em", marginBottom: 8 }}>
+              {isEnglish ? "☎ Phone Number" : "☎ 手機號碼 Phone Number"}
+            </div>
+            <input
+              type="tel"
+              inputMode="tel"
+              placeholder="0912-345-678"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter" && isValid) handleBookingStart(); }}
+              style={{
+                width: "100%",
+                padding: "15px 16px",
+                borderRadius: 16,
+                fontSize: 18,
+                border: "1.5px solid rgba(255,255,255,0.64)",
+                background: "rgba(255,255,255,0.06)",
+                outline: "none",
+                letterSpacing: "0.06em",
+                color: "#fff",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          <button
+            onClick={handleBookingStart}
+            disabled={!isValid || loading}
+            style={{
+              width: "100%",
+              padding: "20px 0",
+              background: "transparent",
+              color: isValid && !loading ? "#fff" : "rgba(255,255,255,0.42)",
+              border: "2px solid " + (isValid && !loading ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.24)"),
+              borderRadius: 18,
+              fontSize: 22,
+              fontWeight: 900,
+              cursor: isValid && !loading ? "pointer" : "default",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {loading ? (isEnglish ? "Checking..." : "查詢中...") : (isEnglish ? "Book Now" : "立即預約")}
+          </button>
+          <button
+            onClick={() => router.push("/booking/my-bookings")}
+            style={{ background: "transparent", color: "#fff", border: "none", padding: "2px 0 0", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
+          >
+            {isEnglish ? "👤 View my profile and bookings →" : "👤 查看我的個人資料及預約 →"}
+          </button>
+        </section>
+
+        <div style={{ marginTop: 34, fontSize: 11, color: "#666", textAlign: "center" }}>
+          © Bing Cherry Hair Salon
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -77,7 +77,7 @@ export default function AdminPrices() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>價目表管理</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>店公版價目表</div>
         <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
       </div>
 

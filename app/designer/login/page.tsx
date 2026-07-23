@@ -29,6 +29,7 @@ export default function DesignerLogin() {
       id: data.designer_id,
       name: data.designers.name,
       nickname: data.designers.nickname,
+      is_manager: data.designers.is_manager || false,
     }));
     router.push("/designer/dashboard");
   }

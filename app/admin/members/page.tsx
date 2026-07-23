@@ -83,7 +83,7 @@ export default function AdminMembers() {
       supabase.from("bookings").select("id, user_id, booking_date, status"),
       supabase.from("customer_notes").select("*").order("customer_name"),
       supabase.from("customer_photos").select("*").order("taken_at", { ascending: false }),
-      supabase.from("designers").select("id, name"),
+      supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
     ]);
     if (mData) setMembers(mData);
     if (bData) setBookings(bData);

@@ -14,12 +14,15 @@ type Designer = {
 
 type BookingState = {
   phone: string;
+  contactMethod: "phone" | "email";
+  contactValue: string;
   customerName: string;
   designer: Designer | null;
   serviceIds: number[];
   date: string | null;
   time: string | null;
   setPhone: (phone: string) => void;
+  setContact: (method: "phone" | "email", value: string) => void;
   setCustomerName: (name: string) => void;
   setDesigner: (d: Designer) => void;
   toggleService: (id: number) => void;
@@ -30,12 +33,15 @@ type BookingState = {
 
 export const useBookingStore = create<BookingState>((set) => ({
   phone: "",
+  contactMethod: "phone",
+  contactValue: "",
   customerName: "",
   designer: null,
   serviceIds: [],
   date: null,
   time: null,
   setPhone: (phone) => set({ phone }),
+  setContact: (contactMethod, contactValue) => set({ contactMethod, contactValue, phone: contactValue }),
   setCustomerName: (customerName) => set({ customerName }),
   setDesigner: (d) => set({ designer: d }),
   toggleService: (id) =>
@@ -46,5 +52,5 @@ export const useBookingStore = create<BookingState>((set) => ({
     })),
   setDate: (date) => set({ date, time: null }),
   setTime: (time) => set({ time }),
-  reset: () => set({ phone: "", customerName: "", designer: null, serviceIds: [], date: null, time: null }),
+  reset: () => set({ phone: "", contactMethod: "phone", contactValue: "", customerName: "", designer: null, serviceIds: [], date: null, time: null }),
 }));

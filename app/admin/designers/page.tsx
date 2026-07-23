@@ -22,6 +22,8 @@ type Designer = {
   joined_date: string;
   left_date: string;
   can_view_members: boolean;
+  is_manager: boolean;
+  sort_order?: number | null;
 };
 
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
@@ -44,7 +46,7 @@ export default function AdminDesigners() {
     brand_fee_rate: 0,
     product_commission_rate: 0,
     joined_date: "", left_date: "",
-    can_view_members: true, status: "active",
+    can_view_members: true, is_manager: false, status: "active",
     work_hours: defaultWorkHours,
   });
 
@@ -62,7 +64,7 @@ export default function AdminDesigners() {
   }, [router]);
 
   async function fetchData() {
-    const { data } = await supabase.from("designers").select("*").order("id");
+    const { data } = await supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id");
     if (data) setDesigners(data);
     setLoading(false);
   }
@@ -79,7 +81,7 @@ export default function AdminDesigners() {
       brand_fee_rate: 0,
       product_commission_rate: 0,
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
-      can_view_members: true, status: "active",
+      can_view_members: true, is_manager: false, status: "active",
       work_hours: defaultWorkHours,
     } as any);
     setShowForm(true);
@@ -105,6 +107,7 @@ export default function AdminDesigners() {
       joined_date: d.joined_date || "",
       left_date: d.left_date || "",
       can_view_members: d.can_view_members ?? true,
+      is_manager: d.is_manager ?? false,
       status: d.status || "active",
       work_hours: d.work_hours || defaultWorkHours,
     });
@@ -115,7 +118,8 @@ export default function AdminDesigners() {
     if (!form.name) { alert("請填寫設計師姓名"); return; }
     setSaving(true);
     const isActive = form.status === "active";
-    const saveData = { ...form, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null };
+    const nextSortOrder = designers.reduce((max, designer) => Math.max(max, designer.sort_order || 0), 0) + 1;
+    const saveData = { ...form, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null, sort_order: editing?.sort_order || nextSortOrder };
     if (editing) {
       await supabase.from("designers").update(saveData).eq("id", editing.id);
       await supabase.from("designer_auth").update({ username: form.name.toLowerCase() }).eq("designer_id", editing.id);
@@ -123,7 +127,7 @@ export default function AdminDesigners() {
     } else {
       const { data } = await supabase.from("designers").insert(saveData).select().single();
       if (data) {
-        setDesigners([...designers, data]);
+        setDesigners([...designers, data].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id)));
         await supabase.from("designer_auth").insert({
           designer_id: data.id,
           username: form.name.toLowerCase(),
@@ -149,6 +153,30 @@ export default function AdminDesigners() {
     setDesigners(designers.map(x => x.id === d.id ? { ...x, can_view_members: newVal } : x));
   }
 
+  async function moveDesigner(index: number, direction: -1 | 1) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= designers.length) return;
+
+    const current = designers[index];
+    const target = designers[targetIndex];
+    const currentOrder = current.sort_order ?? index + 1;
+    const targetOrder = target.sort_order ?? targetIndex + 1;
+    const nextDesigners = [...designers];
+    nextDesigners[index] = { ...target, sort_order: currentOrder };
+    nextDesigners[targetIndex] = { ...current, sort_order: targetOrder };
+    setDesigners(nextDesigners);
+
+    const [{ error: currentError }, { error: targetError }] = await Promise.all([
+      supabase.from("designers").update({ sort_order: targetOrder }).eq("id", current.id),
+      supabase.from("designers").update({ sort_order: currentOrder }).eq("id", target.id),
+    ]);
+
+    if (currentError || targetError) {
+      alert("排序更新失敗，請再試一次");
+      fetchData();
+    }
+  }
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -159,11 +187,14 @@ export default function AdminDesigners() {
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>設計師管理</div>
-        <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => router.push("/admin/prices")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>公版價目表</button>
+          <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
+        </div>
       </div>
 
       <div style={{ padding: 16 }}>
-        {designers.map((d) => (
+        {designers.map((d, index) => (
           <div key={d.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", opacity: d.status === "active" ? 1 : 0.7 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, flexShrink: 0, overflow: "hidden" }}>
@@ -206,10 +237,18 @@ export default function AdminDesigners() {
                   <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", color: d.can_view_members ? "#085041" : "#A32D2D" }}>
                     {d.can_view_members ? "✓ 可查看會員" : "✕ 禁止查看會員"}
                   </span>
+                  {d.is_manager && (
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: "#EEEDFE", color: "#534AB7", fontWeight: 600 }}>
+                      店長權限
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                  <button onClick={() => moveDesigner(index, -1)} disabled={index === 0} style={{ padding: "5px 10px", background: index === 0 ? "#F1EFE8" : "#fff", color: index === 0 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === 0 ? "default" : "pointer" }}>上移</button>
+                  <button onClick={() => moveDesigner(index, 1)} disabled={index === designers.length - 1} style={{ padding: "5px 10px", background: index === designers.length - 1 ? "#F1EFE8" : "#fff", color: index === designers.length - 1 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === designers.length - 1 ? "default" : "pointer" }}>下移</button>
                   <button onClick={() => openEdit(d)} style={{ padding: "5px 10px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
+                  <button onClick={() => router.push(`/admin/designer-prices?designerId=${d.id}`)} style={{ padding: "5px 10px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>專屬價目表</button>
                   <button onClick={() => toggleStatus(d)} style={{ padding: "5px 10px", background: d.status === "active" ? "#FCEBEB" : "#E1F5EE", color: d.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                     {d.status === "active" ? "設為離職" : "恢復在職"}
                   </button>
@@ -306,6 +345,15 @@ export default function AdminDesigners() {
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.can_view_members ? 22 : 2, transition: "left 0.2s" }} />
               </div>
             </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "#F1EFE8", borderRadius: 10, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#2C2C2A" }}>店長權限</div>
+                <div style={{ fontSize: 11, color: "#888780" }}>可查看全店預約，並協助新增、確認或取消預約</div>
+              </div>
+              <div onClick={() => setForm({ ...form, is_manager: !form.is_manager })} style={{ width: 44, height: 24, borderRadius: 12, background: form.is_manager ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.is_manager ? 22 : 2, transition: "left 0.2s" }} />
+              </div>
+            </div>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>品牌社群資源共享費</div>
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
@@ -356,4 +404,3 @@ export default function AdminDesigners() {
     </div>
   );
 }
-

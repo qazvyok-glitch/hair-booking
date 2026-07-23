@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
 type Booking = {
   id: number;
+  designer_id: number;
   customer_name: string;
   customer_phone: string;
   booking_date: string;
@@ -12,11 +13,15 @@ type Booking = {
   service_ids: number[];
   note: string;
   status: string;
+  reference_image_url?: string;
+  designers?: { name?: string; display_name?: string; nickname?: string };
 };
 
 type Service = { id: number; name: string; category_id: number };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
-type DesignerSession = { id: number; name: string; nickname: string };
+type Designer = { id: number; name: string; display_name?: string; nickname?: string; status?: string; is_active?: boolean };
+type DesignerSession = { id: number; name: string; nickname: string; is_manager?: boolean };
+type Transaction = { designer_id: number; total_amount: number; created_at: string };
 
 function BottomNav({ current }: { current: string }) {
   const router = useRouter();
@@ -46,10 +51,13 @@ export default function DesignerDashboard() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [allDesigners, setAllDesigners] = useState<Designer[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
+  const [designerFilter, setDesignerFilter] = useState<number | "all">("all");
   const [showAddBooking, setShowAddBooking] = useState(false);
-  const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+  const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "", designer_id: "" });
   const [newBookingServices, setNewBookingServices] = useState<number[]>([]);
   const [openCat, setOpenCat] = useState<number | null>(null);
   const [addingSaving, setAddingSaving] = useState(false);
@@ -61,16 +69,23 @@ export default function DesignerDashboard() {
     setDesigner(d);
 
     async function fetchData() {
-      const [{ data: bookingData }, { data: serviceData }, { data: catData }] = await Promise.all([
-        supabase.from("bookings").select("*").eq("designer_id", d.id).order("booking_date").order("booking_time"),
+      const bookingQuery = supabase.from("bookings").select("*, designers(name, display_name, nickname)").order("booking_date").order("booking_time");
+      const today = new Date().toLocaleDateString("en-CA");
+      const transactionQuery = supabase.from("transactions").select("designer_id, total_amount, created_at").gte("created_at", today);
+      const [{ data: bookingData }, { data: transactionData }, { data: serviceData }, { data: catData }, { data: designerData }] = await Promise.all([
+        d.is_manager ? bookingQuery : bookingQuery.eq("designer_id", d.id),
+        d.is_manager ? transactionQuery : transactionQuery.eq("designer_id", d.id),
         supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
         supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
+        supabase.from("designers").select("id, name, display_name, nickname, status, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       ]);
       if (bookingData) setBookings(bookingData);
+      if (transactionData) setTransactions(transactionData);
       const { data: annoData } = await supabase.from("announcements").select("*").eq("is_active", true).in("target", ["all", "designer"]).order("created_at", { ascending: false }).limit(5);
       if (annoData) setAnnouncements(annoData);
       if (serviceData) setServices(serviceData);
       if (catData) setCategories(catData);
+      if (designerData) setAllDesigners(designerData);
       setLoading(false);
     }
     fetchData();
@@ -81,10 +96,22 @@ export default function DesignerDashboard() {
     return ids.map((id) => services.find((s) => s.id === id)?.name || "").filter(Boolean).join("、");
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  const todayBookings = bookings.filter((b) => b.booking_date === today);
-  const upcomingBookings = bookings.filter((b) => b.booking_date > today);
-  const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : bookings;
+  const today = new Date().toLocaleDateString("en-CA");
+  const filteredByDesigner = designer?.is_manager && designerFilter !== "all" ? bookings.filter((b) => b.designer_id === designerFilter) : bookings;
+  const filteredTransactions = designer?.is_manager && designerFilter !== "all" ? transactions.filter((t) => t.designer_id === designerFilter) : transactions;
+  const todayBookings = filteredByDesigner.filter((b) => b.booking_date === today);
+  const upcomingBookings = filteredByDesigner.filter((b) => b.booking_date > today);
+  const pendingBookings = filteredByDesigner.filter((b) => b.status === "pending");
+  const todayTotalAmount = filteredTransactions
+    .filter((t) => t.created_at?.slice(0, 10) === today)
+    .reduce((sum, t) => sum + (t.total_amount || 0), 0);
+  const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : filteredByDesigner;
+  const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
+
+  function getDesignerName(id: number) {
+    const item = allDesigners.find((d) => d.id === id);
+    return item?.display_name || item?.name || "未指定設計師";
+  }
 
   function renderAnnouncements() {
     if (announcements.length === 0) return null;
@@ -112,9 +139,10 @@ export default function DesignerDashboard() {
 
   async function handleAddBooking() {
     if (!newBooking.customer_name || !newBooking.booking_date) { alert("請填寫客人姓名及日期"); return; }
+    if (!bookingTargetDesignerId) { alert("請選擇設計師"); return; }
     setAddingSaving(true);
     const { data } = await supabase.from("bookings").insert({
-      designer_id: designer!.id,
+      designer_id: bookingTargetDesignerId,
       customer_name: newBooking.customer_name,
       customer_phone: newBooking.customer_phone,
       booking_date: newBooking.booking_date,
@@ -126,7 +154,7 @@ export default function DesignerDashboard() {
     if (data) setBookings([...bookings, data]);
     setAddingSaving(false);
     setShowAddBooking(false);
-    setNewBooking({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "" });
+    setNewBooking({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "", designer_id: "" });
     setNewBookingServices([]);
   }
 
@@ -149,26 +177,60 @@ export default function DesignerDashboard() {
           <img src="/logo.png" alt="logo" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{designer?.name}</div>
-            {designer?.nickname && <div style={{ fontSize: 10, color: "#888780" }}>{designer.nickname}</div>}
+            <div style={{ fontSize: 10, color: "#888780" }}>{designer?.is_manager ? "店長模式" : designer?.nickname}</div>
           </div>
         </div>
         <div style={{ fontSize: 12, color: "#888780" }}>{today.replace(/-/g, "/")}</div>
-        <button onClick={() => setShowAddBooking(true)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增預約</button>
       </div>
 
       {renderAnnouncements()}
-      {/* 統計卡 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "12px 16px 0" }}>
-        {[
-          { label: "今日預約", value: todayBookings.length, color: "#534AB7", bg: "#EEEDFE" },
-          { label: "待確認", value: bookings.filter((b) => b.status === "pending").length, color: "#BA7517", bg: "#FAEEDA" },
-          { label: "即將到來", value: upcomingBookings.length, color: "#1D9E75", bg: "#E1F5EE" },
-        ].map((s) => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: 12, padding: "12px 10px", textAlign: "center" }}>
-            <div style={{ fontSize: 24, fontWeight: 700, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>{s.label}</div>
+      {designer?.is_manager && (
+        <div style={{ padding: "12px 16px 0" }}>
+          <div style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 14, padding: 12 }}>
+            <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>店長查看範圍</div>
+            <select value={designerFilter} onChange={(e) => setDesignerFilter(e.target.value === "all" ? "all" : Number(e.target.value))} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, background: "#fff", color: "#2C2C2A" }}>
+              <option value="all">全店設計師</option>
+              {allDesigners.map((d) => (
+                <option key={d.id} value={d.id}>{d.display_name || d.name}{d.nickname ? `（${d.nickname}）` : ""}</option>
+              ))}
+            </select>
           </div>
-        ))}
+        </div>
+      )}
+      {/* 今日工作 */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#2C2C2A", letterSpacing: "-0.02em" }}>今日工作</div>
+            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>
+              {designer?.is_manager && designerFilter === "all" ? "全店今日狀態" : "今日預約與結帳概況"}
+            </div>
+          </div>
+          <button onClick={() => setShowAddBooking(true)} style={{ background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ 新增</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 14, padding: "13px 12px", boxShadow: "0 4px 14px rgba(26,26,26,0.04)" }}>
+            <div style={{ fontSize: 11, color: "#888780", marginBottom: 8 }}>今日預約</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+              <span style={{ fontSize: 30, fontWeight: 850, color: "#7A1F1F", lineHeight: 1 }}>{todayBookings.length}</span>
+              <span style={{ fontSize: 11, color: "#888780" }}>筆</span>
+            </div>
+          </div>
+          <div style={{ background: pendingBookings.length > 0 ? "#FAEEDA" : "#fff", border: "0.5px solid " + (pendingBookings.length > 0 ? "#FAC775" : "#D3D1C7"), borderRadius: 14, padding: "13px 12px", boxShadow: "0 4px 14px rgba(26,26,26,0.04)" }}>
+            <div style={{ fontSize: 11, color: pendingBookings.length > 0 ? "#633806" : "#888780", marginBottom: 8 }}>待確認</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+              <span style={{ fontSize: 30, fontWeight: 850, color: pendingBookings.length > 0 ? "#BA7517" : "#2C2C2A", lineHeight: 1 }}>{pendingBookings.length}</span>
+              <span style={{ fontSize: 11, color: pendingBookings.length > 0 ? "#633806" : "#888780" }}>筆</span>
+            </div>
+          </div>
+          <div style={{ gridColumn: "1 / -1", background: "linear-gradient(135deg, #1A1A1A 0%, #3A2424 100%)", borderRadius: 16, padding: "15px 14px", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 8px 22px rgba(26,26,26,0.16)" }}>
+            <div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.62)", marginBottom: 5 }}>今日結帳</div>
+              <div style={{ fontSize: 22, fontWeight: 850, letterSpacing: "-0.02em" }}>NT$ {todayTotalAmount.toLocaleString()}</div>
+            </div>
+            <button onClick={() => router.push("/designer/transaction")} style={{ background: "#fff", color: "#1A1A1A", border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>
+          </div>
+        </div>
       </div>
 
       {/* Tab */}
@@ -205,12 +267,19 @@ export default function DesignerDashboard() {
                 </div>
               </div>
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 3 }}>📅 {b.booking_date.replace(/-/g, "/")} {b.booking_time}</div>
+              {designer?.is_manager && <div style={{ fontSize: 12, color: "#534AB7", marginBottom: 3 }}>設計師：{b.designers?.display_name || b.designers?.name || getDesignerName(b.designer_id)}</div>}
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: b.note ? 4 : 0 }}>✂ {getServiceNames(b.service_ids || [])}</div>
               {b.note && <div style={{ fontSize: 11, color: "#888780", background: "#F1EFE8", borderRadius: 6, padding: "4px 8px", marginTop: 4 }}>備註：{b.note}</div>}
+              {b.reference_image_url && (
+                <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 8, textDecoration: "none" }}>
+                  <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, marginBottom: 5 }}>查看參考圖片</div>
+                  <img src={b.reference_image_url} alt="參考圖片" style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 10, border: "0.5px solid #D3D1C7" }} />
+                </a>
+              )}
               {b.status === "pending" && (
                 <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                  <button onClick={() => updateStatus(b.id, "confirmed")} style={{ flex: 1, padding: "8px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>確認預約</button>
-                  <button onClick={() => updateStatus(b.id, "cancelled")} style={{ flex: 1, padding: "8px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>取消預約</button>
+                  <button onClick={() => updateStatus(b.id, "confirmed")} style={{ flex: 1, padding: "8px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>接受預約</button>
+                  <button onClick={() => updateStatus(b.id, "cancelled")} style={{ flex: 1, padding: "8px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>婉拒預約</button>
                 </div>
               )}
             </div>
@@ -226,6 +295,17 @@ export default function DesignerDashboard() {
               <button onClick={() => setShowAddBooking(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
             <div style={{ marginBottom: 12 }}>
+              {designer?.is_manager && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>指定設計師 *</div>
+                  <select value={newBooking.designer_id} onChange={(e) => setNewBooking({ ...newBooking, designer_id: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", background: "#fff", boxSizing: "border-box" }}>
+                    <option value="">請選擇設計師</option>
+                    {allDesigners.map((d) => (
+                      <option key={d.id} value={d.id}>{d.display_name || d.name}{d.nickname ? `（${d.nickname}）` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>客人姓名 *</div>
               <input value={newBooking.customer_name} onChange={(e) => setNewBooking({ ...newBooking, customer_name: e.target.value })} placeholder="王小明" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
