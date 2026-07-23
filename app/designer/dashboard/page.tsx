@@ -38,6 +38,9 @@ export default function DesignerDashboard() {
   const [designerFilter, setDesignerFilter] = useState<number | "all">("all");
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [translatedNote, setTranslatedNote] = useState("");
+  const [translatingNote, setTranslatingNote] = useState(false);
+  const [translationError, setTranslationError] = useState("");
   const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "", designer_id: "" });
   const [newBookingServices, setNewBookingServices] = useState<number[]>([]);
   const [openCat, setOpenCat] = useState<number | null>(null);
@@ -71,6 +74,12 @@ export default function DesignerDashboard() {
     }
     fetchData();
   }, [router]);
+
+  useEffect(() => {
+    setTranslatedNote("");
+    setTranslatingNote(false);
+    setTranslationError("");
+  }, [selectedBooking?.id]);
 
   function getServiceNames(ids: number[]) {
     if (!ids || ids.length === 0) return "—";
@@ -106,8 +115,25 @@ export default function DesignerDashboard() {
     return `${date.replace(/-/g, "/")}（${weekday}）`;
   }
 
-  function getTranslateUrl(text: string) {
-    return `https://translate.google.com/?sl=auto&tl=zh-TW&text=${encodeURIComponent(text)}&op=translate`;
+  async function translateNoteToChinese(text: string) {
+    if (!text.trim()) return;
+    setTranslatingNote(true);
+    setTranslationError("");
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("translate_failed");
+      const data = await res.json();
+      const translated = Array.isArray(data?.[0])
+        ? data[0].map((part: any[]) => part?.[0] || "").join("")
+        : "";
+      if (!translated) throw new Error("empty_translation");
+      setTranslatedNote(translated);
+    } catch {
+      setTranslationError("目前無法自動翻譯，請稍後再試。");
+    } finally {
+      setTranslatingNote(false);
+    }
   }
 
   function renderAnnouncements() {
@@ -470,12 +496,23 @@ export default function DesignerDashboard() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <div style={{ fontSize: 11, color: "#888780" }}>備註</div>
                   {selectedBooking.note && (
-                    <a href={getTranslateUrl(selectedBooking.note)} target="_blank" rel="noreferrer" style={{ flex: "0 0 auto", background: "#1A1A1A", color: "#fff", borderRadius: 999, padding: "5px 10px", fontSize: 11, fontWeight: 800, textDecoration: "none" }}>
-                      翻譯成中文
-                    </a>
+                    <button onClick={() => translateNoteToChinese(selectedBooking.note)} disabled={translatingNote} style={{ flex: "0 0 auto", background: translatingNote ? "#D3D1C7" : "#1A1A1A", color: "#fff", border: "none", borderRadius: 999, padding: "5px 10px", fontSize: 11, fontWeight: 800, cursor: translatingNote ? "default" : "pointer" }}>
+                      {translatingNote ? "翻譯中..." : "翻譯成中文"}
+                    </button>
                   )}
                 </div>
                 <div style={{ fontSize: 14, color: selectedBooking.note ? "#2C2C2A" : "#AAA69D", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{selectedBooking.note || "沒有備註"}</div>
+                {translatedNote && (
+                  <div style={{ marginTop: 10, background: "#E1F5EE", border: "0.5px solid #BFE6D7", borderRadius: 12, padding: "10px 11px" }}>
+                    <div style={{ fontSize: 11, color: "#085041", fontWeight: 800, marginBottom: 5 }}>中文翻譯</div>
+                    <div style={{ fontSize: 14, color: "#2C2C2A", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{translatedNote}</div>
+                  </div>
+                )}
+                {translationError && (
+                  <div style={{ marginTop: 10, background: "#FCEBEB", border: "0.5px solid #F5C4C4", borderRadius: 12, padding: "9px 10px", fontSize: 12, color: "#A32D2D", lineHeight: 1.5 }}>
+                    {translationError}
+                  </div>
+                )}
               </div>
 
               {selectedBooking.reference_image_url && (
