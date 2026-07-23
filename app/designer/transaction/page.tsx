@@ -53,6 +53,8 @@ export default function DesignerTransaction() {
   const [photoNote, setPhotoNote] = useState("");
   const [history, setHistory] = useState<Transaction[]>([]);
   const [monthTotal, setMonthTotal] = useState(0);
+  const [historyMode, setHistoryMode] = useState<"today" | "date" | "all">("today");
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editServices, setEditServices] = useState<SelectedService[]>([]);
   const [editNote, setEditNote] = useState("");
@@ -364,6 +366,14 @@ export default function DesignerTransaction() {
 
   const filteredHistory = history.filter(t => t.created_at?.slice(0, 7) === selectedMonth);
   const filteredTotal = filteredHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+  const today = new Date().toLocaleDateString("en-CA");
+  const visibleHistory = historyMode === "today"
+    ? history.filter(t => t.created_at?.slice(0, 10) === today)
+    : historyMode === "date"
+      ? history.filter(t => t.created_at?.slice(0, 10) === selectedHistoryDate)
+      : history;
+  const visibleHistoryTotal = visibleHistory.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+  const historyTitle = historyMode === "today" ? "今日交易紀錄" : historyMode === "date" ? `${selectedHistoryDate.replace(/-/g, "/")} 交易紀錄` : "全部交易紀錄";
 
   // 當月各服務分類統計
   const serviceStats = (() => {
@@ -655,13 +665,37 @@ export default function DesignerTransaction() {
         {tab === "history" && (
           <>
             <div style={{ background: "#2C2840", borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>本月總收入</div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: "#C8C4F8" }}>${monthTotal.toLocaleString()}</div>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>{historyTitle}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: "#C8C4F8" }}>${visibleHistoryTotal.toLocaleString()}</div>
+              <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>{visibleHistory.length} 筆交易</div>
             </div>
-            {history.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無交易紀錄</div>
+
+            <div style={{ background: "#fff", borderRadius: 14, padding: 10, marginBottom: 10, border: "0.5px solid #D3D1C7" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: historyMode === "date" ? 10 : 0 }}>
+                {[
+                  { key: "today", label: "今日" },
+                  { key: "date", label: "選日期" },
+                  { key: "all", label: "全部" },
+                ].map((mode) => (
+                  <button key={mode.key} onClick={() => setHistoryMode(mode.key as "today" | "date" | "all")} style={{ padding: "8px 0", borderRadius: 999, border: "none", background: historyMode === mode.key ? "#534AB7" : "#F1EFE8", color: historyMode === mode.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: historyMode === mode.key ? 800 : 600, cursor: "pointer" }}>
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              {historyMode === "date" && (
+                <input
+                  type="date"
+                  value={selectedHistoryDate}
+                  onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              )}
+            </div>
+
+            {visibleHistory.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>{historyMode === "today" ? "今日尚無交易紀錄" : "此範圍尚無交易紀錄"}</div>
             ) : (
-              history.map((t) => (
+              visibleHistory.map((t) => (
                 <div key={t.id} style={{ background: "#fff", borderRadius: 10, padding: "8px 12px", marginBottom: 4, border: "0.5px solid #D3D1C7", display: "flex", alignItems: "center", gap: 8, overflowX: "auto", whiteSpace: "nowrap" }}>
                   <span style={{ fontSize: 11, color: "#888780", flexShrink: 0 }}>{t.created_at?.slice(0, 10).replace(/-/g, "/")} {t.created_at?.slice(11, 16)}</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "#2C2C2A", flexShrink: 0 }}>{t.customer_name}</span>
