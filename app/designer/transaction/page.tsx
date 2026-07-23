@@ -355,9 +355,8 @@ export default function DesignerTransaction() {
   })();
 
   function openEditTransaction(t: Transaction) {
-    setEditingTransaction(t);
-    setEditServices(t.service_items || []);
-    setEditNote(t.note || "");
+    // 已完成結帳的交易保留原始帳務紀錄，不再開放設計師端修改。
+    alert("此筆交易已完成結帳，無法再進入編輯。");
   }
 
   async function handleEditSave() {
@@ -551,7 +550,7 @@ export default function DesignerTransaction() {
                   </span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "#534AB7", flexShrink: 0 }}>${t.total_amount?.toLocaleString()}</span>
                   {t.payment_method && <span style={{ fontSize: 10, background: "#F1EFE8", color: "#5F5E5A", borderRadius: 6, padding: "1px 6px", flexShrink: 0 }}>{t.payment_method}</span>}
-                  <button onClick={() => openEditTransaction(t)} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer", flexShrink: 0, marginLeft: "auto" }}>編輯</button>
+                  <span style={{ background: "#F1EFE8", color: "#888780", borderRadius: 6, padding: "3px 8px", fontSize: 11, flexShrink: 0, marginLeft: "auto" }}>已結帳鎖定</span>
                 </div>
               ))
             )}
