@@ -37,6 +37,7 @@ export default function DesignerDashboard() {
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [designerFilter, setDesignerFilter] = useState<number | "all">("all");
   const [showAddBooking, setShowAddBooking] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [newBooking, setNewBooking] = useState({ customer_name: "", customer_phone: "", booking_date: "", booking_time: "10:00", note: "", designer_id: "" });
   const [newBookingServices, setNewBookingServices] = useState<number[]>([]);
   const [openCat, setOpenCat] = useState<number | null>(null);
@@ -255,7 +256,7 @@ export default function DesignerDashboard() {
           displayBookings.map((b) => {
             const statusMeta = getStatusMeta(b.status);
             return (
-            <div key={b.id} style={{ background: "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)" }}>
+            <div key={b.id} onClick={() => setSelectedBooking(b)} style={{ background: "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)", cursor: "pointer" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", background: b.status === "pending" ? "#FFF8EA" : "#FBFAF7", borderBottom: "0.5px solid #ECE8DF" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <div style={{ fontSize: 22, fontWeight: 850, color: "#7A1F1F", letterSpacing: "-0.02em" }}>{b.booking_time}</div>
@@ -270,7 +271,7 @@ export default function DesignerDashboard() {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 800, color: "#2C2C2A" }}>{b.customer_name || "訪客"}</div>
-                    <a href={b.customer_phone ? `tel:${b.customer_phone}` : undefined} style={{ display: "inline-block", fontSize: 12, color: "#888780", marginTop: 3, textDecoration: "none" }}>{b.customer_phone || "未留電話"}</a>
+                    <a href={b.customer_phone ? `tel:${b.customer_phone}` : undefined} onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, color: "#888780", marginTop: 3, textDecoration: "none" }}>{b.customer_phone || "未留電話"}</a>
                   </div>
                   {designer?.is_manager && (
                     <div style={{ textAlign: "right", minWidth: 82 }}>
@@ -295,15 +296,16 @@ export default function DesignerDashboard() {
 
                 {b.status === "pending" ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <button onClick={() => updateStatus(b.id, "confirmed")} style={{ padding: "11px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>接受預約</button>
-                    <button onClick={() => updateStatus(b.id, "cancelled")} style={{ padding: "11px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>婉拒預約</button>
+                    <button onClick={(e) => { e.stopPropagation(); updateStatus(b.id, "confirmed"); }} style={{ padding: "11px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>接受預約</button>
+                    <button onClick={(e) => { e.stopPropagation(); updateStatus(b.id, "cancelled"); }} style={{ padding: "11px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>婉拒預約</button>
                   </div>
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: b.customer_phone ? "1fr 1fr" : "1fr", gap: 8 }}>
-                    {b.customer_phone && <a href={`tel:${b.customer_phone}`} style={{ textAlign: "center", padding: "10px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 12, fontSize: 12, fontWeight: 800, textDecoration: "none" }}>聯絡客人</a>}
-                    {b.status === "confirmed" && <button onClick={() => router.push("/designer/transaction")} style={{ padding: "10px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>}
+                    {b.customer_phone && <a href={`tel:${b.customer_phone}`} onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", padding: "10px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 12, fontSize: 12, fontWeight: 800, textDecoration: "none" }}>聯絡客人</a>}
+                    {b.status === "confirmed" && <button onClick={(e) => { e.stopPropagation(); router.push("/designer/transaction"); }} style={{ padding: "10px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>}
                   </div>
                 )}
+                <div style={{ marginTop: 10, fontSize: 11, color: "#888780", textAlign: "center" }}>點擊卡片查看預約內容</div>
                 </div>
             </div>
             );
@@ -416,6 +418,74 @@ export default function DesignerDashboard() {
               <button onClick={handleAddBooking} disabled={addingSaving} style={{ width: "100%", padding: "14px 0", background: addingSaving ? "#D3D1C7" : "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 850, cursor: addingSaving ? "default" : "pointer" }}>
                 {addingSaving ? "建立中..." : "確認新增預約"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedBooking && (
+        <div onClick={() => setSelectedBooking(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 110, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 390, maxHeight: "86vh", background: "#fff", borderRadius: "22px 22px 0 0", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "18px 16px 14px", borderBottom: "0.5px solid #ECE8DF", background: "#FBFAF7", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 850, color: "#2C2C2A", letterSpacing: "-0.02em" }}>預約內容</div>
+                <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>{formatBookingDate(selectedBooking.booking_date)} {selectedBooking.booking_time}</div>
+              </div>
+              <button onClick={() => setSelectedBooking(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 999, width: 34, height: 34, fontSize: 18, cursor: "pointer", color: "#5F5E5A" }}>×</button>
+            </div>
+
+            <div style={{ padding: "14px 16px", overflowY: "auto" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 850, color: "#2C2C2A" }}>{selectedBooking.customer_name || "訪客"}</div>
+                  <div style={{ fontSize: 13, color: "#888780", marginTop: 4 }}>{selectedBooking.customer_phone || "未留電話"}</div>
+                </div>
+                <div style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, fontWeight: 800, background: getStatusMeta(selectedBooking.status).background, color: getStatusMeta(selectedBooking.status).color, border: "1px solid " + getStatusMeta(selectedBooking.status).border }}>
+                  {getStatusMeta(selectedBooking.status).label}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                <div style={{ background: "#F7F4EE", borderRadius: 14, padding: 12 }}>
+                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 5 }}>設計師</div>
+                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 800 }}>{selectedBooking.designers?.display_name || selectedBooking.designers?.name || getDesignerName(selectedBooking.designer_id)}</div>
+                </div>
+                <div style={{ background: "#F7F4EE", borderRadius: 14, padding: 12 }}>
+                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 5 }}>預約時間</div>
+                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 800 }}>{selectedBooking.booking_time}</div>
+                </div>
+              </div>
+
+              <div style={{ background: "#F7F4EE", borderRadius: 14, padding: 12, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: "#888780", marginBottom: 6 }}>服務項目</div>
+                <div style={{ fontSize: 14, color: "#2C2C2A", lineHeight: 1.7, fontWeight: 750 }}>{getServiceNames(selectedBooking.service_ids || [])}</div>
+              </div>
+
+              <div style={{ background: "#FBFAF7", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12, marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: "#888780", marginBottom: 6 }}>備註</div>
+                <div style={{ fontSize: 14, color: selectedBooking.note ? "#2C2C2A" : "#AAA69D", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{selectedBooking.note || "沒有備註"}</div>
+              </div>
+
+              {selectedBooking.reference_image_url && (
+                <a href={selectedBooking.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginBottom: 12, textDecoration: "none" }}>
+                  <div style={{ fontSize: 12, color: "#534AB7", fontWeight: 800, marginBottom: 7 }}>查看參考圖片</div>
+                  <img src={selectedBooking.reference_image_url} alt="參考圖片" style={{ width: "100%", maxHeight: 240, objectFit: "cover", borderRadius: 14, border: "0.5px solid #D3D1C7" }} />
+                </a>
+              )}
+            </div>
+
+            <div style={{ padding: "12px 16px 18px", borderTop: "0.5px solid #ECE8DF", background: "#fff" }}>
+              {selectedBooking.status === "pending" ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <button onClick={() => { updateStatus(selectedBooking.id, "confirmed"); setSelectedBooking({ ...selectedBooking, status: "confirmed" }); }} style={{ padding: "13px 0", background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>接受預約</button>
+                  <button onClick={() => { updateStatus(selectedBooking.id, "cancelled"); setSelectedBooking({ ...selectedBooking, status: "cancelled" }); }} style={{ padding: "13px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>婉拒預約</button>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: selectedBooking.customer_phone && selectedBooking.status === "confirmed" ? "1fr 1fr" : "1fr", gap: 8 }}>
+                  {selectedBooking.customer_phone && <a href={`tel:${selectedBooking.customer_phone}`} style={{ textAlign: "center", padding: "13px 0", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 14, fontSize: 14, fontWeight: 850, textDecoration: "none" }}>聯絡客人</a>}
+                  {selectedBooking.status === "confirmed" && <button onClick={() => router.push("/designer/transaction")} style={{ padding: "13px 0", background: "#7A1F1F", color: "#fff", border: "none", borderRadius: 14, fontSize: 14, fontWeight: 850, cursor: "pointer" }}>前往結帳</button>}
+                </div>
+              )}
             </div>
           </div>
         </div>
