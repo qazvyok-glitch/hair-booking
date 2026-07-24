@@ -38,7 +38,7 @@ export default function DesignerDashboard() {
   const [offDays, setOffDays] = useState<OffDay[]>([]);
   const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
+  const [tab, setTab] = useState<"today" | "upcoming">("today");
   const [designerFilter, setDesignerFilter] = useState<number | "all">("all");
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -105,7 +105,7 @@ export default function DesignerDashboard() {
     .reduce((sum, t) => sum + (t.total_amount || 0), 0);
   const checkedOutTodayCount = todayBookings.filter((b) => isBookingCheckedOut(b.id)).length;
   const overdueUncheckoutCount = todayBookings.filter((b) => b.status === "confirmed" && !isBookingCheckedOut(b.id) && isPastBookingTime(b.booking_time)).length;
-  const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : filteredByDesigner;
+  const displayBookings = tab === "today" ? todayBookings : upcomingBookings;
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
   const addBookingConflict = getAddBookingConflict();
 
@@ -287,7 +287,7 @@ export default function DesignerDashboard() {
                 <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>協助預約</div>
                 <div style={{ fontSize: 11, color: "#5F5E5A", lineHeight: 1.45 }}>替任一設計師建立電話或現場預約</div>
               </button>
-              <button onClick={() => setTab("all")} style={{ background: pendingBookings.length + overdueUncheckoutCount > 0 ? "#FAEEDA" : "rgba(255,255,255,0.1)", color: pendingBookings.length + overdueUncheckoutCount > 0 ? "#633806" : "#fff", border: "none", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
+              <button onClick={() => setTab("today")} style={{ background: pendingBookings.length + overdueUncheckoutCount > 0 ? "#FAEEDA" : "rgba(255,255,255,0.1)", color: pendingBookings.length + overdueUncheckoutCount > 0 ? "#633806" : "#fff", border: "none", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
                 <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>待處理</div>
                 <div style={{ fontSize: 11, color: pendingBookings.length + overdueUncheckoutCount > 0 ? "#633806" : "rgba(255,255,255,0.68)", lineHeight: 1.45 }}>待確認 {pendingBookings.length} 筆，逾時未結帳 {overdueUncheckoutCount} 筆</div>
               </button>
@@ -348,9 +348,8 @@ export default function DesignerDashboard() {
         {[
           { key: "today", label: "今日", count: todayBookings.length },
           { key: "upcoming", label: "即將到來", count: upcomingBookings.length },
-          { key: "all", label: "全部", count: filteredByDesigner.length },
         ].map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key as "today" | "upcoming" | "all")} style={{ padding: "6px 14px", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
+          <button key={t.key} onClick={() => setTab(t.key as "today" | "upcoming")} style={{ padding: "6px 14px", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
             {t.label} {t.count}
           </button>
         ))}
