@@ -109,6 +109,7 @@ export default function DesignerDashboard() {
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
   const addBookingConflict = getAddBookingConflict();
   const showManagerTodayOverview = !!designer?.is_manager && designerFilter === "all" && tab === "today";
+  const selectedDesignerName = designer?.is_manager && designerFilter !== "all" ? getDesignerName(Number(designerFilter)) : "";
   const managerTodaySummaries = allDesigners.map((d) => {
     const designerBookings = todayBookings.filter((b) => b.designer_id === d.id);
     const activeBookings = designerBookings.filter((b) => !isBookingCheckedOut(b.id));
@@ -317,11 +318,16 @@ export default function DesignerDashboard() {
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: "#2C2C2A", letterSpacing: "-0.02em" }}>今日工作</div>
             <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>
-              {designer?.is_manager && designerFilter === "all" ? "全店今日狀態" : "今日預約與結帳概況"}
+              {selectedDesignerName ? `正在查看 ${selectedDesignerName} 的預約` : designer?.is_manager && designerFilter === "all" ? "全店今日狀態" : "今日預約與結帳概況"}
             </div>
           </div>
           <button onClick={() => setShowAddBooking(true)} style={{ background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ 新增</button>
         </div>
+        {selectedDesignerName && (
+          <button onClick={() => { setDesignerFilter("all"); setTab("today"); }} style={{ width: "100%", marginBottom: 10, background: "#fff", border: "1px solid #D3D1C7", borderRadius: 14, padding: "11px 12px", color: "#7A1F1F", fontSize: 13, fontWeight: 850, textAlign: "left", cursor: "pointer", boxShadow: "0 4px 14px rgba(26,26,26,0.04)" }}>
+            ← 返回全店今日總覽
+          </button>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <div style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 14, padding: "13px 12px", boxShadow: "0 4px 14px rgba(26,26,26,0.04)" }}>
             <div style={{ fontSize: 11, color: "#888780", marginBottom: 8 }}>今日預約</div>
@@ -385,9 +391,15 @@ export default function DesignerDashboard() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#2C2C2A" }}>預約清單</div>
-            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>依時間排序，待確認預約會優先提醒</div>
+            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>
+              {selectedDesignerName ? `${selectedDesignerName} 的預約清單` : "依時間排序，待確認預約會優先提醒"}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: "#888780" }}>{displayBookings.length} 筆</div>
+          {selectedDesignerName ? (
+            <button onClick={() => { setDesignerFilter("all"); setTab("today"); }} style={{ background: "#1A1A1A", color: "#fff", border: "none", borderRadius: 999, padding: "7px 11px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>返回全店</button>
+          ) : (
+            <div style={{ fontSize: 11, color: "#888780" }}>{displayBookings.length} 筆</div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
         {[
