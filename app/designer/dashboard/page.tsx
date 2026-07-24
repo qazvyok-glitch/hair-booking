@@ -23,6 +23,8 @@ type ServiceCategory = { id: number; label: string; color: string; text_color: s
 type Designer = { id: number; name: string; display_name?: string; nickname?: string; status?: string; is_active?: boolean };
 type DesignerSession = { id: number; name: string; nickname: string; is_manager?: boolean };
 type Transaction = { designer_id: number; total_amount: number; created_at: string; booking_id?: number | null };
+type OffDay = { designer_id: number; off_date: string };
+type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
 
 export default function DesignerDashboard() {
   const router = useRouter();
@@ -33,6 +35,8 @@ export default function DesignerDashboard() {
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [allDesigners, setAllDesigners] = useState<Designer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [offDays, setOffDays] = useState<OffDay[]>([]);
+  const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"today" | "upcoming" | "all">("today");
   const [designerFilter, setDesignerFilter] = useState<number | "all">("all");
@@ -56,12 +60,14 @@ export default function DesignerDashboard() {
       const bookingQuery = supabase.from("bookings").select("*, designers(name, display_name, nickname)").order("booking_date").order("booking_time");
       const today = new Date().toLocaleDateString("en-CA");
       const transactionQuery = supabase.from("transactions").select("designer_id, booking_id, total_amount, created_at").gte("created_at", today);
-      const [{ data: bookingData }, { data: transactionData }, { data: serviceData }, { data: catData }, { data: designerData }] = await Promise.all([
+      const [{ data: bookingData }, { data: transactionData }, { data: serviceData }, { data: catData }, { data: designerData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
         d.is_manager ? bookingQuery : bookingQuery.eq("designer_id", d.id),
         d.is_manager ? transactionQuery : transactionQuery.eq("designer_id", d.id),
         supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
         supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("designers").select("id, name, display_name, nickname, status, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
+        supabase.from("designer_off_days").select("*"),
+        supabase.from("designer_off_slots").select("*"),
       ]);
       if (bookingData) setBookings(bookingData);
       if (transactionData) setTransactions(transactionData);
@@ -70,6 +76,8 @@ export default function DesignerDashboard() {
       if (serviceData) setServices(serviceData);
       if (catData) setCategories(catData);
       if (designerData) setAllDesigners(designerData);
+      if (offDayData) setOffDays(offDayData);
+      if (offSlotData) setOffSlots(offSlotData);
       setLoading(false);
     }
     fetchData();
@@ -99,6 +107,7 @@ export default function DesignerDashboard() {
   const overdueUncheckoutCount = todayBookings.filter((b) => b.status === "confirmed" && !isBookingCheckedOut(b.id) && isPastBookingTime(b.booking_time)).length;
   const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : filteredByDesigner;
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
+  const addBookingConflict = getAddBookingConflict();
 
   function getDesignerName(id: number) {
     const item = allDesigners.find((d) => d.id === id);
@@ -122,6 +131,22 @@ export default function DesignerDashboard() {
     const bookingTime = new Date();
     bookingTime.setHours(hour || 0, minute || 0, 0, 0);
     return bookingTime.getTime() < now.getTime();
+  }
+
+  function getAddBookingConflict() {
+    if (!bookingTargetDesignerId || !newBooking.booking_date || !newBooking.booking_time) return null;
+    const isDesignerOffDay = offDays.some((d) => d.designer_id === bookingTargetDesignerId && d.off_date === newBooking.booking_date);
+    if (isDesignerOffDay) return "此設計師當天已設定休假，無法建立預約。";
+    const isDesignerOffSlot = offSlots.some((s) => s.designer_id === bookingTargetDesignerId && s.slot_date === newBooking.booking_date && s.slot_time === newBooking.booking_time);
+    if (isDesignerOffSlot) return "此時段已被設為不可預約，請改選其他時間。";
+    const hasExistingBooking = bookings.some((b) =>
+      b.designer_id === bookingTargetDesignerId &&
+      b.booking_date === newBooking.booking_date &&
+      b.booking_time === newBooking.booking_time &&
+      b.status !== "cancelled"
+    );
+    if (hasExistingBooking) return "此設計師同時段已有預約，請改選其他時間。";
+    return null;
   }
 
   function getBookingStatusMeta(booking: Booking) {
@@ -183,6 +208,7 @@ export default function DesignerDashboard() {
   async function handleAddBooking() {
     if (!newBooking.customer_name || !newBooking.booking_date) { alert("請填寫客人姓名及日期"); return; }
     if (!bookingTargetDesignerId) { alert("請選擇設計師"); return; }
+    if (addBookingConflict) { alert(addBookingConflict); return; }
     setAddingSaving(true);
     const { data } = await supabase.from("bookings").insert({
       designer_id: bookingTargetDesignerId,
@@ -453,6 +479,11 @@ export default function DesignerDashboard() {
                     </select>
                   </div>
                 </div>
+                {bookingTargetDesignerId && newBooking.booking_date && newBooking.booking_time && (
+                  <div style={{ marginTop: 10, background: addBookingConflict ? "#FCEBEB" : "#E1F5EE", border: "0.5px solid " + (addBookingConflict ? "#F5C4C4" : "#BFE6D7"), color: addBookingConflict ? "#A32D2D" : "#085041", borderRadius: 10, padding: "9px 10px", fontSize: 12, fontWeight: 800, lineHeight: 1.5 }}>
+                    {addBookingConflict || "此設計師此時段目前可安排預約。"}
+                  </div>
+                )}
               </div>
 
               <div style={{ marginBottom: 14, background: "#fff", border: "0.5px solid #ECE8DF", borderRadius: 14, padding: 12 }}>
@@ -503,8 +534,8 @@ export default function DesignerDashboard() {
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.5 }}>
                 建立後狀態為「已確認」，適合電話預約、現場加約或店長協助預約。
               </div>
-              <button onClick={handleAddBooking} disabled={addingSaving} style={{ width: "100%", padding: "14px 0", background: addingSaving ? "#D3D1C7" : "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 850, cursor: addingSaving ? "default" : "pointer" }}>
-                {addingSaving ? "建立中..." : "確認新增預約"}
+              <button onClick={handleAddBooking} disabled={addingSaving || !!addBookingConflict} style={{ width: "100%", padding: "14px 0", background: addingSaving || addBookingConflict ? "#D3D1C7" : "#1A1A1A", color: "#fff", border: "none", borderRadius: 14, fontSize: 15, fontWeight: 850, cursor: addingSaving || addBookingConflict ? "default" : "pointer" }}>
+                {addingSaving ? "建立中..." : addBookingConflict ? "請先調整預約時間" : "確認新增預約"}
               </button>
             </div>
           </div>
