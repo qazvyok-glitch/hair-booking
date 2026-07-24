@@ -95,6 +95,8 @@ export default function DesignerDashboard() {
   const todayTotalAmount = filteredTransactions
     .filter((t) => t.created_at?.slice(0, 10) === today)
     .reduce((sum, t) => sum + (t.total_amount || 0), 0);
+  const checkedOutTodayCount = todayBookings.filter((b) => isBookingCheckedOut(b.id)).length;
+  const overdueUncheckoutCount = todayBookings.filter((b) => b.status === "confirmed" && !isBookingCheckedOut(b.id) && isPastBookingTime(b.booking_time)).length;
   const displayBookings = tab === "today" ? todayBookings : tab === "upcoming" ? upcomingBookings : filteredByDesigner;
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
 
@@ -111,6 +113,15 @@ export default function DesignerDashboard() {
 
   function isBookingCheckedOut(bookingId: number) {
     return transactions.some((t) => t.booking_id === bookingId);
+  }
+
+  function isPastBookingTime(time: string) {
+    if (!time) return false;
+    const now = new Date();
+    const [hour, minute] = time.split(":").map(Number);
+    const bookingTime = new Date();
+    bookingTime.setHours(hour || 0, minute || 0, 0, 0);
+    return bookingTime.getTime() < now.getTime();
   }
 
   function getBookingStatusMeta(booking: Booking) {
@@ -227,6 +238,38 @@ export default function DesignerDashboard() {
                 <option key={d.id} value={d.id}>{d.display_name || d.name}{d.nickname ? `（${d.nickname}）` : ""}</option>
               ))}
             </select>
+          </div>
+
+          <div style={{ marginTop: 10, background: "linear-gradient(135deg, #1A1A1A 0%, #3A2424 100%)", borderRadius: 18, padding: 14, color: "#fff", boxShadow: "0 8px 22px rgba(26,26,26,0.16)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.02em" }}>店長工作台</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.62)", marginTop: 3, lineHeight: 1.5 }}>全店預約、協助排程與待處理事項集中在這裡。</div>
+              </div>
+              <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "7px 10px", textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.58)", marginBottom: 3 }}>今日已結帳</div>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>{checkedOutTodayCount} 筆</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button onClick={() => { setDesignerFilter("all"); setTab("today"); }} style={{ background: "#fff", color: "#1A1A1A", border: "none", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>今日全店</div>
+                <div style={{ fontSize: 11, color: "#5F5E5A", lineHeight: 1.45 }}>{todayBookings.length} 筆預約，快速切回全店今日清單</div>
+              </button>
+              <button onClick={() => setShowAddBooking(true)} style={{ background: "#fff", color: "#1A1A1A", border: "none", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>協助預約</div>
+                <div style={{ fontSize: 11, color: "#5F5E5A", lineHeight: 1.45 }}>替任一設計師建立電話或現場預約</div>
+              </button>
+              <button onClick={() => setTab("all")} style={{ background: pendingBookings.length + overdueUncheckoutCount > 0 ? "#FAEEDA" : "rgba(255,255,255,0.1)", color: pendingBookings.length + overdueUncheckoutCount > 0 ? "#633806" : "#fff", border: "none", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>待處理</div>
+                <div style={{ fontSize: 11, color: pendingBookings.length + overdueUncheckoutCount > 0 ? "#633806" : "rgba(255,255,255,0.68)", lineHeight: 1.45 }}>待確認 {pendingBookings.length} 筆，逾時未結帳 {overdueUncheckoutCount} 筆</div>
+              </button>
+              <button onClick={() => alert("進貨／庫存會在下一步加入店長模式。")} style={{ background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 14, padding: "12px 10px", textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 5 }}>進貨／庫存</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 }}>下一步開放：庫存清單、進貨與盤點</div>
+              </button>
+            </div>
           </div>
         </div>
       )}
