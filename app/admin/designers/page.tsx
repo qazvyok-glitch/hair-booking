@@ -153,6 +153,12 @@ export default function AdminDesigners() {
     setDesigners(designers.map(x => x.id === d.id ? { ...x, can_view_members: newVal } : x));
   }
 
+  async function toggleManagerAccess(d: Designer) {
+    const newVal = !d.is_manager;
+    await supabase.from("designers").update({ is_manager: newVal }).eq("id", d.id);
+    setDesigners(designers.map(x => x.id === d.id ? { ...x, is_manager: newVal } : x));
+  }
+
   async function moveDesigner(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= designers.length) return;
@@ -254,6 +260,9 @@ export default function AdminDesigners() {
                   </button>
                   <button onClick={() => toggleMemberAccess(d)} style={{ padding: "5px 10px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
                     {d.can_view_members ? "禁止查看會員" : "允許查看會員"}
+                  </button>
+                  <button onClick={() => toggleManagerAccess(d)} style={{ padding: "5px 10px", background: d.is_manager ? "#FCEBEB" : "#EEEDFE", color: d.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                    {d.is_manager ? "取消店長" : "設為店長"}
                   </button>
                 </div>
               </div>
