@@ -108,6 +108,18 @@ export default function DesignerDashboard() {
   const displayBookings = tab === "today" ? todayBookings : upcomingBookings;
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
   const addBookingConflict = getAddBookingConflict();
+  const showManagerTodayOverview = !!designer?.is_manager && designerFilter === "all" && tab === "today";
+  const managerTodaySummaries = allDesigners.map((d) => {
+    const designerBookings = todayBookings.filter((b) => b.designer_id === d.id);
+    const activeBookings = designerBookings.filter((b) => !isBookingCheckedOut(b.id));
+    return {
+      designer: d,
+      bookings: designerBookings,
+      pending: designerBookings.filter((b) => b.status === "pending").length,
+      checkedOut: designerBookings.filter((b) => isBookingCheckedOut(b.id)).length,
+      nextTime: activeBookings[0]?.booking_time || designerBookings[0]?.booking_time || "",
+    };
+  });
 
   function getDesignerName(id: number) {
     const item = allDesigners.find((d) => d.id === id);
@@ -333,6 +345,39 @@ export default function DesignerDashboard() {
             <button onClick={() => router.push("/designer/transaction")} style={{ background: "#fff", color: "#1A1A1A", border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>前往結帳</button>
           </div>
         </div>
+
+        {showManagerTodayOverview && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 850 }}>各設計師今日概況</div>
+              <div style={{ fontSize: 11, color: "#888780" }}>全店總覽</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+              {managerTodaySummaries.map(({ designer: d, bookings: list, pending, checkedOut, nextTime }) => (
+                <button
+                  key={d.id}
+                  onClick={() => setDesignerFilter(d.id)}
+                  style={{ background: list.length > 0 ? "#fff" : "#F7F4EE", border: "0.5px solid " + (pending > 0 ? "#FAC775" : "#D3D1C7"), borderRadius: 14, padding: "11px 10px", textAlign: "left", cursor: "pointer", boxShadow: list.length > 0 ? "0 4px 14px rgba(26,26,26,0.04)" : "none" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 900, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.display_name || d.name}</div>
+                      <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>{d.nickname || "設計師"}</div>
+                    </div>
+                    <div style={{ fontSize: 18, color: list.length > 0 ? "#7A1F1F" : "#AAA69D", fontWeight: 900, lineHeight: 1 }}>{list.length}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+                    <div style={{ background: pending > 0 ? "#FAEEDA" : "#F1EFE8", color: pending > 0 ? "#633806" : "#5F5E5A", borderRadius: 9, padding: "6px 7px", fontSize: 10, fontWeight: 800 }}>待確認 {pending}</div>
+                    <div style={{ background: "#F1EFE8", color: "#5F5E5A", borderRadius: 9, padding: "6px 7px", fontSize: 10, fontWeight: 800 }}>已結帳 {checkedOut}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: nextTime ? "#2C2C2A" : "#888780", marginTop: 8, fontWeight: 700 }}>
+                    {nextTime ? `下一筆 ${nextTime}` : "今日無預約"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tab */}
