@@ -16,6 +16,14 @@ type Appointment = {
   note: string;
   image: string;
 };
+type CheckoutDraft = {
+  serviceAmount: number;
+  serviceDiscount: number;
+  productAmount: number;
+  productDiscount: number;
+  paymentMethod: string;
+  note: string;
+};
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "□" },
@@ -31,8 +39,8 @@ const todayRows: Appointment[] = [
 ];
 
 const pendingRows = [
-  { time: "11:00", name: "Peggy", service: "剪髮（含髮浴）", detail: "0920-xxx-xxx" },
-  { time: "16:30", name: "Alisa", service: "設計染（L）", detail: "需要翻譯備註" },
+  { time: "11:00", name: "Peggy", phone: "0920-xxx-xxx", service: "剪髮（含髮浴）", detail: "想剪短一點，保留瀏海。" },
+  { time: "16:30", name: "Alisa", phone: "0918-xxx-xxx", service: "設計染（L）", detail: "Please make the color natural brown." },
 ];
 
 const scheduleItems: Record<number, { text: string; tone: string }[]> = {
@@ -46,7 +54,9 @@ export default function DesignerPreviewV2Page() {
   const [activeTab, setActiveTab] = useState<TabKey>("today");
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [checkoutAppointment, setCheckoutAppointment] = useState<Appointment | null>(null);
+  const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [pendingDecisions, setPendingDecisions] = useState<Record<string, PendingDecision>>({});
+  const [selectedPending, setSelectedPending] = useState<(typeof pendingRows)[number] | null>(null);
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("月");
 
   function setDecision(name: string, decision: PendingDecision) {
@@ -59,14 +69,15 @@ export default function DesignerPreviewV2Page() {
         <Header />
         <div className="screen-body">
           {activeTab === "today" && <TodayView onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} />}
-          {activeTab === "pending" && <PendingView decisions={pendingDecisions} onDecide={setDecision} />}
+          {activeTab === "pending" && <PendingView decisions={pendingDecisions} onOpen={setSelectedPending} />}
           {activeTab === "calendar" && <CalendarView mode={scheduleMode} onModeChange={setScheduleMode} />}
           {activeTab === "earnings" && <EarningsView />}
         </div>
         <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
-      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} onClose={() => setCheckoutAppointment(null)} />}
+      {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
+      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} onComplete={() => setCheckoutComplete(true)} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
 
       <style>{`
         .preview-page { min-height: 100vh; background: #eef0f3; display: flex; justify-content: center; padding: 20px; color: #1f2937; }
@@ -165,6 +176,14 @@ export default function DesignerPreviewV2Page() {
         .primary-modal-btn, .secondary-modal-btn { border-radius: 12px; padding: 12px 0; font-size: 14px; font-weight: 900; cursor: pointer; }
         .primary-modal-btn { border: none; background: #1478c8; color: #fff; }
         .secondary-modal-btn { border: 1px solid #dfe3ea; background: #fff; color: #4b5563; }
+        .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .checkout-line:last-child { border-bottom: none; }
+        .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
+        .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
+        .amount-preview { background: #0f172a; color: #fff; border-radius: 16px; padding: 16px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-weight: 900; }
+        .amount-preview strong { font-size: 24px; }
+        .complete-state { text-align: center; padding: 22px 8px 8px; }
+        .complete-icon { width: 54px; height: 54px; border-radius: 50%; margin: 0 auto 14px; background: #e8f7ef; color: #208051; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 950; }
         @media (max-width: 460px) { .preview-page { padding: 0; } .phone-shell { max-width: none; height: 100vh; border-radius: 0; border: none; } }
       `}</style>
     </main>
@@ -215,7 +234,7 @@ function TodayView({ onView, onCheckout }: { onView: (row: Appointment) => void;
   );
 }
 
-function PendingView({ decisions, onDecide }: { decisions: Record<string, PendingDecision>; onDecide: (name: string, decision: PendingDecision) => void }) {
+function PendingView({ decisions, onOpen }: { decisions: Record<string, PendingDecision>; onOpen: (row: (typeof pendingRows)[number]) => void }) {
   return (
     <>
       <h1 className="page-title">待確認</h1>
@@ -233,8 +252,8 @@ function PendingView({ decisions, onDecide }: { decisions: Record<string, Pendin
               </div>
               {decision === "pending" ? (
                 <div className="pending-actions">
-                  <button className="accept-btn" onClick={() => onDecide(row.name, "accepted")}>接受</button>
-                  <button className="decline-btn" onClick={() => onDecide(row.name, "declined")}>婉拒</button>
+                  <button className="accept-btn" onClick={() => onOpen(row)}>確認</button>
+                  <button className="decline-btn" onClick={() => onOpen(row)}>查看</button>
                 </div>
               ) : (
                 <div className={`decision-note ${decision}`}>{decision === "accepted" ? "已接受" : "已婉拒"}</div>
@@ -387,29 +406,108 @@ function AppointmentModal({ row, onClose }: { row: Appointment; onClose: () => v
   );
 }
 
-function CheckoutModal({ row, onClose }: { row: Appointment; onClose: () => void }) {
+function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: (typeof pendingRows)[number]; decision: PendingDecision; onDecide: (name: string, decision: PendingDecision) => void; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">結帳預覽</div>
-            <div className="modal-subtitle">{row.name} · {row.service}</div>
+            <div className="modal-title">預約確認</div>
+            <div className="modal-subtitle">{row.time} · {row.name}</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="detail-grid">
-          <DetailCard label="服務金額" value="NT$3,000" />
-          <DetailCard label="商品金額" value="NT$0" />
-          <DetailCard label="折扣" value="可由設計師調整" />
-          <DetailCard label="付款方式" value="現金／轉帳／LINE Pay" />
+          <DetailCard label="電話" value={row.phone} />
+          <DetailCard label="服務項目" value={row.service} />
+          <DetailCard label="顧客備註" value={row.detail} />
+          <DetailCard label="翻譯中文" value={row.detail.includes("Please") ? "請讓顏色呈現自然棕色。" : "不需翻譯"} />
         </div>
-        <div className="final-card"><span>客人應收總額</span><span className="final-amount">NT$3,000</span></div>
-        <div className="modal-action-row">
-          <button className="secondary-modal-btn" onClick={onClose}>稍後處理</button>
-          <button className="primary-modal-btn" onClick={onClose}>確認畫面</button>
+        {decision === "pending" ? (
+          <div className="modal-action-row">
+            <button className="secondary-modal-btn" onClick={() => { onDecide(row.name, "declined"); onClose(); }}>婉拒預約</button>
+            <button className="primary-modal-btn" onClick={() => { onDecide(row.name, "accepted"); onClose(); }}>接受預約</button>
+          </div>
+        ) : (
+          <div className={`decision-note ${decision}`}>{decision === "accepted" ? "此預約已接受" : "此預約已婉拒"}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CheckoutModal({ row, complete, onComplete, onClose }: { row: Appointment; complete: boolean; onComplete: () => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<CheckoutDraft>({
+    serviceAmount: 3000,
+    serviceDiscount: 0,
+    productAmount: 1180,
+    productDiscount: 0,
+    paymentMethod: "現金",
+    note: "",
+  });
+  const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + Math.max(0, draft.productAmount - draft.productDiscount);
+
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">結帳完成</div>
+            <div className="modal-subtitle">{row.name} 的服務已完成，此為暫存預覽，不會寫入正式資料。</div>
+          </div>
+          <div className="amount-preview"><span>本次總額</span><strong>NT${total.toLocaleString()}</strong></div>
+          <div className="modal-action-row">
+            <button className="secondary-modal-btn" onClick={onClose}>返回今日</button>
+            <button className="primary-modal-btn" onClick={onClose}>完成</button>
+          </div>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">結帳</div>
+            <div className="modal-subtitle">{row.name} · {row.service}</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <section className="panel">
+          <div className="panel-label">服務項目</div>
+          <CheckoutNumber label={row.service} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
+          <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
+        </section>
+        <section className="panel">
+          <div className="panel-label">客人購買商品</div>
+          <CheckoutNumber label="生命果油 GS 120ml" value={draft.productAmount} onChange={(value) => setDraft({ ...draft, productAmount: value })} />
+          <CheckoutNumber label="商品折扣" value={draft.productDiscount} onChange={(value) => setDraft({ ...draft, productDiscount: value })} />
+        </section>
+        <section className="panel">
+          <div className="panel-label">付款與備註</div>
+          <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
+            {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="折扣原因、顧客狀況、服務紀錄..." />
+        </section>
+        <div className="amount-preview"><span>客人應收總額</span><strong>NT${total.toLocaleString()}</strong></div>
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>稍後處理</button>
+          <button className="primary-modal-btn" onClick={onComplete}>建立暫存交易</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckoutNumber({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="checkout-line">
+      <div className="row-service">{label}</div>
+      <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
     </div>
   );
 }
