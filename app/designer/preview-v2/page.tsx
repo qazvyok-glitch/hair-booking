@@ -47,8 +47,8 @@ const todayRows: Appointment[] = [
 ];
 
 const pendingRows = [
-  { time: "11:00", name: "Peggy", phone: "0920-xxx-xxx", service: "剪髮（含髮浴）", detail: "想剪短一點，保留瀏海。" },
-  { time: "16:30", name: "Alisa", phone: "0918-xxx-xxx", service: "設計染（L）", detail: "Please make the color natural brown." },
+  { date: "8/13（四）", time: "11:00", name: "Peggy", phone: "0920-xxx-xxx", service: "剪髮（含髮浴）", detail: "想剪短一點，保留瀏海。" },
+  { date: "8/14（五）", time: "16:30", name: "Alisa", phone: "0918-xxx-xxx", service: "設計染（L）", detail: "Please make the color natural brown." },
 ];
 
 const scheduleItems: Record<number, { text: string; tone: string }[]> = {
@@ -111,6 +111,7 @@ export default function DesignerPreviewV2Page() {
         .appointment-row { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 10px; min-height: 96px; padding: 0 14px; border-bottom: 1px solid #edf0f4; }
         .appointment-row:last-child { border-bottom: none; }
         .row-time { font-size: 18px; font-weight: 850; color: #1f2937; }
+        .row-date { display: block; color: #8b95a3; font-size: 12px; font-weight: 850; margin-bottom: 4px; white-space: nowrap; }
         .row-name { font-size: 16px; font-weight: 900; margin-bottom: 5px; }
         .row-service { color: #5f6673; font-size: 13px; font-weight: 700; line-height: 1.5; }
         .row-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
@@ -261,7 +262,10 @@ function PendingView({ decisions, onOpen }: { decisions: Record<string, PendingD
           const decision = decisions[row.name] || "pending";
           return (
             <div className={`pending-card ${decision !== "pending" ? "is-done" : ""}`} key={`${row.time}-${row.name}`}>
-              <div className="row-time">{row.time}</div>
+              <div className="row-time">
+                <span className="row-date">{row.date}</span>
+                {row.time}
+              </div>
               <div>
                 <div className="row-name">{row.name}</div>
                 <div className="row-service">{row.service}</div>
@@ -431,7 +435,7 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: (typeo
         <div className="modal-header">
           <div>
             <div className="modal-title">預約確認</div>
-            <div className="modal-subtitle">{row.time} · {row.name}</div>
+            <div className="modal-subtitle">{row.date} {row.time} · {row.name}</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
