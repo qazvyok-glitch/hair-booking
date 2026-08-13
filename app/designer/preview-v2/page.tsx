@@ -24,6 +24,14 @@ type CheckoutDraft = {
   paymentMethod: string;
   note: string;
 };
+type BookingDraft = {
+  date: string;
+  time: string;
+  name: string;
+  phone: string;
+  service: string;
+  note: string;
+};
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "□" },
@@ -58,6 +66,8 @@ export default function DesignerPreviewV2Page() {
   const [pendingDecisions, setPendingDecisions] = useState<Record<string, PendingDecision>>({});
   const [selectedPending, setSelectedPending] = useState<(typeof pendingRows)[number] | null>(null);
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("月");
+  const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
+  const [bookingComplete, setBookingComplete] = useState(false);
 
   function setDecision(name: string, decision: PendingDecision) {
     setPendingDecisions((prev) => ({ ...prev, [name]: decision }));
@@ -68,9 +78,9 @@ export default function DesignerPreviewV2Page() {
       <section className="phone-shell">
         <Header />
         <div className="screen-body">
-          {activeTab === "today" && <TodayView onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} />}
+          {activeTab === "today" && <TodayView onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
           {activeTab === "pending" && <PendingView decisions={pendingDecisions} onOpen={setSelectedPending} />}
-          {activeTab === "calendar" && <CalendarView mode={scheduleMode} onModeChange={setScheduleMode} />}
+          {activeTab === "calendar" && <CalendarView mode={scheduleMode} onModeChange={setScheduleMode} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time)); }} />}
           {activeTab === "earnings" && <EarningsView />}
         </div>
         <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
@@ -78,6 +88,7 @@ export default function DesignerPreviewV2Page() {
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} onComplete={() => setCheckoutComplete(true)} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
+      {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} onChange={setBookingDraft} onComplete={() => setBookingComplete(true)} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
         .preview-page { min-height: 100vh; background: #eef0f3; display: flex; justify-content: center; padding: 20px; color: #1f2937; }
@@ -108,6 +119,7 @@ export default function DesignerPreviewV2Page() {
         .pill.progress { background: #e8f2ff; color: #126dc2; }
         .pill.done { background: #e8f7ef; color: #208051; }
         .small-action { min-width: 50px; border: 1px solid #2290e6; color: #1478c8; background: #fff; border-radius: 8px; padding: 6px 9px; font-weight: 850; font-size: 13px; cursor: pointer; }
+        .add-booking-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 15px; padding: 13px 14px; font-size: 15px; font-weight: 950; margin-bottom: 16px; cursor: pointer; box-shadow: 0 10px 20px rgba(20,139,216,.16); }
         .pending-list { display: grid; gap: 14px; }
         .pending-card { min-height: 118px; display: grid; grid-template-columns: 58px 1fr 78px; gap: 10px; align-items: center; padding: 14px; }
         .pending-card.is-done { opacity: .74; }
@@ -132,6 +144,7 @@ export default function DesignerPreviewV2Page() {
         .weekday-grid { color: #7b8492; font-size: 12px; font-weight: 850; text-align: center; margin-bottom: 8px; }
         .day-cell { min-height: 66px; border: 1px solid #edf0f4; background: #fff; padding: 7px 5px; font-size: 13px; font-weight: 850; color: #374151; position: relative; }
         .day-cell.selected { background: #eaf7ff; outline: 1.5px solid #74c8ff; z-index: 1; }
+        .day-cell.can-add { cursor: pointer; }
         .date-badge { display: inline-flex; width: 25px; height: 25px; border-radius: 50%; align-items: center; justify-content: center; }
         .selected .date-badge { background: #208bd8; color: #fff; }
         .schedule-bar { display: block; margin-top: 5px; border-radius: 5px; padding: 3px 4px; font-size: 10px; line-height: 1.15; color: #374151; }
@@ -141,6 +154,7 @@ export default function DesignerPreviewV2Page() {
         .compact-section { padding: 14px; margin-bottom: 14px; }
         .compact-title { font-size: 15px; font-weight: 900; margin-bottom: 10px; }
         .timeline-row { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .timeline-row.can-add { cursor: pointer; }
         .timeline-row:last-child { border-bottom: none; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
@@ -180,6 +194,8 @@ export default function DesignerPreviewV2Page() {
         .checkout-line:last-child { border-bottom: none; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
         .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
+        .booking-field { margin-bottom: 12px; }
+        .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
         .amount-preview { background: #0f172a; color: #fff; border-radius: 16px; padding: 16px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-weight: 900; }
         .amount-preview strong { font-size: 24px; }
         .complete-state { text-align: center; padding: 22px 8px 8px; }
@@ -205,11 +221,12 @@ function Header() {
   );
 }
 
-function TodayView({ onView, onCheckout }: { onView: (row: Appointment) => void; onCheckout: (row: Appointment) => void }) {
+function TodayView({ onView, onCheckout, onAddBooking }: { onView: (row: Appointment) => void; onCheckout: (row: Appointment) => void; onAddBooking: () => void }) {
   return (
     <>
       <h1 className="page-title">今日</h1>
       <div className="page-subtitle">8月12日 星期三</div>
+      <button className="add-booking-btn" onClick={onAddBooking}>＋ 幫客人預約</button>
       <div className="status-line">
         <span className="progress-text"><i className="dot progress-dot" />服務中：1</span>
         <span className="upcoming-text"><i className="dot upcoming-dot" />即將到來：3</span>
@@ -266,7 +283,7 @@ function PendingView({ decisions, onOpen }: { decisions: Record<string, PendingD
   );
 }
 
-function CalendarView({ mode, onModeChange }: { mode: ScheduleMode; onModeChange: (mode: ScheduleMode) => void }) {
+function CalendarView({ mode, onModeChange, onAddBooking }: { mode: ScheduleMode; onModeChange: (mode: ScheduleMode) => void; onAddBooking: (date: string, time?: string) => void }) {
   return (
     <>
       <div className="segmented">
@@ -274,12 +291,12 @@ function CalendarView({ mode, onModeChange }: { mode: ScheduleMode; onModeChange
           <button className={`segment ${mode === item ? "active" : ""}`} key={item} onClick={() => onModeChange(item)}>{item}</button>
         ))}
       </div>
-      {mode === "月" ? <MonthSchedule /> : <CompactSchedule mode={mode} />}
+      {mode === "月" ? <MonthSchedule onAddBooking={onAddBooking} /> : <CompactSchedule mode={mode} onAddBooking={onAddBooking} />}
     </>
   );
 }
 
-function MonthSchedule() {
+function MonthSchedule({ onAddBooking }: { onAddBooking: (date: string, time?: string) => void }) {
   return (
     <>
       <div className="calendar-header">
@@ -295,7 +312,7 @@ function MonthSchedule() {
           const date = index + 1;
           const items = scheduleItems[date] || [];
           return (
-            <div className={`day-cell ${date === 12 ? "selected" : ""}`} key={date}>
+            <div className={`day-cell can-add ${date === 12 ? "selected" : ""}`} key={date} onClick={() => onAddBooking(`2026-08-${String(date).padStart(2, "0")}`)}>
               <span className="date-badge">{date}</span>
               {items.map((item) => <span className={`schedule-bar ${item.tone}`} key={item.text}>{item.text}</span>)}
             </div>
@@ -307,7 +324,7 @@ function MonthSchedule() {
   );
 }
 
-function CompactSchedule({ mode }: { mode: Exclude<ScheduleMode, "月"> }) {
+function CompactSchedule({ mode, onAddBooking }: { mode: Exclude<ScheduleMode, "月">; onAddBooking: (date: string, time?: string) => void }) {
   const rows = mode === "3日"
     ? [
       { day: "8/12（三）", items: ["10:30 Lynn 質感燙＋剪髮", "13:00 Mira 染髮（M）"] },
@@ -331,13 +348,14 @@ function CompactSchedule({ mode }: { mode: Exclude<ScheduleMode, "月"> }) {
       <section className="compact-section">
         <div className="compact-title">快速瀏覽</div>
         {rows.map((row) => (
-          <div className="timeline-row" key={row.day}>
+          <div className="timeline-row can-add" key={row.day} onClick={() => onAddBooking("2026-08-13", "10:00")}>
             <div className="row-time">{row.day}</div>
             <div className="row-service">{row.items.join("、")}</div>
           </div>
         ))}
       </section>
       <Legend />
+      <button className="add-booking-btn" onClick={() => onAddBooking("2026-08-13", "10:00")}>＋ 新增此日預約</button>
     </>
   );
 }
@@ -510,6 +528,86 @@ function CheckoutNumber({ label, value, onChange }: { label: string; value: numb
       <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
     </div>
   );
+}
+
+function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">暫存預約已建立</div>
+            <div className="modal-subtitle">這是 V2 預覽流程，不會寫入正式預約資料。</div>
+          </div>
+          <div className="detail-grid">
+            <DetailCard label="客人" value={draft.name || "未填姓名"} />
+            <DetailCard label="日期時間" value={`${draft.date} ${draft.time}`} />
+            <DetailCard label="電話" value={draft.phone || "未填電話"} />
+            <DetailCard label="服務" value={draft.service || "未選服務"} />
+          </div>
+          <div className="modal-action-row">
+            <button className="secondary-modal-btn" onClick={onClose}>返回</button>
+            <button className="primary-modal-btn" onClick={onClose}>完成</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">幫客人預約</div>
+            <div className="modal-subtitle">設計師本人模式：預設預約給 Cherry</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="detail-grid">
+          <BookingInput label="日期" value={draft.date} onChange={(value) => onChange({ ...draft, date: value })} />
+          <BookingInput label="時間" value={draft.time} onChange={(value) => onChange({ ...draft, time: value })} />
+          <BookingInput label="客人姓名" value={draft.name} onChange={(value) => onChange({ ...draft, name: value })} />
+          <BookingInput label="電話" value={draft.phone} onChange={(value) => onChange({ ...draft, phone: value })} />
+        </div>
+        <div className="booking-field">
+          <div className="booking-label">服務項目</div>
+          <select className="checkout-select" value={draft.service} onChange={(event) => onChange({ ...draft, service: event.target.value })}>
+            {["剪髮（含髮浴）", "質感燙＋剪髮", "設計染（M）", "HHN深層結構護髮"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </div>
+        <div className="booking-field">
+          <div className="booking-label">備註</div>
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => onChange({ ...draft, note: event.target.value })} placeholder="特殊需求、現場安排、顧客偏好..." />
+        </div>
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" onClick={onComplete}>建立暫存預約</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BookingInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="booking-field">
+      <div className="booking-label">{label}</div>
+      <input className="checkout-input" value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function createBookingDraft(date = "2026-08-12", time = "10:00"): BookingDraft {
+  return {
+    date,
+    time,
+    name: "",
+    phone: "",
+    service: "剪髮（含髮浴）",
+    note: "",
+  };
 }
 
 function DetailCard({ label, value }: { label: string; value: string }) {
