@@ -158,6 +158,7 @@ export default function DesignerPreviewV2Page() {
         .selected-day-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
         .selected-day-date { font-size: 16px; font-weight: 950; color: #1f2937; }
         .selected-day-hint { color: #8b95a3; font-size: 12px; font-weight: 800; }
+        .selected-day-add { border: none; background: #148bd8; color: #fff; border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 14px rgba(20,139,216,.16); }
         .empty-day { padding: 10px 0 2px; color: #8b95a3; font-size: 13px; font-weight: 750; }
         .timeline-row { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .timeline-row.can-add { cursor: pointer; }
@@ -376,9 +377,9 @@ function CompactSchedule({ mode, selectedDate, onSelectDate, onAddBooking }: { m
       <section className="compact-section">
         <div className="selected-day-title">
           <div className="selected-day-date">{formatScheduleDateLabel(selectedDate)}</div>
-          <div className="selected-day-hint">先選日期，再新增</div>
+          <button className="selected-day-add" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
         </div>
-        <button className="add-booking-btn" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
+        <div className="selected-day-hint">先選日期，再新增</div>
       </section>
     </>
   );
@@ -389,7 +390,7 @@ function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate:
     <section className="compact-section">
       <div className="selected-day-title">
         <div className="selected-day-date">{formatScheduleDateLabel(selectedDate)}</div>
-        <div className="selected-day-hint">先查看，再新增</div>
+        <button className="selected-day-add" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
       </div>
       {items.length > 0 ? (
         items.map((item) => {
@@ -404,7 +405,6 @@ function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate:
       ) : (
         <div className="empty-day">此日目前沒有預約。</div>
       )}
-      <button className="add-booking-btn" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
     </section>
   );
 }
