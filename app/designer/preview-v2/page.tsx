@@ -5,6 +5,7 @@ import { useState } from "react";
 type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
+type EarningsRange = "今日" | "本月" | "指定月份" | "日期區間";
 type Appointment = {
   time: string;
   name: string;
@@ -71,6 +72,13 @@ const customerRecords: CustomerRecord[] = [
   { id: "mira", name: "Mira", phone: "0912-345-678", lastService: "染髮（M）", note: "偏冷棕，不要太亮；頭皮較敏感。", lastVisit: "上次 7/24" },
   { id: "joey", name: "Joey", phone: "0988-111-222", lastService: "HHN深層結構護髮", note: "髮尾乾，護髮停留時間可拉長。", lastVisit: "上次 8/02" },
 ];
+
+const earningsRanges: Record<EarningsRange, { period: string; service: number; discount: number; count: number; label: string }> = {
+  今日: { period: "8月12日", service: 4800, discount: 300, count: 2, label: "今日收入" },
+  本月: { period: "8月1日－8月31日", service: 38600, discount: 2100, count: 12, label: "本月收入" },
+  指定月份: { period: "2026年7月", service: 52400, discount: 3600, count: 18, label: "指定月份收入" },
+  日期區間: { period: "8月10日－8月15日", service: 16800, discount: 900, count: 6, label: "日期區間收入" },
+};
 
 export default function DesignerPreviewV2Page() {
   const [activeTab, setActiveTab] = useState<TabKey>("today");
@@ -149,7 +157,7 @@ export default function DesignerPreviewV2Page() {
         .decision-note.declined { background: #fff0f2; color: #d52740; }
         .segmented, .income-tabs { display: grid; background: #fff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 3px; gap: 3px; margin-bottom: 18px; }
         .segmented { grid-template-columns: repeat(3, 1fr); }
-        .income-tabs { grid-template-columns: repeat(5, 1fr); margin-bottom: 14px; }
+        .income-tabs { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
         .segment, .income-segment { border: none; background: transparent; color: #4b5563; border-radius: 15px; padding: 9px 0; font-weight: 850; font-size: 14px; cursor: pointer; }
         .income-segment { font-size: 12px; padding: 8px 0; }
         .segment.active, .income-segment.active { background: #148bd8; color: #fff; }
@@ -179,7 +187,7 @@ export default function DesignerPreviewV2Page() {
         .timeline-row:last-child { border-bottom: none; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
-        .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); }
+        .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); font: inherit; }
         .period-action-card .period-date::after { content: " ›"; color: #148bd8; font-weight: 950; }
         .period-label, .panel-label { color: #8b95a3; font-size: 10px; font-weight: 900; letter-spacing: .08em; margin-bottom: 6px; }
         .period-date { font-weight: 900; font-size: 14px; }
@@ -213,6 +221,11 @@ export default function DesignerPreviewV2Page() {
         .primary-modal-btn, .secondary-modal-btn { border-radius: 12px; padding: 12px 0; font-size: 14px; font-weight: 900; cursor: pointer; }
         .primary-modal-btn { border: none; background: #1478c8; color: #fff; }
         .secondary-modal-btn { border: 1px solid #dfe3ea; background: #fff; color: #4b5563; }
+        .range-picker-list { display: grid; gap: 10px; }
+        .range-option { width: 100%; border: 1px solid #e1e7ef; background: #fff; border-radius: 14px; padding: 12px 13px; text-align: left; cursor: pointer; color: #1f2937; }
+        .range-option.selected { border-color: #148bd8; background: #eaf7ff; }
+        .range-option span { display: block; font-size: 15px; font-weight: 950; margin-bottom: 4px; }
+        .range-option small { color: #6b7280; font-size: 12px; font-weight: 800; }
         .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line:last-child { border-bottom: none; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
@@ -447,32 +460,73 @@ function Legend() {
 }
 
 function EarningsView() {
+  const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const currentRange = earningsRanges[activeRange];
+  const storeAmount = currentRange.service - currentRange.discount;
+
   return (
     <>
       <h1 className="page-title">我的收入</h1>
       <div className="period-grid">
-        <div className="period-card"><div className="period-label">本月區間</div><div className="period-date">8月1日－8月31日</div></div>
-        <button className="period-card period-action-card">
+        <div className="period-card"><div className="period-label">{activeRange === "本月" ? "本月區間" : "查詢區間"}</div><div className="period-date">{currentRange.period}</div></div>
+        <button className="period-card period-action-card" onClick={() => setShowRangePicker(true)}>
           <div className="period-label">自訂查詢區間</div>
           <div className="period-date">選擇月份或日期</div>
         </button>
       </div>
       <div className="income-tabs">
-        {["今日", "本月", "指定月份", "日期區間"].map((tab) => <button className={`income-segment ${tab === "本月" ? "active" : ""}`} key={tab}>{tab}</button>)}
+        {(["今日", "本月", "指定月份", "日期區間"] as EarningsRange[]).map((tab) => (
+          <button className={`income-segment ${activeRange === tab ? "active" : ""}`} key={tab} onClick={() => setActiveRange(tab)}>{tab}</button>
+        ))}
       </div>
       <div className="summary-grid">
-        <div className="summary-card"><div className="summary-amount">NT$ 38,600</div><div className="summary-title">服務收入</div><div className="summary-sub">12 筆服務 · 折扣前</div></div>
-        <div className="summary-card"><div className="summary-amount purple">NT$ 36,500</div><div className="summary-title purple">店收金額</div><div className="summary-sub">已扣除折扣</div></div>
+        <div className="summary-card"><div className="summary-amount">NT$ {currentRange.service.toLocaleString()}</div><div className="summary-title">服務收入</div><div className="summary-sub">{currentRange.count} 筆服務 · 折扣前</div></div>
+        <div className="summary-card"><div className="summary-amount purple">NT$ {storeAmount.toLocaleString()}</div><div className="summary-title purple">店收金額</div><div className="summary-sub">已扣除折扣</div></div>
       </div>
       <section className="panel">
-        <div className="panel-label">收入明細</div>
-        <div className="breakdown-row"><span>原價（折扣前）</span><span>NT$38,600</span></div>
-        <div className="breakdown-row"><span>折扣金額</span><span className="negative">-NT$2,100</span></div>
-        <div className="breakdown-row"><span>店收金額</span><span>NT$36,500</span></div>
-        <div className="breakdown-row"><span>本月可查看金額</span><span>NT$36,500</span></div>
+        <div className="panel-label">{currentRange.label}</div>
+        <div className="breakdown-row"><span>原價（折扣前）</span><span>NT${currentRange.service.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>折扣金額</span><span className="negative">-NT${currentRange.discount.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>店收金額</span><span>NT${storeAmount.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>{activeRange}可查看金額</span><span>NT${storeAmount.toLocaleString()}</span></div>
       </section>
-      <div className="final-card"><span>本月合計</span><span className="final-amount">NT$36,500</span></div>
+      <div className="final-card"><span>{activeRange}合計</span><span className="final-amount">NT${storeAmount.toLocaleString()}</span></div>
+      {showRangePicker && (
+        <RangePickerModal
+          activeRange={activeRange}
+          onSelect={(range) => {
+            setActiveRange(range);
+            setShowRangePicker(false);
+          }}
+          onClose={() => setShowRangePicker(false)}
+        />
+      )}
     </>
+  );
+}
+
+function RangePickerModal({ activeRange, onSelect, onClose }: { activeRange: EarningsRange; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">選擇收入區間</div>
+            <div className="modal-subtitle">可用月份或日期區間快速查看</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="range-picker-list">
+          {(["今日", "本月", "指定月份", "日期區間"] as EarningsRange[]).map((range) => (
+            <button className={`range-option ${activeRange === range ? "selected" : ""}`} key={range} onClick={() => onSelect(range)}>
+              <span>{range}</span>
+              <small>{earningsRanges[range].period}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
