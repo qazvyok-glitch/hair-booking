@@ -194,7 +194,10 @@ export default function DesignerCustomers() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 76 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>顧客備忘</div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>我的顧客會員資料</div>
+          <div style={{ fontSize: 11, color: "#BEB9AF", marginTop: 2 }}>僅顯示自己建立或服務過的顧客</div>
+        </div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => setShowBookingPicker(true)} style={{ background: "#2C2840", color: "#C8C4F8", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer" }}>從預約帶入</button>
           <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
@@ -202,10 +205,10 @@ export default function DesignerCustomers() {
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋顧客姓名或電話..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋會員姓名或電話..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
         {filtered.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無顧客紀錄</div>
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#888780", fontSize: 14 }}>尚無顧客會員資料</div>
         ) : (
           filtered.map((c) => {
             const customerPhotos = photos.filter(p => p.customer_note_id === c.id);
@@ -346,7 +349,7 @@ export default function DesignerCustomers() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <div style={{ width: "100%", maxWidth: 390, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "85vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{editing ? "編輯顧客" : "新增顧客"}</div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{editing ? "編輯顧客會員資料" : "新增顧客會員資料"}</div>
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
             {[
