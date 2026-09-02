@@ -204,10 +204,10 @@ export default function DesignerPreviewV2Page() {
         .final-card { display: flex; justify-content: space-between; align-items: center; padding: 18px 16px; font-weight: 950; }
         .final-amount { font-size: 25px; }
         .bottom-tabs { height: 74px; background: #fff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(4, 1fr); flex: 0 0 auto; }
-        .tab-btn { border: none; background: transparent; color: #9aa3af; font-weight: 850; font-size: 12px; position: relative; padding-top: 10px; cursor: pointer; }
+        .tab-btn { border: none; background: transparent; color: #9aa3af; font-weight: 850; font-size: 13px; position: relative; padding-top: 9px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
         .tab-btn.active { color: #148bd8; }
         .tab-btn.active::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 4px; border-radius: 0 0 999px 999px; background: #148bd8; }
-        .tab-icon { display: block; font-size: 23px; line-height: 1; margin-bottom: 5px; }
+        .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: flex; justify-content: center; align-items: flex-end; padding: 18px; z-index: 20; }
         .modal-panel { width: 100%; max-width: 430px; background: #fff; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.25); }
         .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
