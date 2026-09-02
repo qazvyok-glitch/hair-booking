@@ -179,6 +179,8 @@ export default function DesignerPreviewV2Page() {
         .timeline-row:last-child { border-bottom: none; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
+        .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); }
+        .period-action-card .period-date::after { content: " ›"; color: #148bd8; font-weight: 950; }
         .period-label, .panel-label { color: #8b95a3; font-size: 10px; font-weight: 900; letter-spacing: .08em; margin-bottom: 6px; }
         .period-date { font-weight: 900; font-size: 14px; }
         .summary-amount { color: #1478c8; font-size: 21px; font-weight: 950; margin-bottom: 8px; }
@@ -449,11 +451,14 @@ function EarningsView() {
     <>
       <h1 className="page-title">我的收入</h1>
       <div className="period-grid">
-        <div className="period-card"><div className="period-label">本期區間</div><div className="period-date">8月1日－8月15日</div></div>
-        <div className="period-card"><div className="period-label">下期區間</div><div className="period-date">8月16日－8月31日</div></div>
+        <div className="period-card"><div className="period-label">本月區間</div><div className="period-date">8月1日－8月31日</div></div>
+        <button className="period-card period-action-card">
+          <div className="period-label">自訂查詢區間</div>
+          <div className="period-date">選擇月份或日期</div>
+        </button>
       </div>
       <div className="income-tabs">
-        {["今日", "下期", "本期", "上期", "本月"].map((tab) => <button className={`income-segment ${tab === "本期" ? "active" : ""}`} key={tab}>{tab}</button>)}
+        {["今日", "本月", "指定月份", "日期區間"].map((tab) => <button className={`income-segment ${tab === "本月" ? "active" : ""}`} key={tab}>{tab}</button>)}
       </div>
       <div className="summary-grid">
         <div className="summary-card"><div className="summary-amount">NT$ 38,600</div><div className="summary-title">服務收入</div><div className="summary-sub">12 筆服務 · 折扣前</div></div>
@@ -464,9 +469,9 @@ function EarningsView() {
         <div className="breakdown-row"><span>原價（折扣前）</span><span>NT$38,600</span></div>
         <div className="breakdown-row"><span>折扣金額</span><span className="negative">-NT$2,100</span></div>
         <div className="breakdown-row"><span>店收金額</span><span>NT$36,500</span></div>
-        <div className="breakdown-row"><span>本期可查看金額</span><span>NT$36,500</span></div>
+        <div className="breakdown-row"><span>本月可查看金額</span><span>NT$36,500</span></div>
       </section>
-      <div className="final-card"><span>本期合計</span><span className="final-amount">NT$36,500</span></div>
+      <div className="final-card"><span>本月合計</span><span className="final-amount">NT$36,500</span></div>
     </>
   );
 }
