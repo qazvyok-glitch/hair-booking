@@ -5,7 +5,7 @@ import { useState } from "react";
 type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
-type EarningsRange = "今日" | "本月" | "指定月份" | "日期區間";
+type EarningsRange = "今日" | "本月" | "指定日期或區間";
 type Appointment = {
   time: string;
   name: string;
@@ -76,8 +76,7 @@ const customerRecords: CustomerRecord[] = [
 const earningsRanges: Record<EarningsRange, { period: string; service: number; discount: number; count: number; label: string }> = {
   今日: { period: "8月12日", service: 4800, discount: 300, count: 2, label: "今日收入" },
   本月: { period: "8月1日－8月31日", service: 38600, discount: 2100, count: 12, label: "本月收入" },
-  指定月份: { period: "2026年7月", service: 52400, discount: 3600, count: 18, label: "指定月份收入" },
-  日期區間: { period: "8月10日－8月15日", service: 16800, discount: 900, count: 6, label: "日期區間收入" },
+  指定日期或區間: { period: "8月10日－8月15日", service: 16800, discount: 900, count: 6, label: "指定日期或區間收入" },
 };
 
 export default function DesignerPreviewV2Page() {
@@ -159,7 +158,7 @@ export default function DesignerPreviewV2Page() {
         .decision-note.declined { background: #fff0f2; color: #d52740; }
         .segmented, .income-tabs { display: grid; background: #fff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 3px; gap: 3px; margin-bottom: 18px; }
         .segmented { grid-template-columns: repeat(3, 1fr); }
-        .income-tabs { grid-template-columns: repeat(4, 1fr); margin-bottom: 14px; }
+        .income-tabs { grid-template-columns: repeat(3, 1fr); margin-bottom: 14px; }
         .segment, .income-segment { border: none; background: transparent; color: #4b5563; border-radius: 15px; padding: 9px 0; font-weight: 850; font-size: 14px; cursor: pointer; }
         .income-segment { font-size: 12px; padding: 8px 0; }
         .segment.active, .income-segment.active { background: #148bd8; color: #fff; }
@@ -487,7 +486,7 @@ function EarningsView() {
         </button>
       </div>
       <div className="income-tabs">
-        {(["今日", "本月", "指定月份", "日期區間"] as EarningsRange[]).map((tab) => (
+        {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((tab) => (
           <button className={`income-segment ${activeRange === tab ? "active" : ""}`} key={tab} onClick={() => setActiveRange(tab)}>{tab}</button>
         ))}
       </div>
@@ -524,12 +523,12 @@ function RangePickerModal({ activeRange, onSelect, onClose }: { activeRange: Ear
         <div className="modal-header">
           <div>
             <div className="modal-title">選擇收入區間</div>
-            <div className="modal-subtitle">可用月份或日期區間快速查看</div>
+            <div className="modal-subtitle">可快速查看今日、本月，或指定日期範圍</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="range-picker-list">
-          {(["今日", "本月", "指定月份", "日期區間"] as EarningsRange[]).map((range) => (
+          {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((range) => (
             <button className={`range-option ${activeRange === range ? "selected" : ""}`} key={range} onClick={() => onSelect(range)}>
               <span>{range}</span>
               <small>{earningsRanges[range].period}</small>
