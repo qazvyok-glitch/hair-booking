@@ -341,6 +341,13 @@ function PendingView({ decisions, onOpen }: { decisions: Record<string, PendingD
 function CalendarView({ mode, selectedDate, onModeChange, onSelectDate, onAddBooking }: { mode: ScheduleMode; selectedDate: string; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
   return (
     <>
+      <div className="page-heading-row">
+        <div>
+          <h1 className="page-title">排程</h1>
+          <div className="page-subtitle">{formatScheduleDateLabel(selectedDate)}</div>
+        </div>
+        <button className="add-booking-btn" onClick={() => onAddBooking(selectedDate, "10:00")}>＋新增預約</button>
+      </div>
       <div className="segmented">
         {(["3日", "週", "月"] as ScheduleMode[]).map((item) => (
           <button className={`segment ${mode === item ? "active" : ""}`} key={item} onClick={() => onModeChange(item)}>{item}</button>
@@ -422,7 +429,6 @@ function CompactSchedule({ mode, selectedDate, onSelectDate, onAddBooking }: { m
       <section className="compact-section">
         <div className="selected-day-title">
           <div className="selected-day-date">{formatScheduleDateLabel(selectedDate)}</div>
-          <button className="selected-day-add" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
         </div>
         <div className="selected-day-hint">先選日期，再新增</div>
       </section>
@@ -435,7 +441,6 @@ function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate:
     <section className="compact-section">
       <div className="selected-day-title">
         <div className="selected-day-date">{formatScheduleDateLabel(selectedDate)}</div>
-        <button className="selected-day-add" onClick={() => onAddBooking(selectedDate, "10:00")}>＋ 新增此日預約</button>
       </div>
       {items.length > 0 ? (
         items.map((item) => {
