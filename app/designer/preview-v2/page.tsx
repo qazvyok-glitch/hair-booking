@@ -124,8 +124,10 @@ export default function DesignerPreviewV2Page() {
         .designer-role { font-size: 13px; color: #6b7280; margin-top: 4px; font-weight: 650; }
         .logout-btn { border: 1px solid #dfe3ea; background: #fff; color: #5f6673; border-radius: 12px; padding: 10px 16px; font-size: 14px; font-weight: 750; }
         .screen-body { flex: 1 1 auto; overflow-y: auto; padding: 20px 16px 18px; }
+        .page-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
         .page-title { font-size: 25px; line-height: 1.1; margin: 0 0 8px; font-weight: 900; letter-spacing: -.04em; }
         .page-subtitle { color: #9aa3af; font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+        .page-heading-row .page-subtitle { margin-bottom: 0; }
         .status-line { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; font-weight: 850; margin-bottom: 22px; }
         .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
         .progress-text { color: #1d6fd4; } .upcoming-text { color: #c96810; } .done-text { color: #258354; }
@@ -143,7 +145,7 @@ export default function DesignerPreviewV2Page() {
         .pill.progress { background: #e8f2ff; color: #126dc2; }
         .pill.done { background: #e8f7ef; color: #208051; }
         .small-action { min-width: 50px; border: 1px solid #2290e6; color: #1478c8; background: #fff; border-radius: 8px; padding: 6px 9px; font-weight: 850; font-size: 13px; cursor: pointer; }
-        .add-booking-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 15px; padding: 13px 14px; font-size: 15px; font-weight: 950; margin-bottom: 16px; cursor: pointer; box-shadow: 0 10px 20px rgba(20,139,216,.16); }
+        .add-booking-btn { border: none; background: #148bd8; color: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; box-shadow: 0 8px 16px rgba(20,139,216,.16); }
         .pending-list { display: grid; gap: 14px; }
         .pending-card { min-height: 118px; display: grid; grid-template-columns: 58px 1fr 78px; gap: 10px; align-items: center; padding: 14px; }
         .pending-card.is-done { opacity: .74; }
@@ -270,9 +272,13 @@ function Header() {
 function TodayView({ onView, onCheckout, onAddBooking }: { onView: (row: Appointment) => void; onCheckout: (row: Appointment) => void; onAddBooking: () => void }) {
   return (
     <>
-      <h1 className="page-title">今日</h1>
-      <div className="page-subtitle">8月12日 星期三</div>
-      <button className="add-booking-btn" onClick={onAddBooking}>＋ 幫客人預約</button>
+      <div className="page-heading-row">
+        <div>
+          <h1 className="page-title">今日</h1>
+          <div className="page-subtitle">8月12日 星期三</div>
+        </div>
+        <button className="add-booking-btn" onClick={onAddBooking}>＋新增預約</button>
+      </div>
       <div className="status-line">
         <span className="progress-text"><i className="dot progress-dot" />服務中：1</span>
         <span className="upcoming-text"><i className="dot upcoming-dot" />即將到來：3</span>
