@@ -7,7 +7,7 @@ export default function BottomNav({ current }: { current: string }) {
     { key: "dashboard", label: "今日", icon: "01", path: "/designer/dashboard" },
     { key: "schedule", label: "班表", icon: "02", path: "/designer/schedule" },
     { key: "transaction", label: "結帳", icon: "03", path: "/designer/transaction" },
-    { key: "customers", label: "顧客", icon: "04", path: "/designer/customers" },
+    { key: "customers", label: "會員資料", icon: "04", path: "/designer/customers" },
     { key: "account", label: "我的", icon: "05", path: "/designer/account" },
   ];
   return (

@@ -100,6 +100,12 @@ export default function AdminMembers() {
     (m.customer_no || "").includes(search)
   );
 
+  const filteredCustomerNotes = customerNotes.filter(n =>
+    (n.customer_name || "").includes(search) ||
+    (n.customer_phone || "").includes(search) ||
+    getDesignerName(n.designer_id).includes(search)
+  );
+
   async function handleAddMember() {
     if (!addForm.name || !addForm.phone) { alert("請填寫姓名和電話"); return; }
     setAddSaving(true);
@@ -272,7 +278,7 @@ export default function AdminMembers() {
             )}
           </div>
         )}
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋姓名、電話、Email、編號..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋姓名、電話、Email、編號、設計師..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
         {isDesktop ? (
           <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
@@ -328,6 +334,53 @@ export default function AdminMembers() {
             );
           })
         )}
+
+        <div style={{ marginTop: 18, marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#2C2C2A" }}>全店設計師顧客資料</div>
+              <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>Admin 可查看所有設計師建立的顧客備忘與髮型照</div>
+            </div>
+            <div style={{ fontSize: 11, color: "#534AB7", background: "#EEEDFE", borderRadius: 8, padding: "3px 9px", fontWeight: 700 }}>{filteredCustomerNotes.length} 筆</div>
+          </div>
+          {filteredCustomerNotes.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "18px 0", color: "#888780", fontSize: 13, background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7" }}>尚無設計師顧客資料</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(2, 1fr)" : "1fr", gap: 10 }}>
+              {filteredCustomerNotes.map(note => {
+                const notePhotos = getNotePhotos(note.id);
+                return (
+                  <div key={note.id} style={{ background: "#fff", borderRadius: 14, padding: 14, border: "0.5px solid #D3D1C7" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#2C2C2A" }}>{note.customer_name || "未填姓名"}</div>
+                        <div style={{ fontSize: 12, color: "#888780", marginTop: 2 }}>{note.customer_phone || "未留電話"}</div>
+                      </div>
+                      <span style={{ fontSize: 11, color: "#534AB7", background: "#EEEDFE", borderRadius: 8, padding: "3px 8px", fontWeight: 700 }}>{getDesignerName(note.designer_id)}</span>
+                    </div>
+                    {note.hair_type && <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 3 }}>髮質：{note.hair_type}</div>}
+                    {note.preferences && <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 3 }}>喜好：{note.preferences}</div>}
+                    {note.allergies && <div style={{ fontSize: 12, color: "#A32D2D", marginBottom: 3 }}>過敏／注意：{note.allergies}</div>}
+                    {note.notes && <div style={{ fontSize: 11, color: "#888780", background: "#F1EFE8", borderRadius: 8, padding: "6px 8px", marginTop: 6 }}>{note.notes}</div>}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                      <div style={{ fontSize: 11, color: "#888780" }}>{note.last_visit ? `上次到訪：${note.last_visit.replace(/-/g, "/")}` : "尚未記錄到訪日"}</div>
+                      <div style={{ fontSize: 11, color: "#888780" }}>髮型照 {notePhotos.length} 張</div>
+                    </div>
+                    {notePhotos.length > 0 && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5, marginTop: 8 }}>
+                        {notePhotos.slice(0, 4).map(photo => (
+                          <button key={photo.id} onClick={() => setLightboxUrl(photo.photo_url)} style={{ border: "none", padding: 0, aspectRatio: "1", borderRadius: 7, overflow: "hidden", cursor: "pointer", background: "#F1EFE8" }}>
+                            <img src={photo.photo_url} alt="髮型照" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 新增會員 Modal */}
