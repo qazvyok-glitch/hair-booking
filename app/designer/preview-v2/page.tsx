@@ -73,10 +73,10 @@ const customerRecords: CustomerRecord[] = [
   { id: "joey", name: "Joey", phone: "0988-111-222", lastService: "HHN深層結構護髮", note: "髮尾乾，護髮停留時間可拉長。", lastVisit: "上次 8/02" },
 ];
 
-const earningsRanges: Record<EarningsRange, { period: string; service: number; discount: number; count: number; label: string }> = {
-  今日: { period: "8月12日", service: 4800, discount: 300, count: 2, label: "今日收入" },
-  本月: { period: "8月1日－8月31日", service: 38600, discount: 2100, count: 12, label: "本月收入" },
-  指定日期或區間: { period: "8月10日－8月15日", service: 16800, discount: 900, count: 6, label: "指定日期或區間收入" },
+const earningsRanges: Record<EarningsRange, { period: string; service: number; product: number; discount: number; salary: number; count: number; label: string }> = {
+  今日: { period: "8月12日", service: 4800, product: 1180, discount: 300, salary: 4500, count: 2, label: "今日收入" },
+  本月: { period: "8月1日－8月31日", service: 38600, product: 7200, discount: 2100, salary: 36500, count: 12, label: "本月收入" },
+  指定日期或區間: { period: "8月10日－8月15日", service: 16800, product: 2360, discount: 900, salary: 15120, count: 6, label: "指定日期或區間收入" },
 };
 
 export default function DesignerPreviewV2Page() {
@@ -473,7 +473,7 @@ function EarningsView() {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const currentRange = earningsRanges[activeRange];
-  const storeAmount = currentRange.service - currentRange.discount;
+  const totalPerformance = currentRange.service + currentRange.product;
 
   return (
     <>
@@ -491,17 +491,18 @@ function EarningsView() {
         ))}
       </div>
       <div className="summary-grid">
-        <div className="summary-card"><div className="summary-amount">NT$ {currentRange.service.toLocaleString()}</div><div className="summary-title">服務收入</div><div className="summary-sub">{currentRange.count} 筆服務 · 折扣前</div></div>
-        <div className="summary-card"><div className="summary-amount purple">NT$ {storeAmount.toLocaleString()}</div><div className="summary-title purple">店收金額</div><div className="summary-sub">已扣除折扣</div></div>
+        <div className="summary-card"><div className="summary-amount">NT$ {totalPerformance.toLocaleString()}</div><div className="summary-title">總業績</div><div className="summary-sub">服務業績 NT${currentRange.service.toLocaleString()} · 商品銷售 NT${currentRange.product.toLocaleString()}</div></div>
+        <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">實際薪資</div><div className="summary-sub">依抽成與獎金計算</div></div>
       </div>
       <section className="panel">
         <div className="panel-label">{currentRange.label}</div>
-        <div className="breakdown-row"><span>原價（折扣前）</span><span>NT${currentRange.service.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>服務業績</span><span>NT${currentRange.service.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>商品銷售</span><span>NT${currentRange.product.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>總業績</span><span>NT${totalPerformance.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>折扣金額</span><span className="negative">-NT${currentRange.discount.toLocaleString()}</span></div>
-        <div className="breakdown-row"><span>店收金額</span><span>NT${storeAmount.toLocaleString()}</span></div>
-        <div className="breakdown-row"><span>{activeRange}可查看金額</span><span>NT${storeAmount.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>實際薪資</span><span>NT${currentRange.salary.toLocaleString()}</span></div>
       </section>
-      <div className="final-card"><span>{activeRange}合計</span><span className="final-amount">NT${storeAmount.toLocaleString()}</span></div>
+      <div className="final-card"><span>{activeRange}實際薪資</span><span className="final-amount">NT${currentRange.salary.toLocaleString()}</span></div>
       {showRangePicker && (
         <RangePickerModal
           activeRange={activeRange}
