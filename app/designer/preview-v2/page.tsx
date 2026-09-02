@@ -32,6 +32,14 @@ type BookingDraft = {
   service: string;
   note: string;
 };
+type CustomerRecord = {
+  id: string;
+  name: string;
+  phone: string;
+  lastService: string;
+  note: string;
+  lastVisit: string;
+};
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "□" },
@@ -57,6 +65,12 @@ const scheduleItems: Record<number, { text: string; tone: string }[]> = {
   10: [{ text: "15:30 護髮", tone: "treatment" }],
   20: [{ text: "11:00 燙髮", tone: "perm" }],
 };
+
+const customerRecords: CustomerRecord[] = [
+  { id: "lynn", name: "Lynn", phone: "0920-262-570", lastService: "質感燙＋剪髮", note: "喜歡自然蓬鬆，瀏海不要剪太短。", lastVisit: "上次 7/10" },
+  { id: "mira", name: "Mira", phone: "0912-345-678", lastService: "染髮（M）", note: "偏冷棕，不要太亮；頭皮較敏感。", lastVisit: "上次 7/24" },
+  { id: "joey", name: "Joey", phone: "0988-111-222", lastService: "HHN深層結構護髮", note: "髮尾乾，護髮停留時間可拉長。", lastVisit: "上次 8/02" },
+];
 
 export default function DesignerPreviewV2Page() {
   const [activeTab, setActiveTab] = useState<TabKey>("today");
@@ -203,6 +217,16 @@ export default function DesignerPreviewV2Page() {
         .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
+        .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
+        .customer-result-list { display: grid; gap: 8px; margin-top: 9px; }
+        .customer-result { width: 100%; border: 1px solid #e1e7ef; background: #fff; color: #1f2937; border-radius: 12px; padding: 10px 11px; text-align: left; cursor: pointer; }
+        .customer-result.selected { border-color: #148bd8; background: #eaf7ff; }
+        .customer-result span { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .customer-result strong { font-size: 14px; font-weight: 950; }
+        .customer-result em { color: #6b7280; font-size: 12px; font-style: normal; font-weight: 800; }
+        .customer-result small { display: block; color: #8b95a3; font-size: 11px; font-weight: 800; line-height: 1.35; }
+        .customer-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 8px 2px 0; }
+        .customer-note-preview { margin-top: 10px; background: #eef9f4; color: #207153; border-radius: 10px; padding: 9px 10px; font-size: 12px; font-weight: 800; line-height: 1.45; }
         .amount-preview { background: #0f172a; color: #fff; border-radius: 16px; padding: 16px; margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-weight: 900; }
         .amount-preview strong { font-size: 24px; }
         .complete-state { text-align: center; padding: 22px 8px 8px; }
@@ -580,6 +604,26 @@ function CheckoutNumber({ label, value, onChange }: { label: string; value: numb
 }
 
 function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const searchText = customerSearch.trim().toLowerCase();
+  const matchedCustomers = searchText
+    ? customerRecords.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(searchText)).slice(0, 3)
+    : customerRecords.slice(0, 2);
+  const selectedCustomer = customerRecords.find((customer) => customer.id === selectedCustomerId);
+
+  function applyCustomer(customer: CustomerRecord) {
+    setSelectedCustomerId(customer.id);
+    setCustomerSearch(`${customer.name} / ${customer.phone}`);
+    onChange({
+      ...draft,
+      name: customer.name,
+      phone: customer.phone,
+      service: customer.lastService,
+      note: customer.note,
+    });
+  }
+
   if (complete) {
     return (
       <div className="modal-backdrop" onClick={onClose}>
@@ -594,6 +638,8 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
             <DetailCard label="日期時間" value={`${draft.date} ${draft.time}`} />
             <DetailCard label="電話" value={draft.phone || "未填電話"} />
             <DetailCard label="服務" value={draft.service || "未選服務"} />
+            <DetailCard label="顧客資料" value={selectedCustomer ? "已帶入既有顧客紀錄" : "新顧客，完成後自動建立資料"} />
+            <DetailCard label="預約備註" value={draft.note || "未填備註"} />
           </div>
           <div className="modal-action-row">
             <button className="secondary-modal-btn" onClick={onClose}>返回</button>
@@ -614,6 +660,40 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
+        <section className="customer-search-panel">
+          <div className="booking-label">搜尋顧客資料</div>
+          <input
+            className="checkout-input"
+            value={customerSearch}
+            onChange={(event) => {
+              setCustomerSearch(event.target.value);
+              setSelectedCustomerId(null);
+            }}
+            placeholder="輸入姓名或電話，快速帶入顧客資訊"
+          />
+          <div className="customer-result-list">
+            {matchedCustomers.length > 0 ? matchedCustomers.map((customer) => (
+              <button
+                className={`customer-result ${selectedCustomerId === customer.id ? "selected" : ""}`}
+                key={customer.id}
+                onClick={() => applyCustomer(customer)}
+              >
+                <span>
+                  <strong>{customer.name}</strong>
+                  <em>{customer.phone}</em>
+                </span>
+                <small>{customer.lastVisit} · {customer.lastService}</small>
+              </button>
+            )) : (
+              <div className="customer-empty">找不到顧客，完成預約後會建立新顧客資料。</div>
+            )}
+          </div>
+          {selectedCustomer && (
+            <div className="customer-note-preview">
+              <strong>已帶入：</strong>{selectedCustomer.note}
+            </div>
+          )}
+        </section>
         <div className="detail-grid">
           <BookingInput label="日期" value={draft.date} onChange={(value) => onChange({ ...draft, date: value })} />
           <BookingInput label="時間" value={draft.time} onChange={(value) => onChange({ ...draft, time: value })} />
