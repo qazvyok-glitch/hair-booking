@@ -554,7 +554,7 @@ export default function DesignerPreviewV2Page() {
         .decision-note.declined { background: #fff0f2; color: #d52740; }
         .segmented, .income-tabs { display: grid; background: #fff; border: 1px solid #e5e7eb; border-radius: 18px; padding: 3px; gap: 3px; margin-bottom: 18px; }
         .segmented { grid-template-columns: repeat(3, 1fr); }
-        .income-tabs { grid-template-columns: repeat(3, 1fr); margin-bottom: 14px; }
+        .income-tabs { grid-template-columns: repeat(2, 1fr); margin-bottom: 14px; }
         .segment, .income-segment { border: none; background: transparent; color: #4b5563; border-radius: 15px; padding: 9px 0; font-weight: 850; font-size: 14px; cursor: pointer; }
         .income-segment { font-size: 12px; padding: 8px 0; }
         .segment.active, .income-segment.active { background: #148bd8; color: #fff; }
@@ -1178,6 +1178,7 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
   const currentRange = ranges[activeRange];
+  const totalPerformance = currentRange.service + currentRange.product;
   const incomeLabel = `${activeRange === "指定日期或區間" ? "查詢" : activeRange}實際收入`;
 
   return (
@@ -1191,12 +1192,15 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
         </button>
       </div>
       <div className="income-tabs">
-        {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((tab) => (
+        {(["今日", "本月"] as EarningsRange[]).map((tab) => (
           <button className={`income-segment ${activeRange === tab ? "active" : ""}`} key={tab} onClick={() => {
             setActiveRange(tab);
-            if (tab === "指定日期或區間") setShowRangePicker(true);
           }}>{tab}</button>
         ))}
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card"><div className="summary-amount">NT$ {totalPerformance.toLocaleString()}</div><div className="summary-title">總業績</div><div className="summary-sub">服務業績 NT${currentRange.service.toLocaleString()} · 商品銷售 NT${currentRange.product.toLocaleString()}</div></div>
+        <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">{incomeLabel}</div><div className="summary-sub">扣除自領商品與折扣</div></div>
       </div>
       <section className="panel">
         <div className="income-detail-header">
