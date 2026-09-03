@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "../../../lib/supabase";
 
 type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
@@ -60,6 +61,32 @@ type DesignerProfile = {
   specialties: string;
   avatarUrl: string;
 };
+type DesignerSession = { id: number; name: string; nickname?: string; is_manager?: boolean };
+type BackendDesigner = {
+  id: number;
+  name: string;
+  display_name?: string;
+  nickname?: string;
+  style?: string;
+  avatar_url?: string;
+  is_manager?: boolean;
+  is_active?: boolean;
+};
+type BackendService = { id: number; name: string; category_id?: number };
+type BackendBooking = {
+  id: number;
+  designer_id: number;
+  customer_name: string;
+  customer_phone?: string;
+  booking_date: string;
+  booking_time: string;
+  service_ids?: number[];
+  note?: string;
+  status: string;
+  designers?: { name?: string; display_name?: string; nickname?: string };
+};
+type BackendOffDay = { designer_id: number; off_date: string };
+type BackendOffSlot = { designer_id: number; slot_date: string; slot_time: string };
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
@@ -156,6 +183,15 @@ export default function DesignerPreviewV2Page() {
   const [demoTodayRows, setDemoTodayRows] = useState<Appointment[]>(initialTodayRows);
   const [demoScheduleItems, setDemoScheduleItems] = useState<Record<number, ScheduleItem[]>>(initialScheduleItems);
   const [demoLeaveItems, setDemoLeaveItems] = useState<Record<number, LeaveItem[]>>(initialLeaveItems);
+  const [backendSession, setBackendSession] = useState<DesignerSession | null>(null);
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendDesigners, setBackendDesigners] = useState<BackendDesigner[]>([]);
+  const [backendServices, setBackendServices] = useState<BackendService[]>([]);
+  const [backendScheduleItems, setBackendScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
+  const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
+  const [backendLeaveItems, setBackendLeaveItems] = useState<Record<number, LeaveItem[]>>({});
+  const [backendTeamLeaveItems, setBackendTeamLeaveItems] = useState<Record<number, LeaveItem[]>>({});
   const [designerProfile, setDesignerProfile] = useState<DesignerProfile>(() => {
     if (typeof window === "undefined") return initialDesignerProfile;
     const savedProfile = window.localStorage.getItem(designerProfileStorageKey);
@@ -171,11 +207,67 @@ export default function DesignerPreviewV2Page() {
     window.localStorage.setItem(designerProfileStorageKey, JSON.stringify(designerProfile));
   }, [designerProfile]);
 
+  useEffect(() => {
+    const sessionText = window.sessionStorage.getItem("designerSession");
+    if (!sessionText) return;
+    try {
+      const session = JSON.parse(sessionText) as DesignerSession;
+      setBackendSession(session);
+      setBackendConnected(true);
+      setSelectedScheduleDate(new Date().toLocaleDateString("en-CA"));
+      loadBackendData(session);
+    } catch {
+      setBackendConnected(false);
+    }
+  }, []);
+
+  async function loadBackendData(session: DesignerSession) {
+    setBackendLoading(true);
+    const bookingQuery = supabase
+      .from("bookings")
+      .select("*, designers(name, display_name, nickname)")
+      .neq("status", "cancelled")
+      .order("booking_date")
+      .order("booking_time");
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+      supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
+      supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
+      session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
+      session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
+      session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
+    ]);
+
+    const designers = (designerData || []) as BackendDesigner[];
+    const services = (serviceData || []) as BackendService[];
+    const bookings = (bookingData || []) as BackendBooking[];
+    const offDays = (offDayData || []) as BackendOffDay[];
+    const offSlots = (offSlotData || []) as BackendOffSlot[];
+    const currentDesigner = designers.find((designer) => designer.id === session.id);
+
+    setBackendDesigners(designers);
+    setBackendServices(services);
+    setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
+    setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
+    setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
+    setBackendTeamLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id !== session.id), offSlots.filter((item) => item.designer_id !== session.id), designers));
+
+    if (currentDesigner) {
+      setDesignerProfile({
+        name: currentDesigner.display_name || currentDesigner.name,
+        role: currentDesigner.nickname || "設計師",
+        phone: designerProfile.phone,
+        specialties: currentDesigner.style || designerProfile.specialties,
+        avatarUrl: currentDesigner.avatar_url || "",
+      });
+    }
+    setBackendLoading(false);
+  }
+
   function setDecision(name: string, decision: PendingDecision) {
     setPendingDecisions((prev) => ({ ...prev, [name]: decision }));
   }
 
-  function completeDemoBooking() {
+  async function completeDemoBooking() {
     if (!bookingDraft) return;
 
     const serviceLabel = bookingDraft.service.replace(/[（）()ＭMLL]/g, "").trim() || "預約";
@@ -183,6 +275,32 @@ export default function DesignerPreviewV2Page() {
     const isOwnBooking = bookingDraft.designer === "Cherry";
     const scheduleText = isOwnBooking ? `${bookingDraft.time} ${serviceLabel}` : `${bookingDraft.time} ${bookingDraft.designer} ${serviceLabel}`;
     const scheduleItem = { text: scheduleText, tone: isOwnBooking ? getServiceTone(bookingDraft.service) : getTeamTone(bookingDraft.designer), designer: bookingDraft.designer, customer: bookingDraft.name || "新顧客" };
+
+    if (backendConnected && backendSession) {
+      const targetDesigner = findDesignerByLabel(backendDesigners, bookingDraft.designer) || backendDesigners.find((designer) => designer.id === backendSession.id);
+      const selectedService = backendServices.find((service) => service.name === bookingDraft.service) || backendServices.find((service) => bookingDraft.service.includes(service.name) || service.name.includes(serviceLabel));
+      if (!targetDesigner) {
+        alert("找不到指定設計師，請重新選擇。");
+        return;
+      }
+      const { error } = await supabase.from("bookings").insert({
+        designer_id: targetDesigner.id,
+        customer_name: bookingDraft.name || "新顧客",
+        customer_phone: bookingDraft.phone,
+        booking_date: bookingDraft.date,
+        booking_time: bookingDraft.time,
+        note: bookingDraft.note,
+        status: "confirmed",
+        service_ids: selectedService ? [selectedService.id] : [],
+      });
+      if (error) {
+        alert("新增預約失敗，請稍後再試。");
+        return;
+      }
+      await loadBackendData(backendSession);
+      setBookingComplete(true);
+      return;
+    }
 
     setDemoScheduleItems((prev) => ({
       ...prev,
@@ -209,27 +327,75 @@ export default function DesignerPreviewV2Page() {
     setBookingComplete(true);
   }
 
-  function addDemoLeave(day: number, item: LeaveItem) {
+  async function addDemoLeave(date: string, item: LeaveItem) {
+    const day = Number(date.split("-")[2]);
     setDemoLeaveItems((prev) => ({
       ...prev,
       [day]: [...(prev[day] || []), item],
     }));
+    if (!backendConnected || !backendSession) return;
+
+    if (item.tone === "day-off") {
+      await supabase.from("designer_off_days").insert({ designer_id: backendSession.id, off_date: date });
+    } else {
+      const slots = getBlockedSlots(item.text);
+      if (slots.length > 0) {
+        await supabase.from("designer_off_slots").insert(slots.map((slot) => ({ designer_id: backendSession.id, slot_date: date, slot_time: slot })));
+      }
+    }
+    await loadBackendData(backendSession);
+  }
+
+  async function saveDesignerProfile(profile: DesignerProfile) {
+    setDesignerProfile(profile);
+    if (!backendConnected || !backendSession) return;
+    const { error } = await supabase.from("designers").update({
+      display_name: profile.name,
+      nickname: profile.role,
+      style: profile.specialties,
+    }).eq("id", backendSession.id);
+    if (error) alert("個人資料同步失敗，請稍後再試。");
+    else await loadBackendData(backendSession);
+  }
+
+  async function uploadDesignerAvatar(file: File) {
+    if (!backendConnected || !backendSession) return null;
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `designer-${backendSession.id}.${ext}`;
+    const { error } = await supabase.storage.from("designer-avatars").upload(path, file, { upsert: true });
+    if (error) {
+      alert("大頭照上傳失敗，請稍後再試。");
+      return null;
+    }
+    const { data: { publicUrl } } = supabase.storage.from("designer-avatars").getPublicUrl(path);
+    await supabase.from("designers").update({ avatar_url: publicUrl }).eq("id", backendSession.id);
+    setDesignerProfile((prev) => ({ ...prev, avatarUrl: publicUrl }));
+    return publicUrl;
   }
 
   const pendingCount = pendingRows.filter((row) => (pendingDecisions[row.name] || "pending") === "pending").length;
+  const activeScheduleItems = backendConnected ? backendScheduleItems : demoScheduleItems;
+  const activeLeaveItems = backendConnected ? backendLeaveItems : demoLeaveItems;
+  const activeTeamScheduleItems = backendConnected ? backendTeamScheduleItems : teamScheduleItems;
+  const activeTeamLeaveItems = backendConnected ? backendTeamLeaveItems : teamLeaveItems;
+  const activeDesignerOptions = backendConnected && backendDesigners.length > 0 ? backendDesigners.map(getDesignerLabel) : designerOptions;
+  const activeServiceOptions = backendConnected && backendServices.length > 0 ? backendServices.map((service) => service.name) : ["剪髮（含髮浴）", "質感燙＋剪髮", "設計染（M）", "HHN深層結構護髮"];
+  const defaultBookingDate = backendConnected ? selectedScheduleDate : "2026-08-12";
+  const defaultBookingService = activeServiceOptions[0] || "剪髮（含髮浴）";
 
   return (
     <main className="preview-page">
       <section className="phone-shell">
         <Header profile={designerProfile} onOpenSettings={() => setShowSettings(true)} />
         <div className="screen-body">
+          {backendLoading && <div className="sync-banner">正在同步後台資料...</div>}
           {showSettings ? (
-            <SettingsView profile={designerProfile} onProfileChange={setDesignerProfile} leaveItems={demoLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
+            <SettingsView profile={designerProfile} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
-              {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
+              {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView decisions={pendingDecisions} pendingCount={pendingCount} onOpen={setSelectedPending} />}
-              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={demoScheduleItems} leaveItems={demoLeaveItems} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time)); }} />}
+              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? true} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "earnings" && <EarningsView />}
             </>
           )}
@@ -239,7 +405,7 @@ export default function DesignerPreviewV2Page() {
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} onComplete={() => setCheckoutComplete(true)} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
-      {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
+      {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
         .preview-page { min-height: 100vh; background: #eef0f3; display: flex; justify-content: center; padding: 20px; color: #1f2937; }
@@ -258,6 +424,7 @@ export default function DesignerPreviewV2Page() {
         .designer-role { font-size: 13px; color: #6b7280; margin-top: 4px; font-weight: 650; }
         .logout-btn { border: 1px solid #dfe3ea; background: #fff; color: #5f6673; border-radius: 12px; padding: 10px 16px; font-size: 14px; font-weight: 750; }
         .screen-body { flex: 1 1 auto; overflow-y: auto; padding: 20px 16px 18px; }
+        .sync-banner { margin: 0 0 12px; border: 1px solid #bfe6ff; background: #eef9ff; color: #126dc2; border-radius: 12px; padding: 9px 12px; font-size: 12px; font-weight: 850; }
         .page-heading-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
         .page-title { font-size: 25px; line-height: 1.1; margin: 0 0 8px; font-weight: 900; letter-spacing: -.04em; }
         .page-subtitle { color: #9aa3af; font-size: 16px; font-weight: 700; margin-bottom: 16px; }
@@ -475,7 +642,7 @@ function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenS
   );
 }
 
-function SettingsView({ profile, onProfileChange, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void; leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void; onBack: () => void }) {
+function SettingsView({ profile, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: Record<number, LeaveItem[]>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
   const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
 
   return (
@@ -497,22 +664,31 @@ function SettingsView({ profile, onProfileChange, leaveItems, onAddLeave, onBack
           <div className="settings-card-desc">查看已安排休假</div>
         </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} onProfileChange={onProfileChange} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
+      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
     </>
   );
 }
 
-function ProfileSettingsPanel({ profile, onProfileChange }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void }) {
+function ProfileSettingsPanel({ profile, onProfileChange, onAvatarUpload, isSynced }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean }) {
   const [draft, setDraft] = useState(profile);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   function updateDraft(key: keyof DesignerProfile, value: string) {
     setSaved(false);
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  function changeAvatar(file: File | null) {
+  async function changeAvatar(file: File | null) {
     if (!file) return;
+    if (onAvatarUpload) {
+      setUploading(true);
+      const publicUrl = await onAvatarUpload(file);
+      if (publicUrl) updateDraft("avatarUrl", publicUrl);
+      setUploading(false);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       updateDraft("avatarUrl", String(reader.result || ""));
@@ -520,8 +696,10 @@ function ProfileSettingsPanel({ profile, onProfileChange }: { profile: DesignerP
     reader.readAsDataURL(file);
   }
 
-  function saveProfile() {
-    onProfileChange(draft);
+  async function saveProfile() {
+    setSaving(true);
+    await onProfileChange(draft);
+    setSaving(false);
     setSaved(true);
   }
 
@@ -531,7 +709,7 @@ function ProfileSettingsPanel({ profile, onProfileChange }: { profile: DesignerP
       <div className="profile-editor-head">
         <AvatarPreview avatarUrl={draft.avatarUrl} size="large" />
         <label className="avatar-upload-btn">
-          變更大頭照
+          {uploading ? "上傳中..." : "變更大頭照"}
           <input type="file" accept="image/*" onChange={(event) => changeAvatar(event.target.files?.[0] || null)} />
         </label>
       </div>
@@ -551,13 +729,13 @@ function ProfileSettingsPanel({ profile, onProfileChange }: { profile: DesignerP
           </div>
         </div>
       </div>
-      <div className="profile-note">此頁目前是 V2 示意。正式版會將大頭照與個人資料儲存後，同步顯示在顧客預約端的設計師選擇畫面。</div>
-      <button className="full-width-btn" onClick={saveProfile}>{saved ? "已更新個人資訊" : "儲存個人資訊"}</button>
+      <div className="profile-note">{isSynced ? "目前已連線後台，儲存後會同步顯示在顧客預約端與後台設計師資料。" : "目前為公開示意模式，不會寫入正式後台資料。"}</div>
+      <button className="full-width-btn" onClick={saveProfile}>{saving ? "同步中..." : saved ? "已更新個人資訊" : "儲存個人資訊"}</button>
     </section>
   );
 }
 
-function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void }) {
+function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<number, LeaveItem[]>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void> }) {
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [draft, setDraft] = useState<LeaveDraft>({
     date: "2026-08-19",
@@ -570,11 +748,11 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
     items.map((item) => ({ day: Number(day), item }))
   ).sort((a, b) => a.day - b.day);
 
-  function submitLeave() {
+  async function submitLeave() {
     const day = Number(draft.date.split("-")[2]);
     const isFullDay = draft.type === "整天休假";
     const text = isFullDay ? "整天休假" : `${draft.startTime}-${draft.endTime} 不接客`;
-    onAddLeave(day, { text, tone: isFullDay ? "day-off" : "blocked" });
+    await onAddLeave(draft.date, { text, tone: isFullDay ? "day-off" : "blocked", designer: "Cherry" });
     setShowLeaveForm(false);
   }
 
@@ -726,10 +904,10 @@ function PendingView({ decisions, pendingCount, onOpen }: { decisions: Record<st
   );
 }
 
-function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeChange, onSelectDate, onAddBooking }: { mode: ScheduleMode; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSource, leaveItems, teamLeaveItemsSource, isManager, designerName, onModeChange, onSelectDate, onAddBooking }: { mode: ScheduleMode; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; teamScheduleItemsSource: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; teamLeaveItemsSource: Record<number, LeaveItem[]>; isManager: boolean; designerName: string; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
   const [scope, setScope] = useState<"自己" | "全員">("自己");
-  const visibleScheduleItems = scope === "全員" ? mergeCalendarRecords(scheduleItems, teamScheduleItems) : filterCalendarRecords(scheduleItems, "Cherry");
-  const visibleLeaveItems = scope === "全員" ? mergeCalendarRecords(leaveItems, teamLeaveItems) : filterCalendarRecords(leaveItems, "Cherry");
+  const visibleScheduleItems = scope === "全員" ? mergeCalendarRecords(scheduleItems, teamScheduleItemsSource) : filterCalendarRecords(scheduleItems, designerName);
+  const visibleLeaveItems = scope === "全員" ? mergeCalendarRecords(leaveItems, teamLeaveItemsSource) : filterCalendarRecords(leaveItems, designerName);
 
   return (
     <>
@@ -745,7 +923,7 @@ function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeCha
           <button className={`segment ${mode === item ? "active" : ""}`} key={item} onClick={() => onModeChange(item)}>{item}</button>
         ))}
       </div>
-      <div className="manager-scope-card">
+      {isManager && <div className="manager-scope-card">
         <div>
           <div className="manager-scope-title">店長權限</div>
           <div className="manager-scope-subtitle">{scope === "全員" ? "查看全店設計師預約與排休" : "只查看自己的預約與排休"}</div>
@@ -755,7 +933,7 @@ function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeCha
             <button className={scope === item ? "active" : ""} key={item} onClick={() => setScope(item)}>{item}</button>
           ))}
         </div>
-      </div>
+      </div>}
       {mode === "月" ? (
         <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
       ) : (
@@ -766,24 +944,29 @@ function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeCha
 }
 
 function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onAddBooking }: { selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+  const [year, month] = selectedDate.split("-").map(Number);
   const selectedDay = Number(selectedDate.split("-")[2]);
   const selectedItems = getCalendarItems(selectedDay, scheduleItems, leaveItems);
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
+  while (cells.length % 7 !== 0) cells.push(null);
 
   return (
     <>
       <div className="calendar-header">
         <button className="circle-nav">‹</button>
-        <div className="month-title">2026年8月</div>
+        <div className="month-title">{year}年{month}月</div>
         <button className="circle-nav">›</button>
       </div>
       <div className="weekday-grid">
         {["日", "一", "二", "三", "四", "五", "六"].map((day) => <div key={day}>{day}</div>)}
       </div>
       <div className="calendar-grid">
-        {Array.from({ length: 31 }, (_, index) => {
-          const date = index + 1;
+        {cells.map((date, index) => {
+          if (!date) return <div className="day-cell empty" key={`empty-${index}`} />;
           const items = getCalendarItems(date, scheduleItems, leaveItems);
-          const fullDate = formatScheduleDate(date);
+          const fullDate = `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
           return (
             <div className={`day-cell can-add ${date === selectedDay ? "selected" : ""}`} key={date} onClick={() => onSelectDate(fullDate)}>
               <span className="date-badge">{date}</span>
@@ -1154,7 +1337,7 @@ function CheckoutNumber({ label, value, onChange }: { label: string; value: numb
   );
 }
 
-function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
+function AddBookingModal({ draft, complete, designerOptions, serviceOptions, isSynced, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; designerOptions: string[]; serviceOptions: string[]; isSynced: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const searchText = customerSearch.trim().toLowerCase();
@@ -1181,8 +1364,8 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
         <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
           <div className="complete-state">
             <div className="complete-icon">✓</div>
-            <div className="modal-title">暫存預約已建立</div>
-            <div className="modal-subtitle">這是 V2 預覽流程，不會寫入正式預約資料。</div>
+            <div className="modal-title">{isSynced ? "預約已同步建立" : "暫存預約已建立"}</div>
+            <div className="modal-subtitle">{isSynced ? "已寫入後台預約資料，排程與後台會同步更新。" : "這是 V2 預覽流程，不會寫入正式預約資料。"}</div>
           </div>
           <div className="detail-grid">
             <DetailCard label="客人" value={draft.name || "未填姓名"} />
@@ -1261,7 +1444,7 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
         <div className="booking-field">
           <div className="booking-label">服務項目</div>
           <select className="checkout-select" value={draft.service} onChange={(event) => onChange({ ...draft, service: event.target.value })}>
-            {["剪髮（含髮浴）", "質感燙＋剪髮", "設計染（M）", "HHN深層結構護髮"].map((item) => <option key={item}>{item}</option>)}
+            {serviceOptions.map((item) => <option key={item}>{item}</option>)}
           </select>
         </div>
         <div className="booking-field">
@@ -1270,7 +1453,7 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
         </div>
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>取消</button>
-          <button className="primary-modal-btn" onClick={onComplete}>建立暫存預約</button>
+          <button className="primary-modal-btn" onClick={onComplete}>{isSynced ? "建立並同步預約" : "建立暫存預約"}</button>
         </div>
       </div>
     </div>
@@ -1286,20 +1469,83 @@ function BookingInput({ label, value, onChange }: { label: string; value: string
   );
 }
 
-function createBookingDraft(date = "2026-08-12", time = "10:00"): BookingDraft {
+function createBookingDraft(date = "2026-08-12", time = "10:00", designer = "Cherry", service = "剪髮（含髮浴）"): BookingDraft {
   return {
     date,
     time,
-    designer: "Cherry",
+    designer,
     name: "",
     phone: "",
-    service: "剪髮（含髮浴）",
+    service,
     note: "",
   };
 }
 
 function formatScheduleDate(day: number) {
   return `2026-08-${String(day).padStart(2, "0")}`;
+}
+
+function getDesignerLabel(designer: BackendDesigner) {
+  return designer.display_name || designer.name;
+}
+
+function findDesignerByLabel(designers: BackendDesigner[], label: string) {
+  return designers.find((designer) => [designer.display_name, designer.name, designer.nickname].filter(Boolean).includes(label));
+}
+
+function mapBookingsToCalendar(bookings: BackendBooking[], services: BackendService[], designers: BackendDesigner[]): Record<number, ScheduleItem[]> {
+  return bookings.reduce<Record<number, ScheduleItem[]>>((records, booking) => {
+    const day = Number(booking.booking_date.split("-")[2]);
+    const designer = designers.find((item) => item.id === booking.designer_id);
+    const designerName = booking.designers?.display_name || booking.designers?.name || (designer ? getDesignerLabel(designer) : "未指定");
+    const serviceName = getServiceNamesFromBackend(booking.service_ids || [], services);
+    const text = `${booking.booking_time} ${designerName} ${serviceName}`;
+    records[day] = [...(records[day] || []), {
+      text,
+      tone: getServiceTone(serviceName),
+      designer: designerName,
+      customer: booking.customer_name || "訪客",
+    }].sort((a, b) => a.text.localeCompare(b.text));
+    return records;
+  }, {});
+}
+
+function mapLeavesToCalendar(offDays: BackendOffDay[], offSlots: BackendOffSlot[], designers: BackendDesigner[]): Record<number, LeaveItem[]> {
+  const records: Record<number, LeaveItem[]> = {};
+  offDays.forEach((item) => {
+    const day = Number(item.off_date.split("-")[2]);
+    const designer = designers.find((target) => target.id === item.designer_id);
+    const designerName = designer ? getDesignerLabel(designer) : "設計師";
+    records[day] = [...(records[day] || []), { text: `${designerName} 整天休假`, tone: "day-off", designer: designerName }];
+  });
+  const slotsByDesignerDate = offSlots.reduce<Record<string, BackendOffSlot[]>>((groups, item) => {
+    const key = `${item.designer_id}-${item.slot_date}`;
+    groups[key] = [...(groups[key] || []), item];
+    return groups;
+  }, {});
+  Object.entries(slotsByDesignerDate).forEach(([, slots]) => {
+    const first = slots[0];
+    const day = Number(first.slot_date.split("-")[2]);
+    const designer = designers.find((target) => target.id === first.designer_id);
+    const designerName = designer ? getDesignerLabel(designer) : "設計師";
+    const sortedSlots = slots.map((item) => item.slot_time).sort();
+    const label = sortedSlots.length > 1 ? `${sortedSlots[0]}-${sortedSlots[sortedSlots.length - 1]} 不接客` : `${sortedSlots[0]} 不接客`;
+    records[day] = [...(records[day] || []), { text: `${designerName} ${label}`, tone: "blocked", designer: designerName }];
+  });
+  return records;
+}
+
+function getServiceNamesFromBackend(ids: number[], services: BackendService[]) {
+  if (!ids.length) return "預約";
+  return ids.map((id) => services.find((service) => service.id === id)?.name).filter(Boolean).join("、") || "預約";
+}
+
+function getBlockedSlots(text: string) {
+  const matched = text.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+  if (!matched) return [];
+  const startHour = Number(matched[1].slice(0, 2));
+  const endHour = Number(matched[2].slice(0, 2));
+  return Array.from({ length: Math.max(endHour - startHour, 1) }, (_, index) => `${String(startHour + index).padStart(2, "0")}:00`);
 }
 
 function formatScheduleDateLabel(date: string) {
