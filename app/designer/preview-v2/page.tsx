@@ -94,10 +94,10 @@ const customerRecords: CustomerRecord[] = [
   { id: "joey", name: "Joey", phone: "0988-111-222", lastService: "HHN深層結構護髮", note: "髮尾乾，護髮停留時間可拉長。", lastVisit: "上次 8/02" },
 ];
 
-const earningsRanges: Record<EarningsRange, { period: string; service: number; product: number; discount: number; salary: number; count: number; label: string }> = {
-  今日: { period: "8月12日", service: 4800, product: 1180, discount: 300, salary: 4500, count: 3, label: "今日收入" },
-  本月: { period: "8月1日－8月31日", service: 38600, product: 7200, discount: 2100, salary: 36500, count: 12, label: "本月收入" },
-  指定日期或區間: { period: "8月10日－8月15日", service: 16800, product: 2360, discount: 900, salary: 15120, count: 6, label: "指定日期或區間收入" },
+const earningsRanges: Record<EarningsRange, { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string }> = {
+  今日: { period: "8月12日", service: 4800, product: 1180, selfUse: 1180, discount: 300, salary: 4500, count: 3, label: "今日收入" },
+  本月: { period: "8月1日－8月31日", service: 38600, product: 7200, selfUse: 2100, discount: 2100, salary: 41600, count: 12, label: "本月收入" },
+  指定日期或區間: { period: "8月10日－8月15日", service: 16800, product: 2360, selfUse: 3140, discount: 900, salary: 15120, count: 6, label: "指定日期或區間收入" },
 };
 
 export default function DesignerPreviewV2Page() {
@@ -273,6 +273,7 @@ export default function DesignerPreviewV2Page() {
         .summary-sub { color: #36a9ff; font-size: 12px; font-weight: 750; }
         .panel { padding: 16px; margin-bottom: 14px; }
         .income-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+        .income-detail-header .panel-label { color: #1478c8; font-size: 13px; letter-spacing: 0; }
         .detail-link-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; }
         .income-detail-list { display: grid; gap: 14px; }
         .income-detail-section { border: 1px solid #edf0f4; border-radius: 14px; background: #fff; overflow: hidden; }
@@ -283,6 +284,7 @@ export default function DesignerPreviewV2Page() {
         .income-detail-row em { color: #1478c8; font-style: normal; font-weight: 950; white-space: nowrap; }
         .breakdown-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #edf0f4; color: #374151; font-weight: 750; }
         .breakdown-row:last-child { border-bottom: none; color: #1478c8; font-weight: 900; }
+        .deduction-row { color: #ef244e; font-weight: 900; }
         .negative { color: #ef244e; }
         .final-card { display: flex; justify-content: space-between; align-items: center; padding: 18px 16px; font-weight: 950; }
         .final-amount { font-size: 25px; }
@@ -731,6 +733,7 @@ function EarningsView() {
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
   const currentRange = earningsRanges[activeRange];
   const totalPerformance = currentRange.service + currentRange.product;
+  const incomeLabel = `${activeRange === "指定日期或區間" ? "查詢" : activeRange}實際收入`;
 
   return (
     <>
@@ -749,7 +752,7 @@ function EarningsView() {
       </div>
       <div className="summary-grid">
         <div className="summary-card"><div className="summary-amount">NT$ {totalPerformance.toLocaleString()}</div><div className="summary-title">總業績</div><div className="summary-sub">服務業績 NT${currentRange.service.toLocaleString()} · 商品銷售 NT${currentRange.product.toLocaleString()}</div></div>
-        <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">實際薪資</div><div className="summary-sub">依抽成與獎金計算</div></div>
+        <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">{incomeLabel}</div><div className="summary-sub">扣除自領商品與折扣</div></div>
       </div>
       <section className="panel">
         <div className="income-detail-header">
@@ -759,10 +762,11 @@ function EarningsView() {
         <div className="breakdown-row"><span>服務業績</span><span>NT${currentRange.service.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>商品銷售</span><span>NT${currentRange.product.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>總業績</span><span>NT${totalPerformance.toLocaleString()}</span></div>
-        <div className="breakdown-row"><span>折扣金額</span><span className="negative">-NT${currentRange.discount.toLocaleString()}</span></div>
-        <div className="breakdown-row"><span>實際薪資</span><span>NT${currentRange.salary.toLocaleString()}</span></div>
+        <div className="breakdown-row deduction-row"><span>自領商品</span><span>-NT${currentRange.selfUse.toLocaleString()}</span></div>
+        <div className="breakdown-row deduction-row"><span>折扣金額</span><span>-NT${currentRange.discount.toLocaleString()}</span></div>
+        <div className="breakdown-row"><span>{incomeLabel}</span><span>NT${currentRange.salary.toLocaleString()}</span></div>
       </section>
-      <div className="final-card"><span>{activeRange}實際薪資</span><span className="final-amount">NT${currentRange.salary.toLocaleString()}</span></div>
+      <div className="final-card"><span>{incomeLabel}</span><span className="final-amount">NT${currentRange.salary.toLocaleString()}</span></div>
       {showRangePicker && (
         <RangePickerModal
           activeRange={activeRange}
