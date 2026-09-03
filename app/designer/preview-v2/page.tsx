@@ -861,7 +861,6 @@ function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: {
                 ) : (
                   <>
                     <span className="detail-meta">
-                      <span>{formatScheduleDateLabel(selectedDate)}</span>
                       {showDesigner && item.designer ? <span className="detail-name">{item.designer}</span> : null}
                     </span>
                     <strong className="detail-service">
