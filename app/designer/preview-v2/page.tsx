@@ -8,7 +8,18 @@ type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
 type EarningsRange = "今日" | "本月" | "指定日期或區間";
 type SettingsPanel = "profile" | "roster";
+type PendingRow = {
+  key: string;
+  id?: number;
+  date: string;
+  time: string;
+  name: string;
+  phone: string;
+  service: string;
+  detail: string;
+};
 type Appointment = {
+  id?: number;
   time: string;
   name: string;
   phone: string;
@@ -87,6 +98,29 @@ type BackendBooking = {
 };
 type BackendOffDay = { designer_id: number; off_date: string };
 type BackendOffSlot = { designer_id: number; slot_date: string; slot_time: string };
+type BackendServiceItem = { id?: number; name: string; amount?: number; original_amount?: number; discount?: number };
+type BackendTransaction = {
+  id: number;
+  booking_id?: number | null;
+  designer_id: number;
+  customer_name: string;
+  service_items?: BackendServiceItem[];
+  total_amount: number;
+  note?: string;
+  created_at: string;
+};
+type BackendProductUsage = {
+  designer_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  total_cost: number;
+  used_at: string;
+};
+type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
+type IncomeDetailRow = { name: string; item: string; amount: string };
+type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
+type IncomeDetailGroupsByRange = Record<EarningsRange, IncomeDetailGroup[]>;
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
@@ -101,9 +135,9 @@ const initialTodayRows: Appointment[] = [
   { time: "15:30", name: "Joey", phone: "0988-111-222", service: "護髮", status: "已完成", tone: "done", action: "查看", note: "頭皮較敏感。", image: "尚未上傳參考圖片" },
 ];
 
-const pendingRows = [
-  { date: "8/13（四）", time: "11:00", name: "Peggy", phone: "0920-xxx-xxx", service: "剪髮（含髮浴）", detail: "想剪短一點，保留瀏海。" },
-  { date: "8/14（五）", time: "16:30", name: "Alisa", phone: "0918-xxx-xxx", service: "設計染（L）", detail: "Please make the color natural brown." },
+const pendingRows: PendingRow[] = [
+  { key: "Peggy", date: "8/13（四）", time: "11:00", name: "Peggy", phone: "0920-xxx-xxx", service: "剪髮（含髮浴）", detail: "想剪短一點，保留瀏海。" },
+  { key: "Alisa", date: "8/14（五）", time: "16:30", name: "Alisa", phone: "0918-xxx-xxx", service: "設計染（L）", detail: "Please make the color natural brown." },
 ];
 
 const initialScheduleItems: Record<number, ScheduleItem[]> = {
@@ -162,7 +196,7 @@ const customerRecords: CustomerRecord[] = [
   { id: "joey", name: "Joey", phone: "0988-111-222", lastService: "HHN深層結構護髮", note: "髮尾乾，護髮停留時間可拉長。", lastVisit: "上次 8/02" },
 ];
 
-const earningsRanges: Record<EarningsRange, { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string }> = {
+const earningsRanges: Record<EarningsRange, EarningsData> = {
   今日: { period: "8月12日", service: 4800, product: 1180, selfUse: 1180, discount: 300, salary: 4500, count: 3, label: "今日收入" },
   本月: { period: "8月1日－8月31日", service: 38600, product: 7200, selfUse: 2100, discount: 2100, salary: 41600, count: 12, label: "本月收入" },
   指定日期或區間: { period: "8月10日－8月15日", service: 16800, product: 2360, selfUse: 3140, discount: 900, salary: 15120, count: 6, label: "指定日期或區間收入" },
@@ -175,7 +209,7 @@ export default function DesignerPreviewV2Page() {
   const [checkoutAppointment, setCheckoutAppointment] = useState<Appointment | null>(null);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [pendingDecisions, setPendingDecisions] = useState<Record<string, PendingDecision>>({});
-  const [selectedPending, setSelectedPending] = useState<(typeof pendingRows)[number] | null>(null);
+  const [selectedPending, setSelectedPending] = useState<PendingRow | null>(null);
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("月");
   const [selectedScheduleDate, setSelectedScheduleDate] = useState("2026-08-12");
   const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
@@ -188,6 +222,9 @@ export default function DesignerPreviewV2Page() {
   const [backendLoading, setBackendLoading] = useState(false);
   const [backendDesigners, setBackendDesigners] = useState<BackendDesigner[]>([]);
   const [backendServices, setBackendServices] = useState<BackendService[]>([]);
+  const [backendBookings, setBackendBookings] = useState<BackendBooking[]>([]);
+  const [backendTransactions, setBackendTransactions] = useState<BackendTransaction[]>([]);
+  const [backendProductUsage, setBackendProductUsage] = useState<BackendProductUsage[]>([]);
   const [backendScheduleItems, setBackendScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendLeaveItems, setBackendLeaveItems] = useState<Record<number, LeaveItem[]>>({});
@@ -212,13 +249,16 @@ export default function DesignerPreviewV2Page() {
     if (!sessionText) return;
     try {
       const session = JSON.parse(sessionText) as DesignerSession;
-      setBackendSession(session);
-      setBackendConnected(true);
-      setSelectedScheduleDate(new Date().toLocaleDateString("en-CA"));
-      loadBackendData(session);
+      queueMicrotask(() => {
+        setBackendSession(session);
+        setBackendConnected(true);
+        setSelectedScheduleDate(new Date().toLocaleDateString("en-CA"));
+        loadBackendData(session);
+      });
     } catch {
-      setBackendConnected(false);
+      queueMicrotask(() => setBackendConnected(false));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadBackendData(session: DesignerSession) {
@@ -229,10 +269,14 @@ export default function DesignerPreviewV2Page() {
       .neq("status", "cancelled")
       .order("booking_date")
       .order("booking_time");
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+    const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
+    const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
       supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
+      session.is_manager ? transactionQuery : transactionQuery.eq("designer_id", session.id),
+      session.is_manager ? productUsageQuery : productUsageQuery.eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
     ]);
@@ -240,12 +284,17 @@ export default function DesignerPreviewV2Page() {
     const designers = (designerData || []) as BackendDesigner[];
     const services = (serviceData || []) as BackendService[];
     const bookings = (bookingData || []) as BackendBooking[];
+    const transactions = (transactionData || []) as BackendTransaction[];
+    const productUsage = (productUsageData || []) as BackendProductUsage[];
     const offDays = (offDayData || []) as BackendOffDay[];
     const offSlots = (offSlotData || []) as BackendOffSlot[];
     const currentDesigner = designers.find((designer) => designer.id === session.id);
 
     setBackendDesigners(designers);
     setBackendServices(services);
+    setBackendBookings(bookings);
+    setBackendTransactions(transactions);
+    setBackendProductUsage(productUsage);
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
     setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
     setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
@@ -263,8 +312,16 @@ export default function DesignerPreviewV2Page() {
     setBackendLoading(false);
   }
 
-  function setDecision(name: string, decision: PendingDecision) {
-    setPendingDecisions((prev) => ({ ...prev, [name]: decision }));
+  async function setDecision(row: PendingRow, decision: PendingDecision) {
+    setPendingDecisions((prev) => ({ ...prev, [row.key]: decision }));
+    if (!backendConnected || !backendSession || !row.id) return;
+    const status = decision === "accepted" ? "confirmed" : decision === "declined" ? "cancelled" : "pending";
+    const { error } = await supabase.from("bookings").update({ status }).eq("id", row.id);
+    if (error) {
+      alert("預約狀態同步失敗，請稍後再試。");
+      return;
+    }
+    await loadBackendData(backendSession);
   }
 
   async function completeDemoBooking() {
@@ -373,7 +430,37 @@ export default function DesignerPreviewV2Page() {
     return publicUrl;
   }
 
-  const pendingCount = pendingRows.filter((row) => (pendingDecisions[row.name] || "pending") === "pending").length;
+  async function completeCheckout(draft: CheckoutDraft, total: number) {
+    if (!checkoutAppointment) return;
+    if (backendConnected && backendSession) {
+      const productSubtotal = Math.max(0, draft.productAmount - draft.productDiscount);
+      const noteRows = [
+        draft.note,
+        draft.productAmount > 0 ? `客人購買商品：生命果油 GS 120ml x1，單價NT$${draft.productAmount.toLocaleString()}，折扣NT$${draft.productDiscount.toLocaleString()}，小計NT$${productSubtotal.toLocaleString()}` : "",
+      ].filter(Boolean);
+      const { error } = await supabase.from("transactions").insert({
+        booking_id: checkoutAppointment.id || null,
+        designer_id: backendSession.id,
+        customer_name: checkoutAppointment.name || "現場客人",
+        service_items: [{
+          name: checkoutAppointment.service,
+          amount: Math.max(0, draft.serviceAmount - draft.serviceDiscount),
+          original_amount: draft.serviceAmount,
+          discount: draft.serviceDiscount,
+        }],
+        total_amount: total,
+        note: noteRows.join("\n"),
+        payment_method: draft.paymentMethod,
+      });
+      if (error) {
+        alert("結帳同步失敗，請稍後再試。");
+        return;
+      }
+      await loadBackendData(backendSession);
+    }
+    setCheckoutComplete(true);
+  }
+
   const activeScheduleItems = backendConnected ? backendScheduleItems : demoScheduleItems;
   const activeLeaveItems = backendConnected ? backendLeaveItems : demoLeaveItems;
   const activeTeamScheduleItems = backendConnected ? backendTeamScheduleItems : teamScheduleItems;
@@ -382,6 +469,11 @@ export default function DesignerPreviewV2Page() {
   const activeServiceOptions = backendConnected && backendServices.length > 0 ? backendServices.map((service) => service.name) : ["剪髮（含髮浴）", "質感燙＋剪髮", "設計染（M）", "HHN深層結構護髮"];
   const defaultBookingDate = backendConnected ? selectedScheduleDate : "2026-08-12";
   const defaultBookingService = activeServiceOptions[0] || "剪髮（含髮浴）";
+  const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : demoTodayRows;
+  const activePendingRows = backendConnected ? mapBookingsToPendingRows(backendBookings, backendServices) : pendingRows;
+  const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage) : earningsRanges;
+  const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage) : null;
+  const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
 
   return (
     <main className="preview-page">
@@ -393,18 +485,18 @@ export default function DesignerPreviewV2Page() {
             <SettingsView profile={designerProfile} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
-              {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "pending" && <PendingView decisions={pendingDecisions} pendingCount={pendingCount} onOpen={setSelectedPending} />}
+              {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
+              {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? true} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} />}
             </>
           )}
         </div>
-        <BottomTabs activeTab={activeTab} pendingCount={pendingCount} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
+        <BottomTabs activeTab={activeTab} pendingCount={activePendingCount} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
-      {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
-      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} onComplete={() => setCheckoutComplete(true)} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
+      {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
+      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
@@ -749,7 +841,6 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
   ).sort((a, b) => a.day - b.day);
 
   async function submitLeave() {
-    const day = Number(draft.date.split("-")[2]);
     const isFullDay = draft.type === "整天休假";
     const text = isFullDay ? "整天休假" : `${draft.startTime}-${draft.endTime} 不接客`;
     await onAddLeave(draft.date, { text, tone: isFullDay ? "day-off" : "blocked", designer: "Cherry" });
@@ -869,14 +960,14 @@ function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointme
   );
 }
 
-function PendingView({ decisions, pendingCount, onOpen }: { decisions: Record<string, PendingDecision>; pendingCount: number; onOpen: (row: (typeof pendingRows)[number]) => void }) {
+function PendingView({ rows, decisions, pendingCount, onOpen }: { rows: PendingRow[]; decisions: Record<string, PendingDecision>; pendingCount: number; onOpen: (row: PendingRow) => void }) {
   return (
     <>
       <h1 className="page-title">待確認</h1>
       <div className="page-subtitle">目前有 {pendingCount} 筆預約待回覆</div>
       <section className="pending-list">
-        {pendingRows.map((row) => {
-          const decision = decisions[row.name] || "pending";
+        {rows.map((row) => {
+          const decision = decisions[row.key] || "pending";
           return (
             <div className={`pending-card ${decision !== "pending" ? "is-done" : ""}`} key={`${row.time}-${row.name}`}>
               <div className="row-time">
@@ -935,15 +1026,15 @@ function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSour
         </div>
       </div>}
       {mode === "月" ? (
-        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} />
       ) : (
-        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} />
       )}
     </>
   );
 }
 
-function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onAddBooking }: { selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate }: { selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void }) {
   const [year, month] = selectedDate.split("-").map(Number);
   const selectedDay = Number(selectedDate.split("-")[2]);
   const selectedItems = getCalendarItems(selectedDay, scheduleItems, leaveItems);
@@ -976,12 +1067,12 @@ function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, 
         })}
       </div>
       <Legend />
-      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} showDesigner={showDesigner} onAddBooking={onAddBooking} />
+      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} showDesigner={showDesigner} />
     </>
   );
 }
 
-function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onAddBooking }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void }) {
   const rows = mode === "3日"
     ? [
       { day: "8/12（三）", date: "2026-08-12", items: ["10:30 Lynn 質感燙＋剪髮", "13:00 Mira 染髮（M）"] },
@@ -1018,12 +1109,12 @@ function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDe
         </div>
         <div className="selected-day-hint">先選日期，再新增</div>
       </section>
-      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(Number(selectedDate.split("-")[2]), scheduleItems, leaveItems)} showDesigner={showDesigner} onAddBooking={onAddBooking} />
+      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(Number(selectedDate.split("-")[2]), scheduleItems, leaveItems)} showDesigner={showDesigner} />
     </>
   );
 }
 
-function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: { selectedDate: string; items: CalendarItem[]; showDesigner: boolean; onAddBooking: (date: string, time?: string) => void }) {
+function SelectedDayPanel({ selectedDate, items, showDesigner }: { selectedDate: string; items: CalendarItem[]; showDesigner: boolean }) {
   return (
     <section className="compact-section">
       <div className="selected-day-title">
@@ -1074,11 +1165,11 @@ function Legend() {
   );
 }
 
-function EarningsView() {
+function EarningsView({ ranges, detailGroups }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
-  const currentRange = earningsRanges[activeRange];
+  const currentRange = ranges[activeRange];
   const totalPerformance = currentRange.service + currentRange.product;
   const incomeLabel = `${activeRange === "指定日期或區間" ? "查詢" : activeRange}實際收入`;
 
@@ -1119,17 +1210,18 @@ function EarningsView() {
             setActiveRange(range);
             setShowRangePicker(false);
           }}
+          ranges={ranges}
           onClose={() => setShowRangePicker(false)}
         />
       )}
-      {showIncomeDetails && <IncomeDetailsModal range={activeRange} onClose={() => setShowIncomeDetails(false)} />}
+      {showIncomeDetails && <IncomeDetailsModal range={activeRange} ranges={ranges} detailGroups={detailGroups} onClose={() => setShowIncomeDetails(false)} />}
     </>
   );
 }
 
-function IncomeDetailsModal({ range, onClose }: { range: EarningsRange; onClose: () => void }) {
-  const currentRange = earningsRanges[range];
-  const detailGroups = [
+function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: EarningsRange; ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; onClose: () => void }) {
+  const currentRange = ranges[range];
+  const fallbackGroups: IncomeDetailGroup[] = [
     {
       title: "服務明細",
       rows: [
@@ -1151,6 +1243,7 @@ function IncomeDetailsModal({ range, onClose }: { range: EarningsRange; onClose:
       ],
     },
   ];
+  const visibleGroups = detailGroups?.[range] || fallbackGroups;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -1163,16 +1256,16 @@ function IncomeDetailsModal({ range, onClose }: { range: EarningsRange; onClose:
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="income-detail-list">
-          {detailGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <section className="income-detail-section" key={group.title}>
               <div className="income-detail-title">{group.title}</div>
-              {group.rows.map((row) => (
+              {group.rows.length > 0 ? group.rows.map((row) => (
                 <div className="income-detail-row" key={`${group.title}-${row.name}-${row.item}`}>
                   <strong>{row.name}</strong>
                   <span>{row.item}</span>
                   <em>{row.amount}</em>
                 </div>
-              ))}
+              )) : <div className="income-detail-row"><strong>-</strong><span>目前沒有明細</span><em>-</em></div>}
             </section>
           ))}
         </div>
@@ -1181,7 +1274,7 @@ function IncomeDetailsModal({ range, onClose }: { range: EarningsRange; onClose:
   );
 }
 
-function RangePickerModal({ activeRange, onSelect, onClose }: { activeRange: EarningsRange; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
+function RangePickerModal({ activeRange, ranges, onSelect, onClose }: { activeRange: EarningsRange; ranges: Record<EarningsRange, EarningsData>; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
@@ -1196,7 +1289,7 @@ function RangePickerModal({ activeRange, onSelect, onClose }: { activeRange: Ear
           {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((range) => (
             <button className={`range-option ${activeRange === range ? "selected" : ""}`} key={range} onClick={() => onSelect(range)}>
               <span>{range}</span>
-              <small>{earningsRanges[range].period}</small>
+              <small>{ranges[range].period}</small>
             </button>
           ))}
         </div>
@@ -1231,7 +1324,7 @@ function AppointmentModal({ row, onClose }: { row: Appointment; onClose: () => v
   );
 }
 
-function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: (typeof pendingRows)[number]; decision: PendingDecision; onDecide: (name: string, decision: PendingDecision) => void; onClose: () => void }) {
+function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: PendingRow; decision: PendingDecision; onDecide: (row: PendingRow, decision: PendingDecision) => void | Promise<void>; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
@@ -1250,8 +1343,8 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: (typeo
         </div>
         {decision === "pending" ? (
           <div className="modal-action-row">
-            <button className="secondary-modal-btn" onClick={() => { onDecide(row.name, "declined"); onClose(); }}>婉拒預約</button>
-            <button className="primary-modal-btn" onClick={() => { onDecide(row.name, "accepted"); onClose(); }}>接受預約</button>
+            <button className="secondary-modal-btn" onClick={async () => { await onDecide(row, "declined"); onClose(); }}>婉拒預約</button>
+            <button className="primary-modal-btn" onClick={async () => { await onDecide(row, "accepted"); onClose(); }}>接受預約</button>
           </div>
         ) : (
           <div className={`decision-note ${decision}`}>{decision === "accepted" ? "此預約已接受" : "此預約已婉拒"}</div>
@@ -1261,7 +1354,7 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: (typeo
   );
 }
 
-function CheckoutModal({ row, complete, onComplete, onClose }: { row: Appointment; complete: boolean; onComplete: () => void; onClose: () => void }) {
+function CheckoutModal({ row, complete, isSynced, onComplete, onClose }: { row: Appointment; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
   const [draft, setDraft] = useState<CheckoutDraft>({
     serviceAmount: 3000,
     serviceDiscount: 0,
@@ -1278,8 +1371,8 @@ function CheckoutModal({ row, complete, onComplete, onClose }: { row: Appointmen
         <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
           <div className="complete-state">
             <div className="complete-icon">✓</div>
-            <div className="modal-title">結帳完成</div>
-            <div className="modal-subtitle">{row.name} 的服務已完成，此為暫存預覽，不會寫入正式資料。</div>
+            <div className="modal-title">{isSynced ? "結帳已同步完成" : "結帳完成"}</div>
+            <div className="modal-subtitle">{isSynced ? `${row.name} 的交易已寫入後台，今日與收入會同步更新。` : `${row.name} 的服務已完成，此為暫存預覽，不會寫入正式資料。`}</div>
           </div>
           <div className="amount-preview"><span>本次總額</span><strong>NT${total.toLocaleString()}</strong></div>
           <div className="modal-action-row">
@@ -1321,7 +1414,7 @@ function CheckoutModal({ row, complete, onComplete, onClose }: { row: Appointmen
         <div className="amount-preview"><span>客人應收總額</span><strong>NT${total.toLocaleString()}</strong></div>
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>稍後處理</button>
-          <button className="primary-modal-btn" onClick={onComplete}>建立暫存交易</button>
+          <button className="primary-modal-btn" onClick={() => onComplete(draft, total)}>{isSynced ? "建立並同步交易" : "建立暫存交易"}</button>
         </div>
       </div>
     </div>
@@ -1535,6 +1628,111 @@ function mapLeavesToCalendar(offDays: BackendOffDay[], offSlots: BackendOffSlot[
   return records;
 }
 
+function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: BackendTransaction[], services: BackendService[], designerId?: number): Appointment[] {
+  const today = new Date().toLocaleDateString("en-CA");
+  const paidBookingIds = new Set(transactions.map((transaction) => transaction.booking_id).filter(Boolean));
+  return bookings
+    .filter((booking) => booking.booking_date === today)
+    .filter((booking) => !designerId || booking.designer_id === designerId)
+    .filter((booking) => booking.status !== "pending" && booking.status !== "cancelled")
+    .map((booking) => {
+      const isDone = paidBookingIds.has(booking.id);
+      const isProgress = !isDone && isTimeStarted(booking.booking_time);
+      return {
+        id: booking.id,
+        time: booking.booking_time,
+        name: booking.customer_name || "訪客",
+        phone: booking.customer_phone || "未填電話",
+        service: getServiceNamesFromBackend(booking.service_ids || [], services),
+        status: isDone ? "已完成" : isProgress ? "服務中" : "即將到來",
+        tone: isDone ? "done" : isProgress ? "progress" : "upcoming",
+        action: isProgress ? "結帳" : "查看",
+        note: booking.note || "未填備註",
+        image: "尚未上傳參考圖片",
+      } satisfies Appointment;
+    })
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
+function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendService[]): PendingRow[] {
+  return bookings
+    .filter((booking) => booking.status === "pending")
+    .map((booking) => ({
+      key: String(booking.id),
+      id: booking.id,
+      date: formatScheduleDateLabel(booking.booking_date),
+      time: booking.booking_time,
+      name: booking.customer_name || "訪客",
+      phone: booking.customer_phone || "未填電話",
+      service: getServiceNamesFromBackend(booking.service_ids || [], services),
+      detail: booking.note || "未填備註",
+    }))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+}
+
+function buildEarningsRanges(transactions: BackendTransaction[], productUsage: BackendProductUsage[]): Record<EarningsRange, EarningsData> {
+  return {
+    今日: summarizeEarningsRange("今日", transactions, productUsage),
+    本月: summarizeEarningsRange("本月", transactions, productUsage),
+    指定日期或區間: summarizeEarningsRange("指定日期或區間", transactions, productUsage),
+  };
+}
+
+function buildIncomeDetailGroups(transactions: BackendTransaction[], productUsage: BackendProductUsage[]): IncomeDetailGroupsByRange {
+  return {
+    今日: buildIncomeDetailGroupsForRange("今日", transactions, productUsage),
+    本月: buildIncomeDetailGroupsForRange("本月", transactions, productUsage),
+    指定日期或區間: buildIncomeDetailGroupsForRange("指定日期或區間", transactions, productUsage),
+  };
+}
+
+function summarizeEarningsRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[]): EarningsData {
+  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range));
+  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range));
+  const service = rangeTransactions.reduce((total, transaction) => total + getServiceGross(transaction), 0);
+  const product = rangeTransactions.reduce((total, transaction) => total + getProductSaleTotal(transaction.note || ""), 0);
+  const serviceDiscount = rangeTransactions.reduce((total, transaction) => total + getServiceDiscount(transaction), 0);
+  const productDiscount = rangeTransactions.reduce((total, transaction) => total + getProductDiscountTotal(transaction.note || ""), 0);
+  const selfUse = rangeProductUsage.reduce((total, usage) => total + Number(usage.total_cost || 0), 0);
+  const discount = serviceDiscount + productDiscount;
+  return {
+    period: getEarningsPeriodLabel(range),
+    service,
+    product,
+    selfUse,
+    discount,
+    salary: Math.max(0, service + product - selfUse - discount),
+    count: rangeTransactions.length,
+    label: `${range === "指定日期或區間" ? "查詢" : range}收入`,
+  };
+}
+
+function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[]): IncomeDetailGroup[] {
+  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range));
+  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range));
+  const serviceRows = rangeTransactions.flatMap((transaction) =>
+    (transaction.service_items || []).map((service) => ({
+      name: transaction.customer_name || "訪客",
+      item: service.name,
+      amount: formatCurrency(Number(service.original_amount || service.amount || 0)),
+    }))
+  );
+  const productRows = rangeTransactions.flatMap((transaction) =>
+    extractProductSaleRows(transaction.note || "", transaction.customer_name || "訪客")
+  );
+  const selfUseRows = rangeProductUsage.map((usage) => ({
+    name: "自領",
+    item: `${usage.product_name} x${usage.quantity || 1}`,
+    amount: formatCurrency(Number(usage.total_cost || 0)),
+  }));
+
+  return [
+    { title: "服務明細", rows: serviceRows },
+    { title: "商品銷售明細", rows: productRows },
+    { title: "自領商品明細", rows: selfUseRows },
+  ];
+}
+
 function getServiceNamesFromBackend(ids: number[], services: BackendService[]) {
   if (!ids.length) return "預約";
   return ids.map((id) => services.find((service) => service.id === id)?.name).filter(Boolean).join("、") || "預約";
@@ -1552,6 +1750,74 @@ function formatScheduleDateLabel(date: string) {
   const parsedDate = new Date(`${date}T00:00:00+08:00`);
   const weekday = ["日", "一", "二", "三", "四", "五", "六"][parsedDate.getDay()];
   return `${parsedDate.getMonth() + 1}/${parsedDate.getDate()}（${weekday}）`;
+}
+
+function isTimeStarted(time: string) {
+  const today = new Date();
+  const [hour, minute] = time.split(":").map(Number);
+  return today.getHours() > hour || (today.getHours() === hour && today.getMinutes() >= minute);
+}
+
+function getEarningsPeriodLabel(range: EarningsRange) {
+  const today = new Date();
+  if (range === "今日") return `${today.getMonth() + 1}月${today.getDate()}日`;
+  if (range === "本月") return `${today.getMonth() + 1}月1日－${today.getMonth() + 1}月${new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()}日`;
+  const start = new Date(today);
+  start.setDate(today.getDate() - 6);
+  return `${start.getMonth() + 1}月${start.getDate()}日－${today.getMonth() + 1}月${today.getDate()}日`;
+}
+
+function isDateInEarningsRange(dateText: string, range: EarningsRange) {
+  const targetDate = new Date(dateText);
+  const today = new Date();
+  if (Number.isNaN(targetDate.getTime())) return false;
+  if (range === "今日") return targetDate.toLocaleDateString("en-CA") === today.toLocaleDateString("en-CA");
+  if (range === "本月") return targetDate.getFullYear() === today.getFullYear() && targetDate.getMonth() === today.getMonth();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(today);
+  end.setHours(23, 59, 59, 999);
+  return targetDate >= start && targetDate <= end;
+}
+
+function getServiceGross(transaction: BackendTransaction) {
+  return (transaction.service_items || []).reduce((total, service) => total + Number(service.original_amount || service.amount || 0), 0);
+}
+
+function getServiceDiscount(transaction: BackendTransaction) {
+  return (transaction.service_items || []).reduce((total, service) => total + Number(service.discount || 0), 0);
+}
+
+function getProductSaleTotal(note: string) {
+  return extractProductSaleRows(note, "").reduce((total, row) => total + parseCurrency(row.amount), 0);
+}
+
+function getProductDiscountTotal(note: string) {
+  const matches = [...note.matchAll(/商品折扣NT\$?([\d,]+)/g)];
+  return matches.reduce((total, match) => total + Number(match[1].replace(/,/g, "")), 0);
+}
+
+function extractProductSaleRows(note: string, customerName: string): IncomeDetailRow[] {
+  const productSection = note.split("客人購買商品：")[1];
+  if (!productSection) return [];
+  return productSection
+    .split("、")
+    .map((item) => {
+      const amountMatch = item.match(/小計NT\$?([\d,]+)/);
+      const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 0;
+      const itemName = item.replace(/，?小計NT\$?[\d,]+.*/, "").trim();
+      return { name: customerName, item: itemName || "商品銷售", amount: formatCurrency(amount) };
+    })
+    .filter((row) => parseCurrency(row.amount) > 0);
+}
+
+function formatCurrency(amount: number) {
+  return `NT$${Math.max(0, amount).toLocaleString()}`;
+}
+
+function parseCurrency(text: string) {
+  return Number(text.replace(/[^\d]/g, "")) || 0;
 }
 
 function getCalendarItems(day: number, scheduleItems: Record<number, ScheduleItem[]>, leaveItems: Record<number, LeaveItem[]>): CalendarItem[] {
