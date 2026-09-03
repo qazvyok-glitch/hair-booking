@@ -502,6 +502,14 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
 }
 
 function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointment[]; onView: (row: Appointment) => void; onCheckout: (row: Appointment) => void; onAddBooking: () => void }) {
+  const statusCounts = rows.reduce(
+    (counts, row) => ({
+      ...counts,
+      [row.tone]: counts[row.tone] + 1,
+    }),
+    { progress: 0, upcoming: 0, done: 0 }
+  );
+
   return (
     <>
       <div className="page-heading-row">
@@ -512,9 +520,9 @@ function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointme
         <button className="add-booking-btn" onClick={onAddBooking}>＋新增預約</button>
       </div>
       <div className="status-line">
-        <span className="progress-text"><i className="dot progress-dot" />服務中：1</span>
-        <span className="upcoming-text"><i className="dot upcoming-dot" />即將到來：3</span>
-        <span className="done-text"><i className="dot done-dot" />已完成：2</span>
+        <span className="progress-text"><i className="dot progress-dot" />服務中：{statusCounts.progress}</span>
+        <span className="upcoming-text"><i className="dot upcoming-dot" />即將到來：{statusCounts.upcoming}</span>
+        <span className="done-text"><i className="dot done-dot" />已完成：{statusCounts.done}</span>
       </div>
       <section className="list-card">
         {rows.map((row) => (
