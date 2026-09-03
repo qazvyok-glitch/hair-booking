@@ -43,9 +43,9 @@ type CustomerRecord = {
   note: string;
   lastVisit: string;
 };
-type ScheduleItem = { text: string; tone: string; designer?: string };
+type ScheduleItem = { text: string; tone: string; designer?: string; customer?: string };
 type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string };
-type CalendarItem = { text: string; tone: string; designer?: string; category?: "booking" | "leave" };
+type CalendarItem = { text: string; tone: string; designer?: string; customer?: string; category?: "booking" | "leave" };
 type LeaveDraft = {
   date: string;
   type: "整天休假" | "指定時段不接客";
@@ -80,29 +80,29 @@ const pendingRows = [
 ];
 
 const initialScheduleItems: Record<number, ScheduleItem[]> = {
-  5: [{ text: "10:00 剪髮", tone: "cut", designer: "Cherry" }],
-  8: [{ text: "13:00 染髮", tone: "color", designer: "Cherry" }],
-  10: [{ text: "15:30 護髮", tone: "treatment", designer: "Cherry" }],
+  5: [{ text: "10:00 剪髮", tone: "cut", designer: "Cherry", customer: "Nina" }],
+  8: [{ text: "13:00 染髮", tone: "color", designer: "Cherry", customer: "Ivy" }],
+  10: [{ text: "15:30 護髮", tone: "treatment", designer: "Cherry", customer: "Kelly" }],
   12: [
-    { text: "10:30 質感燙＋剪髮", tone: "perm", designer: "Cherry" },
-    { text: "13:00 染髮", tone: "color", designer: "Cherry" },
-    { text: "15:30 護髮", tone: "treatment", designer: "Cherry" },
+    { text: "10:30 質感燙＋剪髮", tone: "perm", designer: "Cherry", customer: "Lynn" },
+    { text: "13:00 染髮", tone: "color", designer: "Cherry", customer: "Mira" },
+    { text: "15:30 護髮", tone: "treatment", designer: "Cherry", customer: "Joey" },
   ],
-  20: [{ text: "11:00 燙髮", tone: "perm", designer: "Cherry" }],
+  20: [{ text: "11:00 燙髮", tone: "perm", designer: "Cherry", customer: "Peggy" }],
 };
 
 const teamScheduleItems: Record<number, ScheduleItem[]> = {
-  3: [{ text: "11:00 Emma 剪髮", tone: "team-a", designer: "Emma" }],
-  5: [{ text: "14:00 Mira 染髮", tone: "team-b", designer: "Mira" }],
+  3: [{ text: "11:00 Emma 剪髮", tone: "team-a", designer: "Emma", customer: "Annie" }],
+  5: [{ text: "14:00 Mira 染髮", tone: "team-b", designer: "Mira", customer: "Ruby" }],
   7: [
-    { text: "10:00 Lynn 護髮", tone: "team-c", designer: "Lynn" },
-    { text: "15:30 Emma 燙髮", tone: "team-a", designer: "Emma" },
+    { text: "10:00 Lynn 護髮", tone: "team-c", designer: "Lynn", customer: "Cindy" },
+    { text: "15:30 Emma 燙髮", tone: "team-a", designer: "Emma", customer: "Bella" },
   ],
   12: [
-    { text: "11:30 Lynn 染髮", tone: "team-c", designer: "Lynn" },
-    { text: "16:00 Mira 剪髮", tone: "team-b", designer: "Mira" },
+    { text: "11:30 Lynn 染髮", tone: "team-c", designer: "Lynn", customer: "Ariel" },
+    { text: "16:00 Mira 剪髮", tone: "team-b", designer: "Mira", customer: "Semira" },
   ],
-  18: [{ text: "13:00 Emma 質感燙", tone: "team-a", designer: "Emma" }],
+  18: [{ text: "13:00 Emma 質感燙", tone: "team-a", designer: "Emma", customer: "Tina" }],
 };
 
 const initialLeaveItems: Record<number, LeaveItem[]> = {
@@ -182,7 +182,7 @@ export default function DesignerPreviewV2Page() {
     const day = Number(bookingDraft.date.split("-")[2]);
     const isOwnBooking = bookingDraft.designer === "Cherry";
     const scheduleText = isOwnBooking ? `${bookingDraft.time} ${serviceLabel}` : `${bookingDraft.time} ${bookingDraft.designer} ${serviceLabel}`;
-    const scheduleItem = { text: scheduleText, tone: isOwnBooking ? getServiceTone(bookingDraft.service) : getTeamTone(bookingDraft.designer), designer: bookingDraft.designer };
+    const scheduleItem = { text: scheduleText, tone: isOwnBooking ? getServiceTone(bookingDraft.service) : getTeamTone(bookingDraft.designer), designer: bookingDraft.designer, customer: bookingDraft.name || "新顧客" };
 
     setDemoScheduleItems((prev) => ({
       ...prev,
@@ -333,7 +333,10 @@ export default function DesignerPreviewV2Page() {
         .timeline-row.can-add { cursor: pointer; }
         .timeline-row:last-child { border-bottom: none; }
         .leave-timeline-row .row-time, .leave-timeline-row .row-service { color: #126dc2; font-weight: 950; }
-        .detail-designer-name { display: inline-flex; align-items: center; margin-right: 8px; color: #1f2937; font-size: 13px; font-weight: 950; }
+        .schedule-detail { display: flex; flex-direction: column; gap: 3px; }
+        .detail-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: #8b95a3; font-size: 12px; font-weight: 850; line-height: 1.3; }
+        .detail-name { color: #1f2937; font-size: 13px; font-weight: 950; }
+        .detail-service { color: #1f2937; font-size: 14px; font-weight: 950; line-height: 1.35; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
         .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); font: inherit; }
@@ -848,12 +851,22 @@ function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: {
           const isLeave = item.category === "leave";
           const rawDetail = isLeave ? item.text : serviceParts.join(" ");
           const detail = showDesigner && item.designer ? rawDetail.replace(new RegExp(`^${item.designer}\\s*`), "") : rawDetail;
+          const detailNames = [showDesigner ? item.designer : null, item.customer].filter(Boolean);
           return (
-            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}`}>
+            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}-${item.customer || ""}`}>
               <div className="row-time">{isLeave ? "排休" : time}</div>
-              <div className="row-service">
-                {showDesigner && item.designer ? <span className="detail-designer-name">{item.designer}</span> : null}
-                <span>{detail}</span>
+              <div className="row-service schedule-detail">
+                {isLeave ? (
+                  <span>{detail}</span>
+                ) : (
+                  <>
+                    <span className="detail-meta">
+                      <span>{formatScheduleDateLabel(selectedDate)}</span>
+                      {detailNames.map((name) => <span className="detail-name" key={name}>{name}</span>)}
+                    </span>
+                    <strong className="detail-service">{detail}</strong>
+                  </>
+                )}
               </div>
             </div>
           );
