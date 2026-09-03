@@ -766,12 +766,10 @@ function EarningsView() {
         </div>
         <div className="breakdown-row"><span>服務業績</span><span>NT${currentRange.service.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>商品銷售</span><span>NT${currentRange.product.toLocaleString()}</span></div>
-        <div className="breakdown-row"><span>總業績</span><span>NT${totalPerformance.toLocaleString()}</span></div>
         <div className="breakdown-row deduction-row"><span>自領商品</span><span>-NT${currentRange.selfUse.toLocaleString()}</span></div>
         <div className="breakdown-row deduction-row"><span>折扣金額</span><span>-NT${currentRange.discount.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>{incomeLabel}</span><span>NT${currentRange.salary.toLocaleString()}</span></div>
       </section>
-      <div className="final-card"><span>{incomeLabel}</span><span className="final-amount">NT${currentRange.salary.toLocaleString()}</span></div>
       {showRangePicker && (
         <RangePickerModal
           activeRange={activeRange}
