@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
@@ -51,6 +51,13 @@ type LeaveDraft = {
   endTime: string;
   note: string;
 };
+type DesignerProfile = {
+  name: string;
+  role: string;
+  phone: string;
+  specialties: string;
+  avatarUrl: string;
+};
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
@@ -88,6 +95,16 @@ const initialLeaveItems: Record<number, LeaveItem[]> = {
   24: [{ text: "上午不接客", tone: "blocked" }],
 };
 
+const initialDesignerProfile: DesignerProfile = {
+  name: "Cherry",
+  role: "設計師",
+  phone: "0912-345-678",
+  specialties: "剪髮、染髮、燙髮、護髮",
+  avatarUrl: "",
+};
+
+const designerProfileStorageKey = "bc-designer-preview-v2-profile";
+
 const customerRecords: CustomerRecord[] = [
   { id: "lynn", name: "Lynn", phone: "0920-262-570", lastService: "質感燙＋剪髮", note: "喜歡自然蓬鬆，瀏海不要剪太短。", lastVisit: "上次 7/10" },
   { id: "mira", name: "Mira", phone: "0912-345-678", lastService: "染髮（M）", note: "偏冷棕，不要太亮；頭皮較敏感。", lastVisit: "上次 7/24" },
@@ -115,6 +132,20 @@ export default function DesignerPreviewV2Page() {
   const [demoTodayRows, setDemoTodayRows] = useState<Appointment[]>(initialTodayRows);
   const [demoScheduleItems, setDemoScheduleItems] = useState<Record<number, ScheduleItem[]>>(initialScheduleItems);
   const [demoLeaveItems, setDemoLeaveItems] = useState<Record<number, LeaveItem[]>>(initialLeaveItems);
+  const [designerProfile, setDesignerProfile] = useState<DesignerProfile>(() => {
+    if (typeof window === "undefined") return initialDesignerProfile;
+    const savedProfile = window.localStorage.getItem(designerProfileStorageKey);
+    if (!savedProfile) return initialDesignerProfile;
+    try {
+      return { ...initialDesignerProfile, ...JSON.parse(savedProfile) };
+    } catch {
+      return initialDesignerProfile;
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(designerProfileStorageKey, JSON.stringify(designerProfile));
+  }, [designerProfile]);
 
   function setDecision(name: string, decision: PendingDecision) {
     setPendingDecisions((prev) => ({ ...prev, [name]: decision }));
@@ -164,10 +195,10 @@ export default function DesignerPreviewV2Page() {
   return (
     <main className="preview-page">
       <section className="phone-shell">
-        <Header onOpenSettings={() => setShowSettings(true)} />
+        <Header profile={designerProfile} onOpenSettings={() => setShowSettings(true)} />
         <div className="screen-body">
           {showSettings ? (
-            <SettingsView leaveItems={demoLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
+            <SettingsView profile={designerProfile} onProfileChange={setDesignerProfile} leaveItems={demoLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
@@ -190,8 +221,12 @@ export default function DesignerPreviewV2Page() {
         .top-bar { height: 72px; background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex: 0 0 auto; }
         .brand-area { display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; }
         .brand-area:focus-visible { outline: 2px solid #148bd8; outline-offset: 4px; border-radius: 14px; }
-        .logo { width: 42px; height: 42px; border-radius: 50%; background: #050505; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; letter-spacing: -.04em; position: relative; }
+        .logo { width: 42px; height: 42px; border-radius: 50%; background: #050505; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; letter-spacing: -.04em; position: relative; overflow: hidden; flex: 0 0 auto; }
         .logo::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #9b1f1f; position: absolute; right: 9px; bottom: 8px; box-shadow: -7px 0 0 #c92d2d; }
+        .logo.has-avatar::after { display: none; }
+        .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .large-avatar { width: 64px; height: 64px; font-size: 24px; }
+        .large-avatar::after { width: 10px; height: 10px; right: 13px; bottom: 12px; box-shadow: -10px 0 0 #c92d2d; }
         .designer-identity { display: flex; flex-direction: column; }
         .designer-name { font-size: 18px; font-weight: 850; line-height: 1.05; }
         .designer-role { font-size: 13px; color: #6b7280; margin-top: 4px; font-weight: 650; }
@@ -296,6 +331,16 @@ export default function DesignerPreviewV2Page() {
         .settings-card-title { font-size: 15px; font-weight: 950; margin-bottom: 6px; }
         .settings-card-desc { color: #6b7280; font-size: 12px; font-weight: 750; line-height: 1.45; }
         .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .profile-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .avatar-upload-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 9px 12px; font-size: 12px; font-weight: 950; cursor: pointer; }
+        .avatar-upload-btn input { display: none; }
+        .profile-input-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
+        .profile-input-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
+        .profile-input-card input { width: 100%; border: none; background: transparent; color: #1f2937; font-size: 14px; font-weight: 850; outline: none; font-family: inherit; }
+        .customer-profile-preview { border: 1px solid #edf0f4; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+        .customer-designer-card { display: flex; align-items: center; gap: 10px; }
+        .customer-designer-card strong { display: block; color: #1f2937; font-size: 16px; font-weight: 950; margin-bottom: 3px; }
+        .customer-designer-card span { color: #6b7280; font-size: 12px; font-weight: 800; line-height: 1.35; }
         .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
         .full-width-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 14px; padding: 13px 0; font-size: 14px; font-weight: 950; cursor: pointer; }
         .roster-calendar { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
@@ -372,14 +417,14 @@ export default function DesignerPreviewV2Page() {
   );
 }
 
-function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
+function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenSettings: () => void }) {
   return (
     <header className="top-bar">
       <button className="brand-area" onClick={onOpenSettings} aria-label="開啟個人設定">
-        <div className="logo">BC</div>
+        <AvatarPreview avatarUrl={profile.avatarUrl} />
         <span className="designer-identity">
-          <span className="designer-name">Cherry</span>
-          <span className="designer-role">設計師</span>
+          <span className="designer-name">{profile.name}</span>
+          <span className="designer-role">{profile.role}</span>
         </span>
       </button>
       <button className="logout-btn">登出</button>
@@ -387,7 +432,7 @@ function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
-function SettingsView({ leaveItems, onAddLeave, onBack }: { leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void; onBack: () => void }) {
+function SettingsView({ profile, onProfileChange, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void; leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void; onBack: () => void }) {
   const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
 
   return (
@@ -409,23 +454,62 @@ function SettingsView({ leaveItems, onAddLeave, onBack }: { leaveItems: Record<n
           <div className="settings-card-desc">查看已安排休假</div>
         </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
+      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} onProfileChange={onProfileChange} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
     </>
   );
 }
 
-function ProfileSettingsPanel() {
+function ProfileSettingsPanel({ profile, onProfileChange }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void }) {
+  const [draft, setDraft] = useState(profile);
+  const [saved, setSaved] = useState(false);
+
+  function updateDraft(key: keyof DesignerProfile, value: string) {
+    setSaved(false);
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function changeAvatar(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateDraft("avatarUrl", String(reader.result || ""));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function saveProfile() {
+    onProfileChange(draft);
+    setSaved(true);
+  }
+
   return (
     <section className="panel">
       <div className="panel-label">個人資料</div>
-      <div className="profile-grid">
-        <DetailCard label="顯示名稱" value="Cherry" />
-        <DetailCard label="職稱" value="設計師" />
-        <DetailCard label="電話" value="0912-345-678" />
-        <DetailCard label="專長" value="剪髮、染髮、燙髮、護髮" />
+      <div className="profile-editor-head">
+        <AvatarPreview avatarUrl={draft.avatarUrl} size="large" />
+        <label className="avatar-upload-btn">
+          變更大頭照
+          <input type="file" accept="image/*" onChange={(event) => changeAvatar(event.target.files?.[0] || null)} />
+        </label>
       </div>
-      <div className="profile-note">這裡之後可以放設計師自己的簡介、作品集連結、可預約服務與通知設定。此頁目前是 V2 示意，不會寫入正式資料。</div>
-      <button className="full-width-btn">編輯個人資訊</button>
+      <div className="profile-grid">
+        <ProfileInput label="顯示名稱" value={draft.name} onChange={(value) => updateDraft("name", value)} />
+        <ProfileInput label="職稱" value={draft.role} onChange={(value) => updateDraft("role", value)} />
+        <ProfileInput label="電話" value={draft.phone} onChange={(value) => updateDraft("phone", value)} />
+        <ProfileInput label="專長" value={draft.specialties} onChange={(value) => updateDraft("specialties", value)} />
+      </div>
+      <div className="customer-profile-preview">
+        <div className="panel-label">顧客預約端顯示預覽</div>
+        <div className="customer-designer-card">
+          <AvatarPreview avatarUrl={draft.avatarUrl} />
+          <div>
+            <strong>{draft.name}</strong>
+            <span>{draft.role} · {draft.specialties}</span>
+          </div>
+        </div>
+      </div>
+      <div className="profile-note">此頁目前是 V2 示意。正式版會將大頭照與個人資料儲存後，同步顯示在顧客預約端的設計師選擇畫面。</div>
+      <button className="full-width-btn" onClick={saveProfile}>{saved ? "已更新個人資訊" : "儲存個人資訊"}</button>
     </section>
   );
 }
@@ -1154,6 +1238,23 @@ function DetailCard({ label, value }: { label: string; value: string }) {
       <div className="detail-label">{label}</div>
       <div className="detail-value">{value}</div>
     </div>
+  );
+}
+
+function AvatarPreview({ avatarUrl, size = "default" }: { avatarUrl: string; size?: "default" | "large" }) {
+  return (
+    <div className={`logo ${avatarUrl ? "has-avatar" : ""} ${size === "large" ? "large-avatar" : ""}`}>
+      {avatarUrl ? <img src={avatarUrl} alt="設計師大頭照" /> : "BC"}
+    </div>
+  );
+}
+
+function ProfileInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="profile-input-card">
+      <span>{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
   );
 }
 
