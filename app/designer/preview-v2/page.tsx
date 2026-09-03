@@ -45,7 +45,7 @@ type CustomerRecord = {
 };
 type ScheduleItem = { text: string; tone: string; designer?: string };
 type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string };
-type CalendarItem = { text: string; tone: string; category?: "booking" | "leave" };
+type CalendarItem = { text: string; tone: string; designer?: string; category?: "booking" | "leave" };
 type LeaveDraft = {
   date: string;
   type: "整天休假" | "指定時段不接客";
@@ -333,6 +333,7 @@ export default function DesignerPreviewV2Page() {
         .timeline-row.can-add { cursor: pointer; }
         .timeline-row:last-child { border-bottom: none; }
         .leave-timeline-row .row-time, .leave-timeline-row .row-service { color: #126dc2; font-weight: 950; }
+        .detail-designer-name { display: inline-flex; align-items: center; margin-right: 8px; color: #1f2937; font-size: 13px; font-weight: 950; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
         .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); font: inherit; }
@@ -752,15 +753,15 @@ function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeCha
         </div>
       </div>
       {mode === "月" ? (
-        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
       ) : (
-        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
       )}
     </>
   );
 }
 
-function MonthSchedule({ selectedDate, scheduleItems, leaveItems, onSelectDate, onAddBooking }: { selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onAddBooking }: { selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
   const selectedDay = Number(selectedDate.split("-")[2]);
   const selectedItems = getCalendarItems(selectedDay, scheduleItems, leaveItems);
 
@@ -788,12 +789,12 @@ function MonthSchedule({ selectedDate, scheduleItems, leaveItems, onSelectDate, 
         })}
       </div>
       <Legend />
-      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} onAddBooking={onAddBooking} />
+      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} showDesigner={showDesigner} onAddBooking={onAddBooking} />
     </>
   );
 }
 
-function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, onSelectDate, onAddBooking }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onAddBooking }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; showDesigner: boolean; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
   const rows = mode === "3日"
     ? [
       { day: "8/12（三）", date: "2026-08-12", items: ["10:30 Lynn 質感燙＋剪髮", "13:00 Mira 染髮（M）"] },
@@ -830,12 +831,12 @@ function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, onSele
         </div>
         <div className="selected-day-hint">先選日期，再新增</div>
       </section>
-      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(Number(selectedDate.split("-")[2]), scheduleItems, leaveItems)} onAddBooking={onAddBooking} />
+      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(Number(selectedDate.split("-")[2]), scheduleItems, leaveItems)} showDesigner={showDesigner} onAddBooking={onAddBooking} />
     </>
   );
 }
 
-function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate: string; items: CalendarItem[]; onAddBooking: (date: string, time?: string) => void }) {
+function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: { selectedDate: string; items: CalendarItem[]; showDesigner: boolean; onAddBooking: (date: string, time?: string) => void }) {
   return (
     <section className="compact-section">
       <div className="selected-day-title">
@@ -845,10 +846,15 @@ function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate:
         items.map((item) => {
           const [time, ...serviceParts] = item.text.split(" ");
           const isLeave = item.category === "leave";
+          const rawDetail = isLeave ? item.text : serviceParts.join(" ");
+          const detail = showDesigner && item.designer ? rawDetail.replace(new RegExp(`^${item.designer}\\s*`), "") : rawDetail;
           return (
             <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}`}>
               <div className="row-time">{isLeave ? "排休" : time}</div>
-              <div className="row-service">{isLeave ? item.text : serviceParts.join(" ")}</div>
+              <div className="row-service">
+                {showDesigner && item.designer ? <span className="detail-designer-name">{item.designer}</span> : null}
+                <span>{detail}</span>
+              </div>
             </div>
           );
         })
@@ -1291,6 +1297,7 @@ function getCalendarItems(day: number, scheduleItems: Record<number, ScheduleIte
   const leaveRows = (leaveItems[day] || []).map((item) => ({
     text: item.text,
     tone: item.tone,
+    designer: item.designer,
     category: "leave" as const,
   }));
   const bookingRows = (scheduleItems[day] || []).map((item) => ({
