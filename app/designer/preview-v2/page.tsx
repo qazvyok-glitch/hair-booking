@@ -303,7 +303,6 @@ export default function DesignerPreviewV2Page() {
         .tab-btn.active::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 4px; border-radius: 0 0 999px 999px; background: #148bd8; }
         .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
         .tab-icon-wrap { position: relative; display: inline-flex; }
-        .tab-badge { position: absolute; top: -7px; right: -10px; min-width: 17px; height: 17px; border-radius: 999px; background: #ef244e; color: #fff; border: 2px solid #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
         .tab-label-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 1; }
         .tab-label-badge { min-width: 16px; height: 16px; border-radius: 999px; background: #ef244e; color: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: flex; justify-content: center; align-items: flex-end; padding: 18px; z-index: 20; }
@@ -1072,7 +1071,6 @@ function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; 
         <button className={`tab-btn ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
           <span className="tab-icon-wrap">
             <span className="tab-icon">{tab.icon}</span>
-            {tab.key === "pending" && pendingCount > 0 && <span className="tab-badge">{pendingCount}</span>}
           </span>
           <span className="tab-label-wrap">
             {tab.label}
