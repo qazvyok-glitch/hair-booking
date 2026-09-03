@@ -29,6 +29,7 @@ type CheckoutDraft = {
 type BookingDraft = {
   date: string;
   time: string;
+  designer: string;
   name: string;
   phone: string;
   service: string;
@@ -42,8 +43,8 @@ type CustomerRecord = {
   note: string;
   lastVisit: string;
 };
-type ScheduleItem = { text: string; tone: string };
-type LeaveItem = { text: string; tone: "day-off" | "blocked" };
+type ScheduleItem = { text: string; tone: string; designer?: string };
+type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string };
 type CalendarItem = { text: string; tone: string; category?: "booking" | "leave" };
 type LeaveDraft = {
   date: string;
@@ -79,22 +80,44 @@ const pendingRows = [
 ];
 
 const initialScheduleItems: Record<number, ScheduleItem[]> = {
-  5: [{ text: "10:00 剪髮", tone: "cut" }],
-  8: [{ text: "13:00 染髮", tone: "color" }],
-  10: [{ text: "15:30 護髮", tone: "treatment" }],
+  5: [{ text: "10:00 剪髮", tone: "cut", designer: "Cherry" }],
+  8: [{ text: "13:00 染髮", tone: "color", designer: "Cherry" }],
+  10: [{ text: "15:30 護髮", tone: "treatment", designer: "Cherry" }],
   12: [
-    { text: "10:30 質感燙＋剪髮", tone: "perm" },
-    { text: "13:00 染髮", tone: "color" },
-    { text: "15:30 護髮", tone: "treatment" },
+    { text: "10:30 質感燙＋剪髮", tone: "perm", designer: "Cherry" },
+    { text: "13:00 染髮", tone: "color", designer: "Cherry" },
+    { text: "15:30 護髮", tone: "treatment", designer: "Cherry" },
   ],
-  20: [{ text: "11:00 燙髮", tone: "perm" }],
+  20: [{ text: "11:00 燙髮", tone: "perm", designer: "Cherry" }],
+};
+
+const teamScheduleItems: Record<number, ScheduleItem[]> = {
+  3: [{ text: "11:00 Emma 剪髮", tone: "team-a", designer: "Emma" }],
+  5: [{ text: "14:00 Mira 染髮", tone: "team-b", designer: "Mira" }],
+  7: [
+    { text: "10:00 Lynn 護髮", tone: "team-c", designer: "Lynn" },
+    { text: "15:30 Emma 燙髮", tone: "team-a", designer: "Emma" },
+  ],
+  12: [
+    { text: "11:30 Lynn 染髮", tone: "team-c", designer: "Lynn" },
+    { text: "16:00 Mira 剪髮", tone: "team-b", designer: "Mira" },
+  ],
+  18: [{ text: "13:00 Emma 質感燙", tone: "team-a", designer: "Emma" }],
 };
 
 const initialLeaveItems: Record<number, LeaveItem[]> = {
-  15: [{ text: "整天休假", tone: "day-off" }],
-  19: [{ text: "13:00-17:00 不接客", tone: "blocked" }],
-  24: [{ text: "上午不接客", tone: "blocked" }],
+  15: [{ text: "整天休假", tone: "day-off", designer: "Cherry" }],
+  19: [{ text: "13:00-17:00 不接客", tone: "blocked", designer: "Cherry" }],
+  24: [{ text: "上午不接客", tone: "blocked", designer: "Cherry" }],
 };
+
+const teamLeaveItems: Record<number, LeaveItem[]> = {
+  6: [{ text: "Lynn 排休", tone: "day-off", designer: "Lynn" }],
+  9: [{ text: "Mira 14:00-18:00 不接客", tone: "blocked", designer: "Mira" }],
+  16: [{ text: "Emma 整天休假", tone: "day-off", designer: "Emma" }],
+};
+
+const designerOptions = ["Cherry", "Lynn", "Mira", "Emma"];
 
 const initialDesignerProfile: DesignerProfile = {
   name: "Cherry",
@@ -157,14 +180,16 @@ export default function DesignerPreviewV2Page() {
 
     const serviceLabel = bookingDraft.service.replace(/[（）()ＭMLL]/g, "").trim() || "預約";
     const day = Number(bookingDraft.date.split("-")[2]);
-    const scheduleItem = { text: `${bookingDraft.time} ${serviceLabel}`, tone: getServiceTone(bookingDraft.service) };
+    const isOwnBooking = bookingDraft.designer === "Cherry";
+    const scheduleText = isOwnBooking ? `${bookingDraft.time} ${serviceLabel}` : `${bookingDraft.time} ${bookingDraft.designer} ${serviceLabel}`;
+    const scheduleItem = { text: scheduleText, tone: isOwnBooking ? getServiceTone(bookingDraft.service) : getTeamTone(bookingDraft.designer), designer: bookingDraft.designer };
 
     setDemoScheduleItems((prev) => ({
       ...prev,
       [day]: [...(prev[day] || []), scheduleItem].sort((a, b) => a.text.localeCompare(b.text)),
     }));
 
-    if (bookingDraft.date === "2026-08-12") {
+    if (bookingDraft.date === "2026-08-12" && isOwnBooking) {
       setDemoTodayRows((prev) => [
         ...prev,
         {
@@ -272,6 +297,12 @@ export default function DesignerPreviewV2Page() {
         .segment, .income-segment { border: none; background: transparent; color: #4b5563; border-radius: 15px; padding: 9px 0; font-weight: 850; font-size: 14px; cursor: pointer; }
         .income-segment { font-size: 12px; padding: 8px 0; }
         .segment.active, .income-segment.active { background: #148bd8; color: #fff; }
+        .manager-scope-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fff; border: 1px solid #e1e7ef; border-radius: 16px; padding: 12px; margin-bottom: 16px; box-shadow: 0 8px 18px rgba(31,41,55,.04); }
+        .manager-scope-title { color: #1f2937; font-size: 14px; font-weight: 950; margin-bottom: 3px; }
+        .manager-scope-subtitle { color: #8b95a3; font-size: 11px; font-weight: 800; line-height: 1.35; }
+        .scope-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #eef1f5; border-radius: 999px; padding: 4px; flex: 0 0 128px; }
+        .scope-toggle button { border: none; border-radius: 999px; background: transparent; color: #6b7280; padding: 7px 0; font-size: 12px; font-weight: 950; cursor: pointer; }
+        .scope-toggle button.active { background: #208bd8; color: #fff; }
         .calendar-header { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 18px; }
         .month-title { font-size: 21px; font-weight: 900; }
         .circle-nav { width: 32px; height: 32px; border: none; border-radius: 50%; background: #eef1f5; color: #4b5563; font-weight: 900; }
@@ -286,6 +317,9 @@ export default function DesignerPreviewV2Page() {
         .cut { background: #dff1ff; } .color { background: #d7f8ef; } .perm { background: #ffe2ef; } .treatment { background: #fff0cf; }
         .schedule-bar.day-off { background: #ffe6d5; color: #b45309; font-weight: 950; }
         .schedule-bar.blocked { background: #dff1ff; color: #126dc2; font-weight: 950; }
+        .schedule-bar.team-a { background: #eadffd; color: #6847d9; font-weight: 950; }
+        .schedule-bar.team-b { background: #ffe2ef; color: #bd2f67; font-weight: 950; }
+        .schedule-bar.team-c { background: #e1f6dc; color: #4c7b1f; font-weight: 950; }
         .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; color: #6b7280; font-size: 12px; font-weight: 750; }
         .legend-mark { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 5px; vertical-align: -2px; }
         .compact-section { padding: 14px; margin-bottom: 14px; }
@@ -688,6 +722,10 @@ function PendingView({ decisions, pendingCount, onOpen }: { decisions: Record<st
 }
 
 function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeChange, onSelectDate, onAddBooking }: { mode: ScheduleMode; selectedDate: string; scheduleItems: Record<number, ScheduleItem[]>; leaveItems: Record<number, LeaveItem[]>; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+  const [scope, setScope] = useState<"自己" | "全員">("自己");
+  const visibleScheduleItems = scope === "全員" ? mergeCalendarRecords(scheduleItems, teamScheduleItems) : filterCalendarRecords(scheduleItems, "Cherry");
+  const visibleLeaveItems = scope === "全員" ? mergeCalendarRecords(leaveItems, teamLeaveItems) : filterCalendarRecords(leaveItems, "Cherry");
+
   return (
     <>
       <div className="page-heading-row">
@@ -702,10 +740,21 @@ function CalendarView({ mode, selectedDate, scheduleItems, leaveItems, onModeCha
           <button className={`segment ${mode === item ? "active" : ""}`} key={item} onClick={() => onModeChange(item)}>{item}</button>
         ))}
       </div>
+      <div className="manager-scope-card">
+        <div>
+          <div className="manager-scope-title">店長權限</div>
+          <div className="manager-scope-subtitle">{scope === "全員" ? "查看全店設計師預約與排休" : "只查看自己的預約與排休"}</div>
+        </div>
+        <div className="scope-toggle" aria-label="切換排程視角">
+          {(["自己", "全員"] as const).map((item) => (
+            <button className={scope === item ? "active" : ""} key={item} onClick={() => setScope(item)}>{item}</button>
+          ))}
+        </div>
+      </div>
       {mode === "月" ? (
-        <MonthSchedule selectedDate={selectedDate} scheduleItems={scheduleItems} leaveItems={leaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
       ) : (
-        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={scheduleItems} leaveItems={leaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
+        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} onSelectDate={onSelectDate} onAddBooking={onAddBooking} />
       )}
     </>
   );
@@ -797,7 +846,7 @@ function SelectedDayPanel({ selectedDate, items, onAddBooking }: { selectedDate:
           const [time, ...serviceParts] = item.text.split(" ");
           const isLeave = item.category === "leave";
           return (
-            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={item.text}>
+            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}`}>
               <div className="row-time">{isLeave ? "排休" : time}</div>
               <div className="row-service">{isLeave ? item.text : serviceParts.join(" ")}</div>
             </div>
@@ -1117,6 +1166,7 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
           <div className="detail-grid">
             <DetailCard label="客人" value={draft.name || "未填姓名"} />
             <DetailCard label="日期時間" value={`${draft.date} ${draft.time}`} />
+            <DetailCard label="設計師" value={draft.designer} />
             <DetailCard label="電話" value={draft.phone || "未填電話"} />
             <DetailCard label="服務" value={draft.service || "未選服務"} />
             <DetailCard label="顧客資料" value={selectedCustomer ? "已帶入既有顧客紀錄" : "新顧客，完成後自動建立資料"} />
@@ -1137,9 +1187,15 @@ function AddBookingModal({ draft, complete, onChange, onComplete, onClose }: { d
         <div className="modal-header">
           <div>
             <div className="modal-title">幫客人預約</div>
-            <div className="modal-subtitle">設計師本人模式：預設預約給 Cherry</div>
+            <div className="modal-subtitle">店長可指定要安排給哪位設計師</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="booking-field">
+          <div className="booking-label">安排設計師</div>
+          <select className="checkout-select" value={draft.designer} onChange={(event) => onChange({ ...draft, designer: event.target.value })}>
+            {designerOptions.map((designer) => <option key={designer}>{designer}</option>)}
+          </select>
         </div>
         <section className="customer-search-panel">
           <div className="booking-label">搜尋顧客資料</div>
@@ -1213,6 +1269,7 @@ function createBookingDraft(date = "2026-08-12", time = "10:00"): BookingDraft {
   return {
     date,
     time,
+    designer: "Cherry",
     name: "",
     phone: "",
     service: "剪髮（含髮浴）",
@@ -1244,11 +1301,34 @@ function getCalendarItems(day: number, scheduleItems: Record<number, ScheduleIte
   return [...leaveRows, ...bookingRows];
 }
 
+function mergeCalendarRecords<T>(primary: Record<number, T[]>, secondary: Record<number, T[]>): Record<number, T[]> {
+  const merged: Record<number, T[]> = { ...primary };
+  Object.entries(secondary).forEach(([day, items]) => {
+    merged[Number(day)] = [...(merged[Number(day)] || []), ...items];
+  });
+  return merged;
+}
+
+function filterCalendarRecords<T extends { designer?: string }>(records: Record<number, T[]>, designer: string): Record<number, T[]> {
+  return Object.fromEntries(
+    Object.entries(records)
+      .map(([day, items]) => [day, items.filter((item) => (item.designer || "Cherry") === designer)])
+      .filter(([, items]) => (items as T[]).length > 0)
+  ) as Record<number, T[]>;
+}
+
 function getServiceTone(service: string) {
   if (service.includes("染")) return "color";
   if (service.includes("燙")) return "perm";
   if (service.includes("護")) return "treatment";
   return "cut";
+}
+
+function getTeamTone(designer: string) {
+  if (designer === "Lynn") return "team-c";
+  if (designer === "Mira") return "team-b";
+  if (designer === "Emma") return "team-a";
+  return getServiceTone(designer);
 }
 
 function DetailCard({ label, value }: { label: string; value: string }) {
