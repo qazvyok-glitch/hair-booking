@@ -1178,7 +1178,6 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
   const currentRange = ranges[activeRange];
-  const totalPerformance = currentRange.service + currentRange.product;
   const incomeLabel = `${activeRange === "指定日期或區間" ? "查詢" : activeRange}實際收入`;
 
   return (
@@ -1198,10 +1197,6 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
             if (tab === "指定日期或區間") setShowRangePicker(true);
           }}>{tab}</button>
         ))}
-      </div>
-      <div className="summary-grid">
-        <div className="summary-card"><div className="summary-amount">NT$ {totalPerformance.toLocaleString()}</div><div className="summary-title">總業績</div><div className="summary-sub">服務業績 NT${currentRange.service.toLocaleString()} · 商品銷售 NT${currentRange.product.toLocaleString()}</div></div>
-        <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">{incomeLabel}</div><div className="summary-sub">扣除自領商品與折扣</div></div>
       </div>
       <section className="panel">
         <div className="income-detail-header">
