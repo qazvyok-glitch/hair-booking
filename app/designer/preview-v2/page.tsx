@@ -701,6 +701,10 @@ export default function DesignerPreviewV2Page() {
         .custom-range-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
         .custom-range-label { display: grid; gap: 5px; color: #6b7280; font-size: 11px; font-weight: 900; }
         .custom-range-label input { width: 100%; border: 1px solid #cfe1f2; border-radius: 10px; padding: 9px 8px; background: #fff; color: #1f2937; font: inherit; font-size: 12px; box-sizing: border-box; }
+        .range-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #eef1f5; border-radius: 999px; padding: 4px; margin-bottom: 14px; }
+        .range-mode-tab { border: none; border-radius: 999px; background: transparent; color: #6b7280; padding: 9px 0; font-size: 13px; font-weight: 950; cursor: pointer; }
+        .range-mode-tab.active { background: #148bd8; color: #fff; }
+        .single-range-card { border: 1px solid #e1e7ef; background: #f8fbff; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
         .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line:last-child { border-bottom: none; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
@@ -1288,6 +1292,11 @@ function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: E
 function RangePickerModal({ ranges, customRange, onCustomRangeChange, onClose }: { ranges: Record<EarningsRange, EarningsData>; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onClose: () => void }) {
   const [draft, setDraft] = useState(customRange);
   const [monthDraft, setMonthDraft] = useState(customRange.startDate.slice(0, 7));
+  const [rangeMode, setRangeMode] = useState<"month" | "date">("month");
+
+  function applyRange() {
+    onCustomRangeChange(rangeMode === "month" ? getMonthIncomeDateRange(monthDraft) : normalizeIncomeDateRange(draft));
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -1299,17 +1308,22 @@ function RangePickerModal({ ranges, customRange, onCustomRangeChange, onClose }:
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
-        <div className="range-picker-list">
-          <div className="custom-range-box">
+        <div className="range-mode-tabs" aria-label="選擇收入查詢方式">
+          <button className={`range-mode-tab ${rangeMode === "month" ? "active" : ""}`} onClick={() => setRangeMode("month")}>選擇月份</button>
+          <button className={`range-mode-tab ${rangeMode === "date" ? "active" : ""}`} onClick={() => setRangeMode("date")}>日期區間</button>
+        </div>
+        <div className="single-range-card">
+          {rangeMode === "month" ? (
+            <>
             <div className="custom-range-title">月份</div>
             <div className="custom-range-subtitle">選擇整個月份收入</div>
             <div className="booking-field">
               <div className="booking-label">月份</div>
               <input className="checkout-input" type="month" value={monthDraft} onChange={(event) => setMonthDraft(event.target.value)} />
             </div>
-            <button className="full-width-btn" onClick={() => onCustomRangeChange(getMonthIncomeDateRange(monthDraft))}>套用月份</button>
-          </div>
-          <div className="custom-range-box">
+            </>
+          ) : (
+            <>
             <div className="custom-range-title">指定日期或區間</div>
             <div className="custom-range-subtitle">{ranges["指定日期或區間"].period}</div>
             <div className="custom-range-grid">
@@ -1322,9 +1336,10 @@ function RangePickerModal({ ranges, customRange, onCustomRangeChange, onClose }:
                 <input type="date" value={draft.endDate} onChange={(event) => setDraft((prev) => ({ ...prev, endDate: event.target.value }))} />
               </label>
             </div>
-            <button className="full-width-btn" onClick={() => onCustomRangeChange(normalizeIncomeDateRange(draft))}>套用指定區間</button>
-          </div>
+            </>
+          )}
         </div>
+        <button className="full-width-btn" onClick={applyRange}>套用</button>
       </div>
     </div>
   );
