@@ -336,7 +336,8 @@ export default function DesignerPreviewV2Page() {
         .schedule-detail { display: flex; flex-direction: column; gap: 3px; }
         .detail-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; color: #8b95a3; font-size: 12px; font-weight: 850; line-height: 1.3; }
         .detail-name { color: #1f2937; font-size: 13px; font-weight: 950; }
-        .detail-service { color: #1f2937; font-size: 14px; font-weight: 950; line-height: 1.35; }
+        .detail-service { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #1f2937; font-size: 14px; font-weight: 950; line-height: 1.35; }
+        .detail-customer { color: #1f2937; font-weight: 950; }
         .period-grid, .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .period-card, .summary-card { padding: 13px; }
         .period-action-card { width: 100%; text-align: left; cursor: pointer; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); font: inherit; }
@@ -851,7 +852,6 @@ function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: {
           const isLeave = item.category === "leave";
           const rawDetail = isLeave ? item.text : serviceParts.join(" ");
           const detail = showDesigner && item.designer ? rawDetail.replace(new RegExp(`^${item.designer}\\s*`), "") : rawDetail;
-          const detailNames = [showDesigner ? item.designer : null, item.customer].filter(Boolean);
           return (
             <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}-${item.customer || ""}`}>
               <div className="row-time">{isLeave ? "排休" : time}</div>
@@ -862,9 +862,12 @@ function SelectedDayPanel({ selectedDate, items, showDesigner, onAddBooking }: {
                   <>
                     <span className="detail-meta">
                       <span>{formatScheduleDateLabel(selectedDate)}</span>
-                      {detailNames.map((name) => <span className="detail-name" key={name}>{name}</span>)}
+                      {showDesigner && item.designer ? <span className="detail-name">{item.designer}</span> : null}
                     </span>
-                    <strong className="detail-service">{detail}</strong>
+                    <strong className="detail-service">
+                      {item.customer ? <span className="detail-customer">{item.customer}</span> : null}
+                      <span>{detail}</span>
+                    </strong>
                   </>
                 )}
               </div>
