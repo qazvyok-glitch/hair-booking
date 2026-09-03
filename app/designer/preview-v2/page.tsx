@@ -1215,11 +1215,6 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
       </section>
       {showRangePicker && (
         <RangePickerModal
-          activeRange={activeRange}
-          onSelect={(range) => {
-            setActiveRange(range);
-            setShowRangePicker(false);
-          }}
           ranges={ranges}
           customRange={customRange}
           onCustomRangeChange={(range) => {
@@ -1290,8 +1285,9 @@ function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: E
   );
 }
 
-function RangePickerModal({ activeRange, ranges, customRange, onCustomRangeChange, onSelect, onClose }: { activeRange: EarningsRange; ranges: Record<EarningsRange, EarningsData>; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
+function RangePickerModal({ ranges, customRange, onCustomRangeChange, onClose }: { ranges: Record<EarningsRange, EarningsData>; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onClose: () => void }) {
   const [draft, setDraft] = useState(customRange);
+  const [monthDraft, setMonthDraft] = useState(customRange.startDate.slice(0, 7));
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -1299,17 +1295,20 @@ function RangePickerModal({ activeRange, ranges, customRange, onCustomRangeChang
         <div className="modal-header">
           <div>
             <div className="modal-title">選擇收入區間</div>
-            <div className="modal-subtitle">可快速查看今日、本月，或指定日期範圍</div>
+            <div className="modal-subtitle">可選擇月份，或指定日期範圍</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="range-picker-list">
-          {(["今日", "本月"] as EarningsRange[]).map((range) => (
-            <button className={`range-option ${activeRange === range ? "selected" : ""}`} key={range} onClick={() => onSelect(range)}>
-              <span>{range}</span>
-              <small>{ranges[range].period}</small>
-            </button>
-          ))}
+          <div className="custom-range-box">
+            <div className="custom-range-title">月份</div>
+            <div className="custom-range-subtitle">選擇整個月份收入</div>
+            <div className="booking-field">
+              <div className="booking-label">月份</div>
+              <input className="checkout-input" type="month" value={monthDraft} onChange={(event) => setMonthDraft(event.target.value)} />
+            </div>
+            <button className="full-width-btn" onClick={() => onCustomRangeChange(getMonthIncomeDateRange(monthDraft))}>套用月份</button>
+          </div>
           <div className="custom-range-box">
             <div className="custom-range-title">指定日期或區間</div>
             <div className="custom-range-subtitle">{ranges["指定日期或區間"].period}</div>
@@ -1826,6 +1825,16 @@ function normalizeIncomeDateRange(range: IncomeDateRange): IncomeDateRange {
   const startDate = range.startDate || fallback.startDate;
   const endDate = range.endDate || fallback.endDate;
   if (startDate > endDate) return { startDate: endDate, endDate: startDate };
+  return { startDate, endDate };
+}
+
+function getMonthIncomeDateRange(monthText: string): IncomeDateRange {
+  const fallback = getDefaultIncomeDateRange();
+  if (!monthText) return fallback;
+  const [year, month] = monthText.split("-").map(Number);
+  if (!year || !month) return fallback;
+  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+  const endDate = new Date(year, month, 0).toLocaleDateString("en-CA");
   return { startDate, endDate };
 }
 
