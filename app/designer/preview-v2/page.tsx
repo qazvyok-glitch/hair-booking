@@ -54,7 +54,7 @@ type LeaveDraft = {
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
-  { key: "pending", label: "待確認", icon: "◷" },
+  { key: "pending", label: "待確認", icon: "" },
   { key: "calendar", label: "排程", icon: "" },
   { key: "earnings", label: "收入", icon: "$" },
 ];
@@ -321,6 +321,7 @@ export default function DesignerPreviewV2Page() {
         .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
         .today-tab-icon { width: 24px; height: 24px; display: block; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
         .today-tab-icon text { fill: currentColor; stroke: none; font-size: 7px; font-weight: 950; font-family: inherit; }
+        .pending-tab-icon { width: 24px; height: 24px; display: block; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
         .schedule-tab-icon { width: 24px; height: 24px; display: block; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
         .schedule-tab-icon .grid-dot { fill: currentColor; stroke: none; opacity: .8; }
         .tab-icon-wrap { position: relative; display: inline-flex; }
@@ -1165,7 +1166,7 @@ function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; 
         <button className={`tab-btn ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
           <span className="tab-icon-wrap">
             <span className="tab-icon">
-              {tab.key === "today" ? <TodayTabIcon /> : tab.key === "calendar" ? <ScheduleTabIcon /> : tab.icon}
+              {tab.key === "today" ? <TodayTabIcon /> : tab.key === "pending" ? <PendingTabIcon /> : tab.key === "calendar" ? <ScheduleTabIcon /> : tab.icon}
             </span>
           </span>
           <span className="tab-label-wrap">
@@ -1186,6 +1187,15 @@ function TodayTabIcon() {
       <path d="M16 3.5v4" />
       <path d="M4 10h16" />
       <text x="12" y="17" textAnchor="middle">02</text>
+    </svg>
+  );
+}
+
+function PendingTabIcon() {
+  return (
+    <svg className="pending-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 7.5V12l3.4 2" />
     </svg>
   );
 }
