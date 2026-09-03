@@ -304,6 +304,8 @@ export default function DesignerPreviewV2Page() {
         .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
         .tab-icon-wrap { position: relative; display: inline-flex; }
         .tab-badge { position: absolute; top: -7px; right: -10px; min-width: 17px; height: 17px; border-radius: 999px; background: #ef244e; color: #fff; border: 2px solid #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
+        .tab-label-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 1; }
+        .tab-label-badge { min-width: 16px; height: 16px; border-radius: 999px; background: #ef244e; color: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: flex; justify-content: center; align-items: flex-end; padding: 18px; z-index: 20; }
         .modal-panel { width: 100%; max-width: 430px; background: #fff; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.25); }
         .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
@@ -1072,7 +1074,10 @@ function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; 
             <span className="tab-icon">{tab.icon}</span>
             {tab.key === "pending" && pendingCount > 0 && <span className="tab-badge">{pendingCount}</span>}
           </span>
-          {tab.label}
+          <span className="tab-label-wrap">
+            {tab.label}
+            {tab.key === "pending" && pendingCount > 0 && <span className="tab-label-badge">{pendingCount}</span>}
+          </span>
         </button>
       ))}
     </nav>
