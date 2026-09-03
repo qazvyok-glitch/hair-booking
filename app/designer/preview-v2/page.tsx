@@ -95,7 +95,7 @@ const customerRecords: CustomerRecord[] = [
 ];
 
 const earningsRanges: Record<EarningsRange, { period: string; service: number; product: number; discount: number; salary: number; count: number; label: string }> = {
-  今日: { period: "8月12日", service: 4800, product: 1180, discount: 300, salary: 4500, count: 2, label: "今日收入" },
+  今日: { period: "8月12日", service: 4800, product: 1180, discount: 300, salary: 4500, count: 3, label: "今日收入" },
   本月: { period: "8月1日－8月31日", service: 38600, product: 7200, discount: 2100, salary: 36500, count: 12, label: "本月收入" },
   指定日期或區間: { period: "8月10日－8月15日", service: 16800, product: 2360, discount: 900, salary: 15120, count: 6, label: "指定日期或區間收入" },
 };
@@ -272,6 +272,15 @@ export default function DesignerPreviewV2Page() {
         .summary-title.purple { color: #6847d9; }
         .summary-sub { color: #36a9ff; font-size: 12px; font-weight: 750; }
         .panel { padding: 16px; margin-bottom: 14px; }
+        .income-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+        .detail-link-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; }
+        .income-detail-list { display: grid; gap: 14px; }
+        .income-detail-section { border: 1px solid #edf0f4; border-radius: 14px; background: #fff; overflow: hidden; }
+        .income-detail-title { padding: 10px 12px; background: #f8fafc; color: #1f2937; font-size: 14px; font-weight: 950; }
+        .income-detail-row { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid #edf0f4; color: #374151; font-size: 12px; font-weight: 800; }
+        .income-detail-row strong { color: #1f2937; font-size: 13px; }
+        .income-detail-row span { color: #6b7280; line-height: 1.35; }
+        .income-detail-row em { color: #1478c8; font-style: normal; font-weight: 950; white-space: nowrap; }
         .breakdown-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #edf0f4; color: #374151; font-weight: 750; }
         .breakdown-row:last-child { border-bottom: none; color: #1478c8; font-weight: 900; }
         .negative { color: #ef244e; }
@@ -719,6 +728,7 @@ function Legend() {
 function EarningsView() {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
+  const [showIncomeDetails, setShowIncomeDetails] = useState(false);
   const currentRange = earningsRanges[activeRange];
   const totalPerformance = currentRange.service + currentRange.product;
 
@@ -742,7 +752,10 @@ function EarningsView() {
         <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">實際薪資</div><div className="summary-sub">依抽成與獎金計算</div></div>
       </div>
       <section className="panel">
-        <div className="panel-label">{currentRange.label}</div>
+        <div className="income-detail-header">
+          <div className="panel-label">{currentRange.label}｜總客數：{currentRange.count}</div>
+          <button className="detail-link-btn" onClick={() => setShowIncomeDetails(true)}>查看明細</button>
+        </div>
         <div className="breakdown-row"><span>服務業績</span><span>NT${currentRange.service.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>商品銷售</span><span>NT${currentRange.product.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>總業績</span><span>NT${totalPerformance.toLocaleString()}</span></div>
@@ -760,7 +773,62 @@ function EarningsView() {
           onClose={() => setShowRangePicker(false)}
         />
       )}
+      {showIncomeDetails && <IncomeDetailsModal range={activeRange} onClose={() => setShowIncomeDetails(false)} />}
     </>
+  );
+}
+
+function IncomeDetailsModal({ range, onClose }: { range: EarningsRange; onClose: () => void }) {
+  const currentRange = earningsRanges[range];
+  const detailGroups = [
+    {
+      title: "服務明細",
+      rows: [
+        { name: "Lynn", item: "質感燙＋剪髮", amount: "NT$2,800" },
+        { name: "Mira", item: "染髮（M）", amount: "NT$1,200" },
+        { name: "Joey", item: "護髮", amount: "NT$800" },
+      ],
+    },
+    {
+      title: "商品銷售明細",
+      rows: [
+        { name: "Mira", item: "生命果油 GS 120ml", amount: "NT$1,180" },
+      ],
+    },
+    {
+      title: "自領商品明細",
+      rows: [
+        { name: "Cherry", item: "染護試用包 x1", amount: "店內自領" },
+      ],
+    },
+  ];
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">查看明細</div>
+            <div className="modal-subtitle">{currentRange.period} · {currentRange.label}</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="income-detail-list">
+          {detailGroups.map((group) => (
+            <section className="income-detail-section" key={group.title}>
+              <div className="income-detail-title">{group.title}</div>
+              {group.rows.map((row) => (
+                <div className="income-detail-row" key={`${group.title}-${row.name}-${row.item}`}>
+                  <strong>{row.name}</strong>
+                  <span>{row.item}</span>
+                  <em>{row.amount}</em>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
