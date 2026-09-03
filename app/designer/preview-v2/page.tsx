@@ -74,6 +74,11 @@ const initialScheduleItems: Record<number, ScheduleItem[]> = {
   5: [{ text: "10:00 剪髮", tone: "cut" }],
   8: [{ text: "13:00 染髮", tone: "color" }],
   10: [{ text: "15:30 護髮", tone: "treatment" }],
+  12: [
+    { text: "10:30 質感燙＋剪髮", tone: "perm" },
+    { text: "13:00 染髮", tone: "color" },
+    { text: "15:30 護髮", tone: "treatment" },
+  ],
   20: [{ text: "11:00 燙髮", tone: "perm" }],
 };
 
@@ -124,7 +129,7 @@ export default function DesignerPreviewV2Page() {
 
     setDemoScheduleItems((prev) => ({
       ...prev,
-      [day]: [...(prev[day] || []), scheduleItem],
+      [day]: [...(prev[day] || []), scheduleItem].sort((a, b) => a.text.localeCompare(b.text)),
     }));
 
     if (bookingDraft.date === "2026-08-12") {
