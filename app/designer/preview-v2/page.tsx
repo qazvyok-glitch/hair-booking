@@ -53,7 +53,7 @@ type LeaveDraft = {
 };
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
-  { key: "today", label: "今日", icon: "□" },
+  { key: "today", label: "今日", icon: "" },
   { key: "pending", label: "待確認", icon: "◷" },
   { key: "calendar", label: "排程", icon: "▣" },
   { key: "earnings", label: "收入", icon: "$" },
@@ -319,6 +319,8 @@ export default function DesignerPreviewV2Page() {
         .tab-btn.active { color: #148bd8; }
         .tab-btn.active::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 4px; border-radius: 0 0 999px 999px; background: #148bd8; }
         .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
+        .today-tab-icon { width: 24px; height: 24px; display: block; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+        .today-tab-icon text { fill: currentColor; stroke: none; font-size: 7px; font-weight: 950; font-family: inherit; }
         .tab-icon-wrap { position: relative; display: inline-flex; }
         .tab-label-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 1; }
         .tab-label-badge { min-width: 16px; height: 16px; border-radius: 999px; background: #ef244e; color: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
@@ -1160,7 +1162,7 @@ function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; 
       {tabs.map((tab) => (
         <button className={`tab-btn ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
           <span className="tab-icon-wrap">
-            <span className="tab-icon">{tab.icon}</span>
+            <span className="tab-icon">{tab.key === "today" ? <TodayTabIcon /> : tab.icon}</span>
           </span>
           <span className="tab-label-wrap">
             {tab.label}
@@ -1169,5 +1171,17 @@ function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; 
         </button>
       ))}
     </nav>
+  );
+}
+
+function TodayTabIcon() {
+  return (
+    <svg className="today-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="5.5" width="16" height="15" rx="2.5" />
+      <path d="M8 3.5v4" />
+      <path d="M16 3.5v4" />
+      <path d="M4 10h16" />
+      <text x="12" y="17" textAnchor="middle">02</text>
+    </svg>
   );
 }
