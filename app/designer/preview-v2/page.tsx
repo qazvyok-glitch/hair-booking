@@ -6,6 +6,7 @@ type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
 type EarningsRange = "今日" | "本月" | "指定日期或區間";
+type SettingsPanel = "profile" | "roster";
 type Appointment = {
   time: string;
   name: string;
@@ -67,6 +68,12 @@ const scheduleItems: Record<number, { text: string; tone: string }[]> = {
   20: [{ text: "11:00 燙髮", tone: "perm" }],
 };
 
+const leaveItems: Record<number, { text: string; tone: "day-off" | "blocked" }[]> = {
+  15: [{ text: "整天休假", tone: "day-off" }],
+  19: [{ text: "13:00-17:00 不接客", tone: "blocked" }],
+  24: [{ text: "上午不接客", tone: "blocked" }],
+};
+
 const customerRecords: CustomerRecord[] = [
   { id: "lynn", name: "Lynn", phone: "0920-262-570", lastService: "質感燙＋剪髮", note: "喜歡自然蓬鬆，瀏海不要剪太短。", lastVisit: "上次 7/10" },
   { id: "mira", name: "Mira", phone: "0912-345-678", lastService: "染髮（M）", note: "偏冷棕，不要太亮；頭皮較敏感。", lastVisit: "上次 7/24" },
@@ -81,6 +88,7 @@ const earningsRanges: Record<EarningsRange, { period: string; service: number; p
 
 export default function DesignerPreviewV2Page() {
   const [activeTab, setActiveTab] = useState<TabKey>("today");
+  const [showSettings, setShowSettings] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [checkoutAppointment, setCheckoutAppointment] = useState<Appointment | null>(null);
   const [checkoutComplete, setCheckoutComplete] = useState(false);
@@ -98,14 +106,20 @@ export default function DesignerPreviewV2Page() {
   return (
     <main className="preview-page">
       <section className="phone-shell">
-        <Header />
+        <Header onOpenSettings={() => setShowSettings(true)} />
         <div className="screen-body">
-          {activeTab === "today" && <TodayView onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
-          {activeTab === "pending" && <PendingView decisions={pendingDecisions} onOpen={setSelectedPending} />}
-          {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time)); }} />}
-          {activeTab === "earnings" && <EarningsView />}
+          {showSettings ? (
+            <SettingsView onBack={() => setShowSettings(false)} />
+          ) : (
+            <>
+              {activeTab === "today" && <TodayView onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
+              {activeTab === "pending" && <PendingView decisions={pendingDecisions} onOpen={setSelectedPending} />}
+              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time)); }} />}
+              {activeTab === "earnings" && <EarningsView />}
+            </>
+          )}
         </div>
-        <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
+        <BottomTabs activeTab={activeTab} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
@@ -116,9 +130,11 @@ export default function DesignerPreviewV2Page() {
         .preview-page { min-height: 100vh; background: #eef0f3; display: flex; justify-content: center; padding: 20px; color: #1f2937; }
         .phone-shell { width: 100%; max-width: 430px; height: min(900px, calc(100vh - 40px)); background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 26px; overflow: hidden; box-shadow: 0 18px 40px rgba(31,41,55,.12); display: flex; flex-direction: column; }
         .top-bar { height: 72px; background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex: 0 0 auto; }
-        .brand-area { display: flex; align-items: center; gap: 10px; }
+        .brand-area { display: flex; align-items: center; gap: 10px; border: none; background: transparent; padding: 0; color: inherit; text-align: left; cursor: pointer; }
+        .brand-area:focus-visible { outline: 2px solid #148bd8; outline-offset: 4px; border-radius: 14px; }
         .logo { width: 42px; height: 42px; border-radius: 50%; background: #050505; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; letter-spacing: -.04em; position: relative; }
         .logo::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #9b1f1f; position: absolute; right: 9px; bottom: 8px; box-shadow: -7px 0 0 #c92d2d; }
+        .designer-identity { display: flex; flex-direction: column; }
         .designer-name { font-size: 18px; font-weight: 850; line-height: 1.05; }
         .designer-role { font-size: 13px; color: #6b7280; margin-top: 4px; font-weight: 650; }
         .logout-btn { border: 1px solid #dfe3ea; background: #fff; color: #5f6673; border-radius: 12px; padding: 10px 16px; font-size: 14px; font-weight: 750; }
@@ -203,6 +219,27 @@ export default function DesignerPreviewV2Page() {
         .negative { color: #ef244e; }
         .final-card { display: flex; justify-content: space-between; align-items: center; padding: 18px 16px; font-weight: 950; }
         .final-amount { font-size: 25px; }
+        .settings-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+        .back-text-btn { border: 1px solid #dfe3ea; background: #fff; color: #4b5563; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .settings-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .settings-card { border: 1px solid #e1e7ef; background: #fff; border-radius: 16px; padding: 13px; text-align: left; color: #1f2937; cursor: pointer; box-shadow: 0 8px 18px rgba(31,41,55,.04); }
+        .settings-card.active { border-color: #148bd8; background: #eaf7ff; }
+        .settings-card-title { font-size: 15px; font-weight: 950; margin-bottom: 6px; }
+        .settings-card-desc { color: #6b7280; font-size: 12px; font-weight: 750; line-height: 1.45; }
+        .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
+        .full-width-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 14px; padding: 13px 0; font-size: 14px; font-weight: 950; cursor: pointer; }
+        .roster-calendar { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
+        .roster-day { min-height: 58px; border-right: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; background: #fff; padding: 6px 4px; font-size: 12px; font-weight: 850; color: #374151; }
+        .roster-day:nth-child(7n) { border-right: none; }
+        .roster-day.has-leave { background: #fff8ee; }
+        .roster-day.has-blocked { background: #f1f8ff; }
+        .leave-chip { display: block; margin-top: 5px; border-radius: 6px; padding: 3px 4px; font-size: 9px; line-height: 1.2; color: #374151; }
+        .leave-chip.day-off { background: #ffe6d5; color: #b45309; }
+        .leave-chip.blocked { background: #dff1ff; color: #126dc2; }
+        .leave-list { display: grid; gap: 8px; margin-bottom: 14px; }
+        .leave-row { display: flex; justify-content: space-between; gap: 10px; border: 1px solid #edf0f4; background: #fff; border-radius: 12px; padding: 10px 11px; font-size: 13px; font-weight: 850; }
+        .leave-row span:last-child { color: #6b7280; text-align: right; }
         .bottom-tabs { height: 74px; background: #fff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(4, 1fr); flex: 0 0 auto; }
         .tab-btn { border: none; background: transparent; color: #9aa3af; font-weight: 850; font-size: 13px; position: relative; padding-top: 9px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
         .tab-btn.active { color: #148bd8; }
@@ -253,18 +290,96 @@ export default function DesignerPreviewV2Page() {
   );
 }
 
-function Header() {
+function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <header className="top-bar">
-      <div className="brand-area">
+      <button className="brand-area" onClick={onOpenSettings} aria-label="開啟個人設定">
         <div className="logo">BC</div>
-        <div>
-          <div className="designer-name">Cherry</div>
-          <div className="designer-role">設計師</div>
-        </div>
-      </div>
+        <span className="designer-identity">
+          <span className="designer-name">Cherry</span>
+          <span className="designer-role">設計師</span>
+        </span>
+      </button>
       <button className="logout-btn">登出</button>
     </header>
+  );
+}
+
+function SettingsView({ onBack }: { onBack: () => void }) {
+  const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
+
+  return (
+    <>
+      <div className="settings-heading">
+        <div>
+          <h1 className="page-title">設定</h1>
+          <div className="page-subtitle">個人資料與排班管理</div>
+        </div>
+        <button className="back-text-btn" onClick={onBack}>返回</button>
+      </div>
+      <div className="settings-menu">
+        <button className={`settings-card ${activePanel === "profile" ? "active" : ""}`} onClick={() => setActivePanel("profile")}>
+          <div className="settings-card-title">個人資料</div>
+          <div className="settings-card-desc">查看與編輯個人資訊</div>
+        </button>
+        <button className={`settings-card ${activePanel === "roster" ? "active" : ""}`} onClick={() => setActivePanel("roster")}>
+          <div className="settings-card-title">排班表</div>
+          <div className="settings-card-desc">查看已安排休假</div>
+        </button>
+      </div>
+      {activePanel === "profile" ? <ProfileSettingsPanel /> : <RosterSettingsPanel />}
+    </>
+  );
+}
+
+function ProfileSettingsPanel() {
+  return (
+    <section className="panel">
+      <div className="panel-label">個人資料</div>
+      <div className="profile-grid">
+        <DetailCard label="顯示名稱" value="Cherry" />
+        <DetailCard label="職稱" value="設計師" />
+        <DetailCard label="電話" value="0912-345-678" />
+        <DetailCard label="專長" value="剪髮、染髮、燙髮、護髮" />
+      </div>
+      <div className="profile-note">這裡之後可以放設計師自己的簡介、作品集連結、可預約服務與通知設定。此頁目前是 V2 示意，不會寫入正式資料。</div>
+      <button className="full-width-btn">編輯個人資訊</button>
+    </section>
+  );
+}
+
+function RosterSettingsPanel() {
+  return (
+    <section className="panel">
+      <div className="panel-label">排班表</div>
+      <div className="calendar-header">
+        <button className="circle-nav">‹</button>
+        <div className="month-title">2026年8月</div>
+        <button className="circle-nav">›</button>
+      </div>
+      <div className="weekday-grid">
+        {["日", "一", "二", "三", "四", "五", "六"].map((day) => <div key={day}>{day}</div>)}
+      </div>
+      <div className="roster-calendar">
+        {Array.from({ length: 31 }, (_, index) => {
+          const date = index + 1;
+          const items = leaveItems[date] || [];
+          const toneClass = items.some((item) => item.tone === "day-off") ? "has-leave" : items.length > 0 ? "has-blocked" : "";
+          return (
+            <div className={`roster-day ${toneClass}`} key={date}>
+              <span>{date}</span>
+              {items.map((item) => <span className={`leave-chip ${item.tone}`} key={item.text}>{item.text}</span>)}
+            </div>
+          );
+        })}
+      </div>
+      <div className="leave-list">
+        <div className="leave-row"><strong>8/15（六）</strong><span>整天休假</span></div>
+        <div className="leave-row"><strong>8/19（三）</strong><span>13:00-17:00 不接客</span></div>
+        <div className="leave-row"><strong>8/24（一）</strong><span>上午不接客</span></div>
+      </div>
+      <button className="full-width-btn">安排休假</button>
+    </section>
   );
 }
 
