@@ -121,6 +121,7 @@ type EarningsData = { period: string; service: number; product: number; selfUse:
 type IncomeDetailRow = { name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
 type IncomeDetailGroupsByRange = Record<EarningsRange, IncomeDetailGroup[]>;
+type IncomeDateRange = { startDate: string; endDate: string };
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
@@ -229,6 +230,7 @@ export default function DesignerPreviewV2Page() {
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendLeaveItems, setBackendLeaveItems] = useState<Record<number, LeaveItem[]>>({});
   const [backendTeamLeaveItems, setBackendTeamLeaveItems] = useState<Record<number, LeaveItem[]>>({});
+  const [customIncomeRange, setCustomIncomeRange] = useState<IncomeDateRange>(() => getDefaultIncomeDateRange());
   const [designerProfile, setDesignerProfile] = useState<DesignerProfile>(() => {
     if (typeof window === "undefined") return initialDesignerProfile;
     const savedProfile = window.localStorage.getItem(designerProfileStorageKey);
@@ -471,8 +473,8 @@ export default function DesignerPreviewV2Page() {
   const defaultBookingService = activeServiceOptions[0] || "剪髮（含髮浴）";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : demoTodayRows;
   const activePendingRows = backendConnected ? mapBookingsToPendingRows(backendBookings, backendServices) : pendingRows;
-  const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage) : earningsRanges;
-  const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage) : null;
+  const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage, customIncomeRange) : withCustomIncomeRange(earningsRanges, customIncomeRange);
+  const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage, customIncomeRange) : null;
   const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
 
   return (
@@ -488,7 +490,7 @@ export default function DesignerPreviewV2Page() {
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? true} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} />}
             </>
           )}
         </div>
@@ -693,6 +695,12 @@ export default function DesignerPreviewV2Page() {
         .range-option.selected { border-color: #148bd8; background: #eaf7ff; }
         .range-option span { display: block; font-size: 15px; font-weight: 950; margin-bottom: 4px; }
         .range-option small { color: #6b7280; font-size: 12px; font-weight: 800; }
+        .custom-range-box { border: 1px solid #148bd8; background: #eaf7ff; border-radius: 14px; padding: 12px 13px; color: #1f2937; }
+        .custom-range-title { font-size: 15px; font-weight: 950; margin-bottom: 4px; }
+        .custom-range-subtitle { color: #6b7280; font-size: 12px; font-weight: 800; margin-bottom: 10px; }
+        .custom-range-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+        .custom-range-label { display: grid; gap: 5px; color: #6b7280; font-size: 11px; font-weight: 900; }
+        .custom-range-label input { width: 100%; border: 1px solid #cfe1f2; border-radius: 10px; padding: 9px 8px; background: #fff; color: #1f2937; font: inherit; font-size: 12px; box-sizing: border-box; }
         .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line:last-child { border-bottom: none; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
@@ -1165,7 +1173,7 @@ function Legend() {
   );
 }
 
-function EarningsView({ ranges, detailGroups }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null }) {
+function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
@@ -1185,7 +1193,10 @@ function EarningsView({ ranges, detailGroups }: { ranges: Record<EarningsRange, 
       </div>
       <div className="income-tabs">
         {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((tab) => (
-          <button className={`income-segment ${activeRange === tab ? "active" : ""}`} key={tab} onClick={() => setActiveRange(tab)}>{tab}</button>
+          <button className={`income-segment ${activeRange === tab ? "active" : ""}`} key={tab} onClick={() => {
+            setActiveRange(tab);
+            if (tab === "指定日期或區間") setShowRangePicker(true);
+          }}>{tab}</button>
         ))}
       </div>
       <div className="summary-grid">
@@ -1211,6 +1222,12 @@ function EarningsView({ ranges, detailGroups }: { ranges: Record<EarningsRange, 
             setShowRangePicker(false);
           }}
           ranges={ranges}
+          customRange={customRange}
+          onCustomRangeChange={(range) => {
+            onCustomRangeChange(range);
+            setActiveRange("指定日期或區間");
+            setShowRangePicker(false);
+          }}
           onClose={() => setShowRangePicker(false)}
         />
       )}
@@ -1274,7 +1291,9 @@ function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: E
   );
 }
 
-function RangePickerModal({ activeRange, ranges, onSelect, onClose }: { activeRange: EarningsRange; ranges: Record<EarningsRange, EarningsData>; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
+function RangePickerModal({ activeRange, ranges, customRange, onCustomRangeChange, onSelect, onClose }: { activeRange: EarningsRange; ranges: Record<EarningsRange, EarningsData>; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onSelect: (range: EarningsRange) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState(customRange);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
@@ -1286,12 +1305,27 @@ function RangePickerModal({ activeRange, ranges, onSelect, onClose }: { activeRa
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="range-picker-list">
-          {(["今日", "本月", "指定日期或區間"] as EarningsRange[]).map((range) => (
+          {(["今日", "本月"] as EarningsRange[]).map((range) => (
             <button className={`range-option ${activeRange === range ? "selected" : ""}`} key={range} onClick={() => onSelect(range)}>
               <span>{range}</span>
               <small>{ranges[range].period}</small>
             </button>
           ))}
+          <div className="custom-range-box">
+            <div className="custom-range-title">指定日期或區間</div>
+            <div className="custom-range-subtitle">{ranges["指定日期或區間"].period}</div>
+            <div className="custom-range-grid">
+              <label className="custom-range-label">
+                開始日期
+                <input type="date" value={draft.startDate} onChange={(event) => setDraft((prev) => ({ ...prev, startDate: event.target.value }))} />
+              </label>
+              <label className="custom-range-label">
+                結束日期
+                <input type="date" value={draft.endDate} onChange={(event) => setDraft((prev) => ({ ...prev, endDate: event.target.value }))} />
+              </label>
+            </div>
+            <button className="full-width-btn" onClick={() => onCustomRangeChange(normalizeIncomeDateRange(draft))}>套用指定區間</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1670,25 +1704,25 @@ function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendS
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 }
 
-function buildEarningsRanges(transactions: BackendTransaction[], productUsage: BackendProductUsage[]): Record<EarningsRange, EarningsData> {
+function buildEarningsRanges(transactions: BackendTransaction[], productUsage: BackendProductUsage[], customRange: IncomeDateRange): Record<EarningsRange, EarningsData> {
   return {
-    今日: summarizeEarningsRange("今日", transactions, productUsage),
-    本月: summarizeEarningsRange("本月", transactions, productUsage),
-    指定日期或區間: summarizeEarningsRange("指定日期或區間", transactions, productUsage),
+    今日: summarizeEarningsRange("今日", transactions, productUsage, customRange),
+    本月: summarizeEarningsRange("本月", transactions, productUsage, customRange),
+    指定日期或區間: summarizeEarningsRange("指定日期或區間", transactions, productUsage, customRange),
   };
 }
 
-function buildIncomeDetailGroups(transactions: BackendTransaction[], productUsage: BackendProductUsage[]): IncomeDetailGroupsByRange {
+function buildIncomeDetailGroups(transactions: BackendTransaction[], productUsage: BackendProductUsage[], customRange: IncomeDateRange): IncomeDetailGroupsByRange {
   return {
-    今日: buildIncomeDetailGroupsForRange("今日", transactions, productUsage),
-    本月: buildIncomeDetailGroupsForRange("本月", transactions, productUsage),
-    指定日期或區間: buildIncomeDetailGroupsForRange("指定日期或區間", transactions, productUsage),
+    今日: buildIncomeDetailGroupsForRange("今日", transactions, productUsage, customRange),
+    本月: buildIncomeDetailGroupsForRange("本月", transactions, productUsage, customRange),
+    指定日期或區間: buildIncomeDetailGroupsForRange("指定日期或區間", transactions, productUsage, customRange),
   };
 }
 
-function summarizeEarningsRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[]): EarningsData {
-  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range));
-  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range));
+function summarizeEarningsRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[], customRange: IncomeDateRange): EarningsData {
+  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range, customRange));
+  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range, customRange));
   const service = rangeTransactions.reduce((total, transaction) => total + getServiceGross(transaction), 0);
   const product = rangeTransactions.reduce((total, transaction) => total + getProductSaleTotal(transaction.note || ""), 0);
   const serviceDiscount = rangeTransactions.reduce((total, transaction) => total + getServiceDiscount(transaction), 0);
@@ -1696,7 +1730,7 @@ function summarizeEarningsRange(range: EarningsRange, transactions: BackendTrans
   const selfUse = rangeProductUsage.reduce((total, usage) => total + Number(usage.total_cost || 0), 0);
   const discount = serviceDiscount + productDiscount;
   return {
-    period: getEarningsPeriodLabel(range),
+    period: getEarningsPeriodLabel(range, customRange),
     service,
     product,
     selfUse,
@@ -1707,9 +1741,9 @@ function summarizeEarningsRange(range: EarningsRange, transactions: BackendTrans
   };
 }
 
-function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[]): IncomeDetailGroup[] {
-  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range));
-  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range));
+function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: BackendTransaction[], productUsage: BackendProductUsage[], customRange: IncomeDateRange): IncomeDetailGroup[] {
+  const rangeTransactions = transactions.filter((transaction) => isDateInEarningsRange(transaction.created_at, range, customRange));
+  const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range, customRange));
   const serviceRows = rangeTransactions.flatMap((transaction) =>
     (transaction.service_items || []).map((service) => ({
       name: transaction.customer_name || "訪客",
@@ -1758,27 +1792,58 @@ function isTimeStarted(time: string) {
   return today.getHours() > hour || (today.getHours() === hour && today.getMinutes() >= minute);
 }
 
-function getEarningsPeriodLabel(range: EarningsRange) {
+function getEarningsPeriodLabel(range: EarningsRange, customRange: IncomeDateRange) {
   const today = new Date();
   if (range === "今日") return `${today.getMonth() + 1}月${today.getDate()}日`;
   if (range === "本月") return `${today.getMonth() + 1}月1日－${today.getMonth() + 1}月${new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()}日`;
-  const start = new Date(today);
-  start.setDate(today.getDate() - 6);
-  return `${start.getMonth() + 1}月${start.getDate()}日－${today.getMonth() + 1}月${today.getDate()}日`;
+  return `${formatIncomeDateLabel(customRange.startDate)}－${formatIncomeDateLabel(customRange.endDate)}`;
 }
 
-function isDateInEarningsRange(dateText: string, range: EarningsRange) {
+function isDateInEarningsRange(dateText: string, range: EarningsRange, customRange: IncomeDateRange) {
   const targetDate = new Date(dateText);
   const today = new Date();
   if (Number.isNaN(targetDate.getTime())) return false;
   if (range === "今日") return targetDate.toLocaleDateString("en-CA") === today.toLocaleDateString("en-CA");
   if (range === "本月") return targetDate.getFullYear() === today.getFullYear() && targetDate.getMonth() === today.getMonth();
-  const start = new Date(today);
-  start.setDate(today.getDate() - 6);
+  const start = new Date(`${customRange.startDate}T00:00:00`);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(today);
+  const end = new Date(`${customRange.endDate}T23:59:59`);
   end.setHours(23, 59, 59, 999);
   return targetDate >= start && targetDate <= end;
+}
+
+function getDefaultIncomeDateRange(): IncomeDateRange {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 6);
+  return {
+    startDate: start.toLocaleDateString("en-CA"),
+    endDate: today.toLocaleDateString("en-CA"),
+  };
+}
+
+function normalizeIncomeDateRange(range: IncomeDateRange): IncomeDateRange {
+  const fallback = getDefaultIncomeDateRange();
+  const startDate = range.startDate || fallback.startDate;
+  const endDate = range.endDate || fallback.endDate;
+  if (startDate > endDate) return { startDate: endDate, endDate: startDate };
+  return { startDate, endDate };
+}
+
+function withCustomIncomeRange(ranges: Record<EarningsRange, EarningsData>, customRange: IncomeDateRange): Record<EarningsRange, EarningsData> {
+  return {
+    ...ranges,
+    指定日期或區間: {
+      ...ranges["指定日期或區間"],
+      period: getEarningsPeriodLabel("指定日期或區間", customRange),
+    },
+  };
+}
+
+function formatIncomeDateLabel(date: string) {
+  const parsedDate = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsedDate.getTime())) return date;
+  return `${parsedDate.getMonth() + 1}月${parsedDate.getDate()}日`;
 }
 
 function getServiceGross(transaction: BackendTransaction) {
