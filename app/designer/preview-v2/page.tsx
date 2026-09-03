@@ -154,6 +154,8 @@ export default function DesignerPreviewV2Page() {
     }));
   }
 
+  const pendingCount = pendingRows.filter((row) => (pendingDecisions[row.name] || "pending") === "pending").length;
+
   return (
     <main className="preview-page">
       <section className="phone-shell">
@@ -164,13 +166,13 @@ export default function DesignerPreviewV2Page() {
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
-              {activeTab === "pending" && <PendingView decisions={pendingDecisions} onOpen={setSelectedPending} />}
+              {activeTab === "pending" && <PendingView decisions={pendingDecisions} pendingCount={pendingCount} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={demoScheduleItems} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time)); }} />}
               {activeTab === "earnings" && <EarningsView />}
             </>
           )}
         </div>
-        <BottomTabs activeTab={activeTab} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
+        <BottomTabs activeTab={activeTab} pendingCount={pendingCount} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.name] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
@@ -300,6 +302,8 @@ export default function DesignerPreviewV2Page() {
         .tab-btn.active { color: #148bd8; }
         .tab-btn.active::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 4px; border-radius: 0 0 999px 999px; background: #148bd8; }
         .tab-icon { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; font-weight: 850; }
+        .tab-icon-wrap { position: relative; display: inline-flex; }
+        .tab-badge { position: absolute; top: -7px; right: -10px; min-width: 17px; height: 17px; border-radius: 999px; background: #ef244e; color: #fff; border: 2px solid #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: flex; justify-content: center; align-items: flex-end; padding: 18px; z-index: 20; }
         .modal-panel { width: 100%; max-width: 430px; background: #fff; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.25); }
         .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
@@ -525,11 +529,11 @@ function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointme
   );
 }
 
-function PendingView({ decisions, onOpen }: { decisions: Record<string, PendingDecision>; onOpen: (row: (typeof pendingRows)[number]) => void }) {
+function PendingView({ decisions, pendingCount, onOpen }: { decisions: Record<string, PendingDecision>; pendingCount: number; onOpen: (row: (typeof pendingRows)[number]) => void }) {
   return (
     <>
       <h1 className="page-title">待確認</h1>
-      <div className="page-subtitle">目前有 2 筆預約待回覆</div>
+      <div className="page-subtitle">目前有 {pendingCount} 筆預約待回覆</div>
       <section className="pending-list">
         {pendingRows.map((row) => {
           const decision = decisions[row.name] || "pending";
@@ -1059,12 +1063,15 @@ function DetailCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function BottomTabs({ activeTab, onChange }: { activeTab: TabKey; onChange: (tab: TabKey) => void }) {
+function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; pendingCount: number; onChange: (tab: TabKey) => void }) {
   return (
     <nav className="bottom-tabs">
       {tabs.map((tab) => (
         <button className={`tab-btn ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
-          <span className="tab-icon">{tab.icon}</span>
+          <span className="tab-icon-wrap">
+            <span className="tab-icon">{tab.icon}</span>
+            {tab.key === "pending" && pendingCount > 0 && <span className="tab-badge">{pendingCount}</span>}
+          </span>
           {tab.label}
         </button>
       ))}
