@@ -71,6 +71,8 @@ type DesignerProfile = {
   phone: string;
   specialties: string;
   avatarUrl: string;
+  joinedDate: string;
+  leftDate: string;
 };
 type DesignerSession = { id: number; name: string; nickname?: string; is_manager?: boolean };
 type BackendDesigner = {
@@ -80,7 +82,18 @@ type BackendDesigner = {
   nickname?: string;
   style?: string;
   avatar_url?: string;
+  joined_date?: string | null;
+  left_date?: string | null;
   is_manager?: boolean;
+  is_active?: boolean;
+};
+type BackendDesignerPriceItem = {
+  id: number;
+  designer_id: number;
+  category: string;
+  name: string;
+  price_range: string;
+  sort_order?: number | null;
   is_active?: boolean;
 };
 type BackendService = { id: number; name: string; category_id?: number };
@@ -187,7 +200,16 @@ const initialDesignerProfile: DesignerProfile = {
   phone: "0912-345-678",
   specialties: "剪髮、染髮、燙髮、護髮",
   avatarUrl: "",
+  joinedDate: "2026-08-01",
+  leftDate: "",
 };
+
+const demoDesignerPriceItems: BackendDesignerPriceItem[] = [
+  { id: 1, designer_id: 1, category: "剪髮", name: "剪髮", price_range: "NT$800", sort_order: 1, is_active: true },
+  { id: 2, designer_id: 1, category: "染髮", name: "染髮", price_range: "NT$1,800 起", sort_order: 2, is_active: true },
+  { id: 3, designer_id: 1, category: "燙髮", name: "燙髮", price_range: "NT$2,800 起", sort_order: 3, is_active: true },
+  { id: 4, designer_id: 1, category: "護髮", name: "護髮", price_range: "NT$1,200 起", sort_order: 4, is_active: true },
+];
 
 const designerProfileStorageKey = "bc-designer-preview-v2-profile";
 
@@ -226,6 +248,7 @@ export default function DesignerPreviewV2Page() {
   const [backendBookings, setBackendBookings] = useState<BackendBooking[]>([]);
   const [backendTransactions, setBackendTransactions] = useState<BackendTransaction[]>([]);
   const [backendProductUsage, setBackendProductUsage] = useState<BackendProductUsage[]>([]);
+  const [designerPriceItems, setDesignerPriceItems] = useState<BackendDesignerPriceItem[]>(demoDesignerPriceItems);
   const [backendScheduleItems, setBackendScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendLeaveItems, setBackendLeaveItems] = useState<Record<number, LeaveItem[]>>({});
@@ -273,12 +296,13 @@ export default function DesignerPreviewV2Page() {
       .order("booking_time");
     const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
-      supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: priceData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+      supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
       session.is_manager ? transactionQuery : transactionQuery.eq("designer_id", session.id),
       session.is_manager ? productUsageQuery : productUsageQuery.eq("designer_id", session.id),
+      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
     ]);
@@ -288,6 +312,7 @@ export default function DesignerPreviewV2Page() {
     const bookings = (bookingData || []) as BackendBooking[];
     const transactions = (transactionData || []) as BackendTransaction[];
     const productUsage = (productUsageData || []) as BackendProductUsage[];
+    const priceItems = (priceData || []) as BackendDesignerPriceItem[];
     const offDays = (offDayData || []) as BackendOffDay[];
     const offSlots = (offSlotData || []) as BackendOffSlot[];
     const currentDesigner = designers.find((designer) => designer.id === session.id);
@@ -297,6 +322,7 @@ export default function DesignerPreviewV2Page() {
     setBackendBookings(bookings);
     setBackendTransactions(transactions);
     setBackendProductUsage(productUsage);
+    setDesignerPriceItems(priceItems);
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
     setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
     setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
@@ -309,6 +335,8 @@ export default function DesignerPreviewV2Page() {
         phone: designerProfile.phone,
         specialties: currentDesigner.style || designerProfile.specialties,
         avatarUrl: currentDesigner.avatar_url || "",
+        joinedDate: currentDesigner.joined_date || "",
+        leftDate: currentDesigner.left_date || "",
       });
     }
     setBackendLoading(false);
@@ -484,7 +512,7 @@ export default function DesignerPreviewV2Page() {
         <div className="screen-body">
           {backendLoading && <div className="sync-banner">正在同步後台資料...</div>}
           {showSettings ? (
-            <SettingsView profile={designerProfile} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
+            <SettingsView profile={designerProfile} priceItems={designerPriceItems} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
@@ -645,6 +673,20 @@ export default function DesignerPreviewV2Page() {
         .customer-designer-card { display: flex; align-items: center; gap: 10px; }
         .customer-designer-card strong { display: block; color: #1f2937; font-size: 16px; font-weight: 950; margin-bottom: 3px; }
         .customer-designer-card span { color: #6b7280; font-size: 12px; font-weight: 800; line-height: 1.35; }
+        .readonly-profile-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
+        .readonly-profile-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
+        .readonly-profile-card strong { color: #1f2937; font-size: 14px; font-weight: 850; }
+        .price-list-card { border: 1px solid #d7eaff; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); border-radius: 16px; padding: 14px; margin-bottom: 14px; }
+        .price-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+        .price-list-title { color: #1f2937; font-size: 16px; font-weight: 950; }
+        .readonly-badge { background: #e8f2ff; color: #1478c8; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 950; white-space: nowrap; }
+        .price-list-rows { display: grid; border: 1px solid #edf0f4; border-radius: 12px; overflow: hidden; background: #fff; }
+        .price-list-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: center; padding: 10px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
+        .price-list-row:last-child { border-bottom: none; }
+        .price-category { color: #8b95a3; font-size: 11px; font-weight: 900; }
+        .price-name { color: #1f2937; font-weight: 950; }
+        .price-value { color: #1478c8; font-weight: 950; white-space: nowrap; }
+        .price-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 12px; text-align: center; }
         .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
         .full-width-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 14px; padding: 13px 0; font-size: 14px; font-weight: 950; cursor: pointer; }
         .roster-calendar { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
@@ -746,7 +788,7 @@ function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenS
   );
 }
 
-function SettingsView({ profile, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: Record<number, LeaveItem[]>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
+function SettingsView({ profile, priceItems, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: Record<number, LeaveItem[]>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
   const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
 
   return (
@@ -768,12 +810,12 @@ function SettingsView({ profile, onProfileChange, onAvatarUpload, isSynced, leav
           <div className="settings-card-desc">查看已安排休假</div>
         </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
+      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} priceItems={priceItems} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
     </>
   );
 }
 
-function ProfileSettingsPanel({ profile, onProfileChange, onAvatarUpload, isSynced }: { profile: DesignerProfile; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean }) {
+function ProfileSettingsPanel({ profile, priceItems, onProfileChange, onAvatarUpload, isSynced }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean }) {
   const [draft, setDraft] = useState(profile);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -822,6 +864,8 @@ function ProfileSettingsPanel({ profile, onProfileChange, onAvatarUpload, isSync
         <ProfileInput label="職稱" value={draft.role} onChange={(value) => updateDraft("role", value)} />
         <ProfileInput label="電話" value={draft.phone} onChange={(value) => updateDraft("phone", value)} />
         <ProfileInput label="專長" value={draft.specialties} onChange={(value) => updateDraft("specialties", value)} />
+        <ReadOnlyProfileCard label="加入日期" value={formatProfileDate(draft.joinedDate)} />
+        <ReadOnlyProfileCard label="離職日期" value={draft.leftDate ? formatProfileDate(draft.leftDate) : "尚未設定"} />
       </div>
       <div className="customer-profile-preview">
         <div className="panel-label">顧客預約端顯示預覽</div>
@@ -833,8 +877,45 @@ function ProfileSettingsPanel({ profile, onProfileChange, onAvatarUpload, isSync
           </div>
         </div>
       </div>
+      <DesignerPriceListCard priceItems={priceItems} />
       <div className="profile-note">{isSynced ? "目前已連線後台，儲存後會同步顯示在顧客預約端與後台設計師資料。" : "目前為公開示意模式，不會寫入正式後台資料。"}</div>
       <button className="full-width-btn" onClick={saveProfile}>{saving ? "同步中..." : saved ? "已更新個人資訊" : "儲存個人資訊"}</button>
+    </section>
+  );
+}
+
+function ReadOnlyProfileCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="readonly-profile-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPriceItem[] }) {
+  const groupedItems = priceItems
+    .filter((item) => item.is_active !== false)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  return (
+    <section className="price-list-card">
+      <div className="price-list-head">
+        <div className="price-list-title">我的價目表</div>
+        <span className="readonly-badge">僅供查看</span>
+      </div>
+      <div className="price-list-rows">
+        {groupedItems.length > 0 ? groupedItems.map((item) => (
+          <div className="price-list-row" key={item.id}>
+            <span className="price-category">{item.category || "服務"}</span>
+            <span className="price-name">{item.name}</span>
+            <span className="price-value">{formatPriceRange(item.price_range)}</span>
+          </div>
+        )) : (
+          <div className="price-empty">目前尚未設定專屬價目表</div>
+        )}
+      </div>
+      <div className="profile-note" style={{ margin: "10px 0 0" }}>價格由後台管理，如需調整請聯繫管理人員。</div>
     </section>
   );
 }
@@ -1867,6 +1948,16 @@ function formatIncomeDateLabel(date: string) {
   const parsedDate = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsedDate.getTime())) return date;
   return `${parsedDate.getMonth() + 1}月${parsedDate.getDate()}日`;
+}
+
+function formatProfileDate(date: string) {
+  if (!date) return "尚未設定";
+  return date.replace(/-/g, "/");
+}
+
+function formatPriceRange(priceRange: string) {
+  if (!priceRange) return "未設定";
+  return priceRange.replace(/\$/g, "NT$");
 }
 
 function getServiceGross(transaction: BackendTransaction) {
