@@ -43,6 +43,14 @@ type CustomerRecord = {
   lastVisit: string;
 };
 type ScheduleItem = { text: string; tone: string };
+type LeaveItem = { text: string; tone: "day-off" | "blocked" };
+type LeaveDraft = {
+  date: string;
+  type: "整天休假" | "指定時段不接客";
+  startTime: string;
+  endTime: string;
+  note: string;
+};
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "□" },
@@ -69,7 +77,7 @@ const initialScheduleItems: Record<number, ScheduleItem[]> = {
   20: [{ text: "11:00 燙髮", tone: "perm" }],
 };
 
-const leaveItems: Record<number, { text: string; tone: "day-off" | "blocked" }[]> = {
+const initialLeaveItems: Record<number, LeaveItem[]> = {
   15: [{ text: "整天休假", tone: "day-off" }],
   19: [{ text: "13:00-17:00 不接客", tone: "blocked" }],
   24: [{ text: "上午不接客", tone: "blocked" }],
@@ -101,6 +109,7 @@ export default function DesignerPreviewV2Page() {
   const [bookingComplete, setBookingComplete] = useState(false);
   const [demoTodayRows, setDemoTodayRows] = useState<Appointment[]>(initialTodayRows);
   const [demoScheduleItems, setDemoScheduleItems] = useState<Record<number, ScheduleItem[]>>(initialScheduleItems);
+  const [demoLeaveItems, setDemoLeaveItems] = useState<Record<number, LeaveItem[]>>(initialLeaveItems);
 
   function setDecision(name: string, decision: PendingDecision) {
     setPendingDecisions((prev) => ({ ...prev, [name]: decision }));
@@ -138,13 +147,20 @@ export default function DesignerPreviewV2Page() {
     setBookingComplete(true);
   }
 
+  function addDemoLeave(day: number, item: LeaveItem) {
+    setDemoLeaveItems((prev) => ({
+      ...prev,
+      [day]: [...(prev[day] || []), item],
+    }));
+  }
+
   return (
     <main className="preview-page">
       <section className="phone-shell">
         <Header onOpenSettings={() => setShowSettings(true)} />
         <div className="screen-body">
           {showSettings ? (
-            <SettingsView onBack={() => setShowSettings(false)} />
+            <SettingsView leaveItems={demoLeaveItems} onAddLeave={addDemoLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={demoTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft()); }} />}
@@ -275,6 +291,10 @@ export default function DesignerPreviewV2Page() {
         .leave-list { display: grid; gap: 8px; margin-bottom: 14px; }
         .leave-row { display: flex; justify-content: space-between; gap: 10px; border: 1px solid #edf0f4; background: #fff; border-radius: 12px; padding: 10px 11px; font-size: 13px; font-weight: 850; }
         .leave-row span:last-child { color: #6b7280; text-align: right; }
+        .leave-form { border: 1px solid #e1e7ef; background: #f8fafc; border-radius: 16px; padding: 12px; }
+        .leave-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .leave-type-btn { border: 1px solid #dfe3ea; background: #fff; color: #4b5563; border-radius: 12px; padding: 10px 8px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .leave-type-btn.active { border-color: #148bd8; background: #eaf7ff; color: #1478c8; }
         .bottom-tabs { height: 74px; background: #fff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(4, 1fr); flex: 0 0 auto; }
         .tab-btn { border: none; background: transparent; color: #9aa3af; font-weight: 850; font-size: 13px; position: relative; padding-top: 9px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
         .tab-btn.active { color: #148bd8; }
@@ -340,7 +360,7 @@ function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
-function SettingsView({ onBack }: { onBack: () => void }) {
+function SettingsView({ leaveItems, onAddLeave, onBack }: { leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void; onBack: () => void }) {
   const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
 
   return (
@@ -362,7 +382,7 @@ function SettingsView({ onBack }: { onBack: () => void }) {
           <div className="settings-card-desc">查看已安排休假</div>
         </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel /> : <RosterSettingsPanel />}
+      {activePanel === "profile" ? <ProfileSettingsPanel /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
     </>
   );
 }
@@ -383,7 +403,27 @@ function ProfileSettingsPanel() {
   );
 }
 
-function RosterSettingsPanel() {
+function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<number, LeaveItem[]>; onAddLeave: (day: number, item: LeaveItem) => void }) {
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [draft, setDraft] = useState<LeaveDraft>({
+    date: "2026-08-19",
+    type: "整天休假",
+    startTime: "13:00",
+    endTime: "17:00",
+    note: "",
+  });
+  const leaveRows = Object.entries(leaveItems).flatMap(([day, items]) =>
+    items.map((item) => ({ day: Number(day), item }))
+  ).sort((a, b) => a.day - b.day);
+
+  function submitLeave() {
+    const day = Number(draft.date.split("-")[2]);
+    const isFullDay = draft.type === "整天休假";
+    const text = isFullDay ? "整天休假" : `${draft.startTime}-${draft.endTime} 不接客`;
+    onAddLeave(day, { text, tone: isFullDay ? "day-off" : "blocked" });
+    setShowLeaveForm(false);
+  }
+
   return (
     <section className="panel">
       <div className="panel-label">排班表</div>
@@ -409,11 +449,44 @@ function RosterSettingsPanel() {
         })}
       </div>
       <div className="leave-list">
-        <div className="leave-row"><strong>8/15（六）</strong><span>整天休假</span></div>
-        <div className="leave-row"><strong>8/19（三）</strong><span>13:00-17:00 不接客</span></div>
-        <div className="leave-row"><strong>8/24（一）</strong><span>上午不接客</span></div>
+        {leaveRows.map(({ day, item }, index) => (
+          <div className="leave-row" key={`${day}-${item.text}-${index}`}>
+            <strong>{formatScheduleDateLabel(formatScheduleDate(day))}</strong>
+            <span>{item.text}</span>
+          </div>
+        ))}
       </div>
-      <button className="full-width-btn">安排休假</button>
+      {showLeaveForm && (
+        <div className="leave-form">
+          <div className="booking-field">
+            <div className="booking-label">日期</div>
+            <input className="checkout-input" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
+          </div>
+          <div className="booking-field">
+            <div className="booking-label">類型</div>
+            <div className="leave-type-grid">
+              {(["整天休假", "指定時段不接客"] as LeaveDraft["type"][]).map((type) => (
+                <button className={`leave-type-btn ${draft.type === type ? "active" : ""}`} key={type} onClick={() => setDraft({ ...draft, type })}>{type}</button>
+              ))}
+            </div>
+          </div>
+          {draft.type === "指定時段不接客" && (
+            <div className="detail-grid">
+              <BookingInput label="開始時間" value={draft.startTime} onChange={(value) => setDraft({ ...draft, startTime: value })} />
+              <BookingInput label="結束時間" value={draft.endTime} onChange={(value) => setDraft({ ...draft, endTime: value })} />
+            </div>
+          )}
+          <div className="booking-field">
+            <div className="booking-label">備註</div>
+            <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="例如：進修課、家庭日、臨時不接客..." />
+          </div>
+          <div className="modal-action-row">
+            <button className="secondary-modal-btn" onClick={() => setShowLeaveForm(false)}>取消</button>
+            <button className="primary-modal-btn" onClick={submitLeave}>加入排班表</button>
+          </div>
+        </div>
+      )}
+      {!showLeaveForm && <button className="full-width-btn" onClick={() => setShowLeaveForm(true)}>安排休假</button>}
     </section>
   );
 }
