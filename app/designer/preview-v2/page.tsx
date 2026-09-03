@@ -283,7 +283,8 @@ export default function DesignerPreviewV2Page() {
         .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
         .full-width-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 14px; padding: 13px 0; font-size: 14px; font-weight: 950; cursor: pointer; }
         .roster-calendar { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
-        .roster-day { min-height: 58px; border-right: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; background: #fff; padding: 6px 4px; font-size: 12px; font-weight: 850; color: #374151; }
+        .roster-day { min-height: 58px; border: none; border-right: 1px solid #edf0f4; border-bottom: 1px solid #edf0f4; background: #fff; padding: 6px 4px; font-size: 12px; font-weight: 850; color: #374151; text-align: left; cursor: pointer; font-family: inherit; }
+        .roster-day:focus-visible { outline: 2px solid #148bd8; outline-offset: -2px; }
         .roster-day:nth-child(7n) { border-right: none; }
         .roster-day.has-leave { background: #fff8ee; }
         .roster-day.has-blocked { background: #f1f8ff; }
@@ -429,6 +430,11 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
     setShowLeaveForm(false);
   }
 
+  function openLeaveForm(day: number) {
+    setDraft((prev) => ({ ...prev, date: formatScheduleDate(day) }));
+    setShowLeaveForm(true);
+  }
+
   return (
     <section className="panel">
       <div className="panel-label">排班表</div>
@@ -446,10 +452,10 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
           const items = leaveItems[date] || [];
           const toneClass = items.some((item) => item.tone === "day-off") ? "has-leave" : items.length > 0 ? "has-blocked" : "";
           return (
-            <div className={`roster-day ${toneClass}`} key={date}>
+            <button className={`roster-day ${toneClass}`} key={date} onClick={() => openLeaveForm(date)}>
               <span>{date}</span>
               {items.map((item) => <span className={`leave-chip ${item.tone}`} key={item.text}>{item.text}</span>)}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -491,7 +497,6 @@ function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: Record<nu
           </div>
         </div>
       )}
-      {!showLeaveForm && <button className="full-width-btn" onClick={() => setShowLeaveForm(true)}>安排休假</button>}
     </section>
   );
 }
