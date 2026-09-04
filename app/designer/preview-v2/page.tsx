@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
@@ -669,17 +670,17 @@ export default function DesignerPreviewV2Page() {
         .profile-input-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
         .profile-input-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
         .profile-input-card input { width: 100%; border: none; background: transparent; color: #1f2937; font-size: 14px; font-weight: 850; outline: none; font-family: inherit; }
-        .customer-profile-preview { border: 1px solid #edf0f4; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
-        .customer-designer-card { display: flex; align-items: center; gap: 10px; }
-        .customer-designer-card strong { display: block; color: #1f2937; font-size: 16px; font-weight: 950; margin-bottom: 3px; }
-        .customer-designer-card span { color: #6b7280; font-size: 12px; font-weight: 800; line-height: 1.35; }
         .readonly-profile-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
+        .readonly-profile-card.wide { grid-column: 1 / -1; }
         .readonly-profile-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
         .readonly-profile-card strong { color: #1f2937; font-size: 14px; font-weight: 850; }
         .price-list-card { border: 1px solid #d7eaff; background: linear-gradient(135deg, #ffffff 0%, #f1f8ff 100%); border-radius: 16px; padding: 14px; margin-bottom: 14px; }
         .price-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
         .price-list-title { color: #1f2937; font-size: 16px; font-weight: 950; }
         .readonly-badge { background: #e8f2ff; color: #1478c8; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 950; white-space: nowrap; }
+        .price-image-wrap { border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; background: #050505; margin-bottom: 12px; }
+        .price-list-image { display: block; width: 100%; height: auto; }
+        .price-sync-label { color: #8b95a3; font-size: 11px; font-weight: 950; margin-bottom: 8px; }
         .price-list-rows { display: grid; border: 1px solid #edf0f4; border-radius: 12px; overflow: hidden; background: #fff; }
         .price-list-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: center; padding: 10px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
         .price-list-row:last-child { border-bottom: none; }
@@ -864,18 +865,7 @@ function ProfileSettingsPanel({ profile, priceItems, onProfileChange, onAvatarUp
         <ProfileInput label="職稱" value={draft.role} onChange={(value) => updateDraft("role", value)} />
         <ProfileInput label="電話" value={draft.phone} onChange={(value) => updateDraft("phone", value)} />
         <ProfileInput label="專長" value={draft.specialties} onChange={(value) => updateDraft("specialties", value)} />
-        <ReadOnlyProfileCard label="加入日期" value={formatProfileDate(draft.joinedDate)} />
-        <ReadOnlyProfileCard label="離職日期" value={draft.leftDate ? formatProfileDate(draft.leftDate) : "尚未設定"} />
-      </div>
-      <div className="customer-profile-preview">
-        <div className="panel-label">顧客預約端顯示預覽</div>
-        <div className="customer-designer-card">
-          <AvatarPreview avatarUrl={draft.avatarUrl} />
-          <div>
-            <strong>{draft.name}</strong>
-            <span>{draft.role} · {draft.specialties}</span>
-          </div>
-        </div>
+        <ReadOnlyProfileCard label="加入日期" value={formatProfileDate(draft.joinedDate)} wide />
       </div>
       <DesignerPriceListCard priceItems={priceItems} />
       <div className="profile-note">{isSynced ? "目前已連線後台，儲存後會同步顯示在顧客預約端與後台設計師資料。" : "目前為公開示意模式，不會寫入正式後台資料。"}</div>
@@ -884,9 +874,9 @@ function ProfileSettingsPanel({ profile, priceItems, onProfileChange, onAvatarUp
   );
 }
 
-function ReadOnlyProfileCard({ label, value }: { label: string; value: string }) {
+function ReadOnlyProfileCard({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
-    <div className="readonly-profile-card">
+    <div className={`readonly-profile-card${wide ? " wide" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -904,6 +894,10 @@ function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPric
         <div className="price-list-title">我的價目表</div>
         <span className="readonly-badge">僅供查看</span>
       </div>
+      <div className="price-image-wrap">
+        <Image className="price-list-image" src="/designer-price-list-v2.png" alt="完整價目表" width={1324} height={1354} sizes="(max-width: 520px) 86vw, 420px" />
+      </div>
+      <div className="price-sync-label">後台同步價目</div>
       <div className="price-list-rows">
         {groupedItems.length > 0 ? groupedItems.map((item) => (
           <div className="price-list-row" key={item.id}>
@@ -1957,7 +1951,9 @@ function formatProfileDate(date: string) {
 
 function formatPriceRange(priceRange: string) {
   if (!priceRange) return "未設定";
-  return priceRange.replace(/\$/g, "NT$");
+  const normalizedPrice = priceRange.trim();
+  if (normalizedPrice.includes("NT$")) return normalizedPrice;
+  return normalizedPrice.replace(/\$/g, "NT$");
 }
 
 function getServiceGross(transaction: BackendTransaction) {
