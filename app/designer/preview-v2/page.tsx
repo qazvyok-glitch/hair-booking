@@ -826,14 +826,9 @@ export default function DesignerPreviewV2Page() {
         .product-meta { color: #8b95a3; font-size: 11px; font-weight: 800; }
         .product-check { width: 22px; height: 22px; border: 1.5px solid #dfe3ea; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 950; flex: 0 0 auto; }
         .product-item.selected .product-check { border-color: #148bd8; background: #148bd8; }
-        .product-controls { background: #eaf7ff; padding: 9px 11px 11px; display: grid; gap: 4px; }
-        .quantity-row { display: flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12px; font-weight: 900; }
-        .quantity-btn { width: 28px; height: 28px; border: 1px solid #cfe1f2; background: #fff; color: #1478c8; border-radius: 8px; font-size: 16px; font-weight: 950; cursor: pointer; }
-        .quantity-value { color: #1f2937; min-width: 20px; text-align: center; font-size: 13px; font-weight: 950; }
-        .product-edit-line { display: grid; grid-template-columns: 1fr 128px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(20, 139, 216, .12); }
-        .product-edit-label { color: #6b7280; font-size: 12px; font-weight: 950; }
-        .product-subtotal { display: flex; justify-content: flex-end; color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; padding-top: 4px; }
-        .selected-product-summary { margin-top: 10px; padding-top: 10px; border-top: 1px solid #edf0f4; display: grid; gap: 5px; }
+        .product-checkout-lines { margin-top: 10px; border-top: 1px solid #edf0f4; }
+        .product-subtotal { display: flex; justify-content: flex-end; color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; padding: 8px 0 2px; }
+        .selected-product-summary { margin-top: 8px; padding-top: 8px; border-top: 1px solid #edf0f4; display: grid; gap: 5px; }
         .selected-product-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #4b5563; font-size: 12px; font-weight: 850; }
         .selected-product-row strong { color: #1478c8; font-weight: 950; white-space: nowrap; }
         .product-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 10px; text-align: center; }
@@ -1608,13 +1603,6 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     });
   }
 
-  function updateProductQuantity(productId: number, quantity: number) {
-    setDraft({
-      ...draft,
-      productItems: draft.productItems.map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item),
-    });
-  }
-
   function updateProductPrice(productId: number, value: number) {
     setDraft({
       ...draft,
@@ -1702,25 +1690,6 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
                         </span>
                         <span className="product-check">{selected ? "✓" : ""}</span>
                       </button>
-                      {selected && (
-                        <div className="product-controls">
-                          <div className="quantity-row">
-                            <span>數量</span>
-                            <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity - 1)}>−</button>
-                            <span className="quantity-value">{selected.quantity}</span>
-                            <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity + 1)}>＋</button>
-                          </div>
-                          <div className="product-edit-line">
-                            <span className="product-edit-label">商品價格</span>
-                            <input className="checkout-input" type="number" value={selected.unitPrice || ""} onChange={(event) => updateProductPrice(product.id, Number(event.target.value) || 0)} placeholder="0" />
-                          </div>
-                          <div className="product-edit-line">
-                            <span className="product-edit-label">商品折扣</span>
-                            <input className="checkout-input" type="number" value={selected.discount || ""} onChange={(event) => updateProductDiscount(product.id, Number(event.target.value) || 0)} placeholder="0" />
-                          </div>
-                          <div className="product-subtotal">小計 NT${Math.max(0, (selected.unitPrice * selected.quantity) - selected.discount).toLocaleString()}</div>
-                        </div>
-                      )}
                     </div>
                   );
                 }) : (
@@ -1730,16 +1699,19 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
             </>
           )}
           {draft.productItems.length > 0 && (
-            <div className="selected-product-summary">
+            <div className="product-checkout-lines">
               {draft.productItems.map((item) => (
-                <div className="selected-product-row" key={item.product.id}>
-                  <span>{item.product.name} x{item.quantity}</span>
-                  <strong>+NT${Math.max(0, (item.unitPrice * item.quantity) - item.discount).toLocaleString()}</strong>
+                <div key={item.product.id}>
+                  <CheckoutNumber label={item.product.name} value={item.unitPrice} onChange={(value) => updateProductPrice(item.product.id, value)} />
+                  <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
+                  <div className="product-subtotal">小計 NT${Math.max(0, (item.unitPrice * item.quantity) - item.discount).toLocaleString()}</div>
                 </div>
               ))}
-              <div className="selected-product-row">
-                <span>商品實收小計</span>
-                <strong>+NT${productSubtotal.toLocaleString()}</strong>
+              <div className="selected-product-summary">
+                <div className="selected-product-row">
+                  <span>商品實收小計</span>
+                  <strong>+NT${productSubtotal.toLocaleString()}</strong>
+                </div>
               </div>
             </div>
           )}
