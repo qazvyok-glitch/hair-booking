@@ -525,6 +525,12 @@ export default function DesignerPreviewV2Page() {
         alert("結帳同步失敗，請稍後再試。");
         return;
       }
+      if (checkoutAppointment.id) {
+        const { error: bookingError } = await supabase.from("bookings").update({ status: "completed" }).eq("id", checkoutAppointment.id);
+        if (bookingError) {
+          alert("交易已同步，但預約狀態更新失敗，請稍後重新整理確認。");
+        }
+      }
       for (const item of draft.productItems) {
         const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
         if (product) {
@@ -540,6 +546,12 @@ export default function DesignerPreviewV2Page() {
         }
       }
       await loadBackendData(backendSession);
+    } else {
+      setDemoTodayRows((prev) => prev.map((item) => (
+        item.time === checkoutAppointment.time && item.name === checkoutAppointment.name
+          ? { ...item, status: "已完成", tone: "done", action: "查看" }
+          : item
+      )));
     }
     setCheckoutComplete(true);
   }
@@ -2032,7 +2044,7 @@ function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: Backen
     .filter((booking) => !designerId || booking.designer_id === designerId)
     .filter((booking) => booking.status !== "pending" && booking.status !== "cancelled")
     .map((booking) => {
-      const isDone = paidBookingIds.has(booking.id);
+      const isDone = booking.status === "completed" || paidBookingIds.has(booking.id);
       const isProgress = !isDone && isTimeStarted(booking.booking_time);
       return {
         id: booking.id,
