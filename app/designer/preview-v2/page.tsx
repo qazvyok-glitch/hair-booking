@@ -33,8 +33,7 @@ type Appointment = {
 type CheckoutDraft = {
   serviceAmount: number;
   serviceDiscount: number;
-  productAmount: number;
-  productDiscount: number;
+  productItems: CheckoutProductItem[];
   paymentMethod: string;
   note: string;
 };
@@ -130,6 +129,8 @@ type BackendProductUsage = {
   total_cost: number;
   used_at: string;
 };
+type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
+type CheckoutProductItem = { product: BackendProduct; quantity: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
@@ -193,6 +194,13 @@ const teamLeaveItems: Record<number, LeaveItem[]> = {
 };
 
 const designerOptions = ["Cherry", "Lynn", "Mira", "Emma"];
+
+const demoProducts: BackendProduct[] = [
+  { id: 1, name: "生命果油 GS 120ml", unit: "瓶", unit_price: 1180, category: "護髮保養", stock_quantity: 8, is_active: true, sort_order: 1 },
+  { id: 2, name: "頭皮淨化洗髮精 250ml", unit: "瓶", unit_price: 980, category: "頭皮養護", stock_quantity: 12, is_active: true, sort_order: 2 },
+  { id: 3, name: "護色洗髮精 250ml", unit: "瓶", unit_price: 880, category: "染後護理", stock_quantity: 10, is_active: true, sort_order: 3 },
+  { id: 4, name: "柔順修護髮膜 200ml", unit: "罐", unit_price: 1280, category: "護髮保養", stock_quantity: 6, is_active: true, sort_order: 4 },
+];
 
 const initialDesignerProfile: DesignerProfile = {
   name: "Cherry",
@@ -271,6 +279,7 @@ export default function DesignerPreviewV2Page() {
   const [backendBookings, setBackendBookings] = useState<BackendBooking[]>([]);
   const [backendTransactions, setBackendTransactions] = useState<BackendTransaction[]>([]);
   const [backendProductUsage, setBackendProductUsage] = useState<BackendProductUsage[]>([]);
+  const [backendProducts, setBackendProducts] = useState<BackendProduct[]>(demoProducts);
   const [designerPriceItems, setDesignerPriceItems] = useState<BackendDesignerPriceItem[]>(demoDesignerPriceItems);
   const [backendScheduleItems, setBackendScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<Record<number, ScheduleItem[]>>({});
@@ -319,12 +328,13 @@ export default function DesignerPreviewV2Page() {
       .order("booking_time");
     const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: priceData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: priceData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
       supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
       session.is_manager ? transactionQuery : transactionQuery.eq("designer_id", session.id),
       session.is_manager ? productUsageQuery : productUsageQuery.eq("designer_id", session.id),
+      supabase.from("products").select("id, name, unit, unit_price, category, stock_quantity, is_active, sort_order").eq("is_active", true).order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
@@ -335,6 +345,7 @@ export default function DesignerPreviewV2Page() {
     const bookings = (bookingData || []) as BackendBooking[];
     const transactions = (transactionData || []) as BackendTransaction[];
     const productUsage = (productUsageData || []) as BackendProductUsage[];
+    const products = (productData || []) as BackendProduct[];
     const priceItems = (priceData || []) as BackendDesignerPriceItem[];
     const offDays = (offDayData || []) as BackendOffDay[];
     const offSlots = (offSlotData || []) as BackendOffSlot[];
@@ -345,6 +356,7 @@ export default function DesignerPreviewV2Page() {
     setBackendBookings(bookings);
     setBackendTransactions(transactions);
     setBackendProductUsage(productUsage);
+    setBackendProducts(products.length > 0 ? products : demoProducts);
     setDesignerPriceItems(priceItems.length > 0 ? priceItems : demoDesignerPriceItems);
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
     setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
@@ -486,10 +498,15 @@ export default function DesignerPreviewV2Page() {
   async function completeCheckout(draft: CheckoutDraft, total: number) {
     if (!checkoutAppointment) return;
     if (backendConnected && backendSession) {
-      const productSubtotal = Math.max(0, draft.productAmount - draft.productDiscount);
+      const productRows = draft.productItems.map((item) => {
+        const originalTotal = item.product.unit_price * item.quantity;
+        const finalTotal = Math.max(0, originalTotal - item.discount);
+        const discountText = item.discount > 0 ? ` 折扣NT$${item.discount.toLocaleString()}` : "";
+        return `${item.product.name} x${item.quantity}${discountText} 小計NT$${finalTotal.toLocaleString()}`;
+      });
       const noteRows = [
         draft.note,
-        draft.productAmount > 0 ? `客人購買商品：生命果油 GS 120ml x1，單價NT$${draft.productAmount.toLocaleString()}，折扣NT$${draft.productDiscount.toLocaleString()}，小計NT$${productSubtotal.toLocaleString()}` : "",
+        productRows.length > 0 ? `客人購買商品：${productRows.join("、")}` : "",
       ].filter(Boolean);
       const { error } = await supabase.from("transactions").insert({
         booking_id: checkoutAppointment.id || null,
@@ -508,6 +525,20 @@ export default function DesignerPreviewV2Page() {
       if (error) {
         alert("結帳同步失敗，請稍後再試。");
         return;
+      }
+      for (const item of draft.productItems) {
+        const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+        if (product) {
+          const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+          await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+          await supabase.from("stock_records").insert({
+            product_id: item.product.id,
+            product_name: item.product.name,
+            quantity: -item.quantity,
+            type: "out",
+            note: `客人購買 - ${checkoutAppointment.name || "現場客人"}`,
+          });
+        }
       }
       await loadBackendData(backendSession);
     }
@@ -549,7 +580,7 @@ export default function DesignerPreviewV2Page() {
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
-      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
+      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} products={backendConnected ? backendProducts : demoProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
@@ -780,6 +811,32 @@ export default function DesignerPreviewV2Page() {
         .checkout-line:last-child { border-bottom: none; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
         .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
+        .checkout-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+        .product-picker-toggle { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 950; cursor: pointer; white-space: nowrap; }
+        .product-picker-hint { color: #8b95a3; font-size: 12px; font-weight: 800; line-height: 1.45; margin-bottom: 10px; }
+        .product-search { margin-bottom: 8px; }
+        .product-category-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; }
+        .product-category-chip { border: 1px solid #dfe3ea; background: #fff; color: #6b7280; border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 900; cursor: pointer; white-space: nowrap; }
+        .product-category-chip.active { border-color: #148bd8; background: #eaf7ff; color: #1478c8; }
+        .product-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; padding-right: 2px; }
+        .product-item { border: 1px solid #e1e7ef; border-radius: 12px; background: #fff; overflow: hidden; }
+        .product-item.selected { border-color: #148bd8; background: #f1f8ff; }
+        .product-pick-row { width: 100%; border: none; background: transparent; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 11px; color: #1f2937; text-align: left; cursor: pointer; font-family: inherit; }
+        .product-name { font-size: 13px; font-weight: 950; margin-bottom: 3px; }
+        .product-meta { color: #8b95a3; font-size: 11px; font-weight: 800; }
+        .product-check { width: 22px; height: 22px; border: 1.5px solid #dfe3ea; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 950; flex: 0 0 auto; }
+        .product-item.selected .product-check { border-color: #148bd8; background: #148bd8; }
+        .product-controls { background: #eaf7ff; padding: 9px 11px 11px; display: grid; gap: 9px; }
+        .quantity-row { display: flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12px; font-weight: 900; }
+        .quantity-btn { width: 28px; height: 28px; border: 1px solid #cfe1f2; background: #fff; color: #1478c8; border-radius: 8px; font-size: 16px; font-weight: 950; cursor: pointer; }
+        .quantity-value { color: #1f2937; min-width: 20px; text-align: center; font-size: 13px; font-weight: 950; }
+        .product-discount-grid { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+        .product-discount-label { display: grid; gap: 5px; color: #6b7280; font-size: 11px; font-weight: 900; }
+        .product-subtotal { color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; }
+        .selected-product-summary { margin-top: 10px; padding-top: 10px; border-top: 1px solid #edf0f4; display: grid; gap: 5px; }
+        .selected-product-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #4b5563; font-size: 12px; font-weight: 850; }
+        .selected-product-row strong { color: #1478c8; font-weight: 950; white-space: nowrap; }
+        .product-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 10px; text-align: center; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
         .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
@@ -1519,16 +1576,55 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
   );
 }
 
-function CheckoutModal({ row, complete, isSynced, onComplete, onClose }: { row: Appointment; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
+function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose }: { row: Appointment; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
   const [draft, setDraft] = useState<CheckoutDraft>({
     serviceAmount: 3000,
     serviceDiscount: 0,
-    productAmount: 1180,
-    productDiscount: 0,
+    productItems: [],
     paymentMethod: "現金",
     note: "",
   });
-  const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + Math.max(0, draft.productAmount - draft.productDiscount);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [productCategory, setProductCategory] = useState("全部");
+  const productCategories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
+  const filteredProducts = products.filter((product) => {
+    const category = product.category || "未分類";
+    const keyword = productSearch.trim().toLowerCase();
+    if (productCategory !== "全部" && category !== productCategory) return false;
+    if (keyword && !`${product.name} ${category}`.toLowerCase().includes(keyword)) return false;
+    return product.is_active !== false;
+  });
+  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, (item.product.unit_price * item.quantity) - item.discount), 0);
+  const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + productSubtotal;
+
+  function toggleProduct(product: BackendProduct) {
+    const exists = draft.productItems.find((item) => item.product.id === product.id);
+    setDraft({
+      ...draft,
+      productItems: exists
+        ? draft.productItems.filter((item) => item.product.id !== product.id)
+        : [...draft.productItems, { product, quantity: 1, discount: 0 }],
+    });
+  }
+
+  function updateProductQuantity(productId: number, quantity: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item),
+    });
+  }
+
+  function updateProductDiscount(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        const originalTotal = item.product.unit_price * item.quantity;
+        return { ...item, discount: Math.min(Math.max(0, value), originalTotal) };
+      }),
+    });
+  }
 
   if (complete) {
     return (
@@ -1565,9 +1661,76 @@ function CheckoutModal({ row, complete, isSynced, onComplete, onClose }: { row: 
           <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
         </section>
         <section className="panel">
-          <div className="panel-label">客人購買商品</div>
-          <CheckoutNumber label="生命果油 GS 120ml" value={draft.productAmount} onChange={(value) => setDraft({ ...draft, productAmount: value })} />
-          <CheckoutNumber label="商品折扣" value={draft.productDiscount} onChange={(value) => setDraft({ ...draft, productDiscount: value })} />
+          <div className="checkout-section-head">
+            <div className="panel-label">客人購買商品</div>
+            <button className="product-picker-toggle" onClick={() => setShowProductPicker(!showProductPicker)}>
+              {showProductPicker ? "收起商品" : "選取商品"}
+            </button>
+          </div>
+          <div className="product-picker-hint">商品品項由後台同步，可打字搜尋，也可用分類快速找。</div>
+          {showProductPicker && (
+            <>
+              <input className="checkout-input product-search" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="搜尋商品名稱或分類..." />
+              <div className="product-category-tabs">
+                {productCategories.map((category) => (
+                  <button className={`product-category-chip${productCategory === category ? " active" : ""}`} key={category} onClick={() => setProductCategory(category)}>
+                    {category}
+                  </button>
+                ))}
+              </div>
+              <div className="product-list">
+                {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+                  const selected = draft.productItems.find((item) => item.product.id === product.id);
+                  const unitText = product.unit ? ` / ${product.unit}` : "";
+                  return (
+                    <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                      <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                        <span>
+                          <span className="product-name">{product.name}</span>
+                          <span className="product-meta">{product.category || "未分類"} · NT${product.unit_price.toLocaleString()}{unitText}</span>
+                        </span>
+                        <span className="product-check">{selected ? "✓" : ""}</span>
+                      </button>
+                      {selected && (
+                        <div className="product-controls">
+                          <div className="quantity-row">
+                            <span>數量</span>
+                            <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity - 1)}>−</button>
+                            <span className="quantity-value">{selected.quantity}</span>
+                            <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity + 1)}>＋</button>
+                            <span style={{ marginLeft: "auto" }}>原價 NT${(product.unit_price * selected.quantity).toLocaleString()}</span>
+                          </div>
+                          <div className="product-discount-grid">
+                            <label className="product-discount-label">
+                              商品折扣
+                              <input className="checkout-input" type="number" value={selected.discount || ""} onChange={(event) => updateProductDiscount(product.id, Number(event.target.value) || 0)} placeholder="0" />
+                            </label>
+                            <div className="product-subtotal">小計 NT${Math.max(0, (product.unit_price * selected.quantity) - selected.discount).toLocaleString()}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }) : (
+                  <div className="product-empty">找不到符合的商品</div>
+                )}
+              </div>
+            </>
+          )}
+          {draft.productItems.length > 0 && (
+            <div className="selected-product-summary">
+              {draft.productItems.map((item) => (
+                <div className="selected-product-row" key={item.product.id}>
+                  <span>{item.product.name} x{item.quantity}</span>
+                  <strong>+NT${Math.max(0, (item.product.unit_price * item.quantity) - item.discount).toLocaleString()}</strong>
+                </div>
+              ))}
+              <div className="selected-product-row">
+                <span>商品實收小計</span>
+                <strong>+NT${productSubtotal.toLocaleString()}</strong>
+              </div>
+            </div>
+          )}
         </section>
         <section className="panel">
           <div className="panel-label">付款與備註</div>
@@ -2024,7 +2187,8 @@ function getProductSaleTotal(note: string) {
 }
 
 function getProductDiscountTotal(note: string) {
-  const matches = [...note.matchAll(/商品折扣NT\$?([\d,]+)/g)];
+  const productSection = note.split("客人購買商品：")[1] || "";
+  const matches = [...productSection.matchAll(/折扣NT\$?([\d,]+)/g)];
   return matches.reduce((total, match) => total + Number(match[1].replace(/,/g, "")), 0);
 }
 
