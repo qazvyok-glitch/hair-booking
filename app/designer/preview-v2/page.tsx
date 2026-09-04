@@ -130,7 +130,7 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
-type CheckoutProductItem = { product: BackendProduct; quantity: number; discount: number };
+type CheckoutProductItem = { product: BackendProduct; quantity: number; unitPrice: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
@@ -499,10 +499,10 @@ export default function DesignerPreviewV2Page() {
     if (!checkoutAppointment) return;
     if (backendConnected && backendSession) {
       const productRows = draft.productItems.map((item) => {
-        const originalTotal = item.product.unit_price * item.quantity;
+        const originalTotal = item.unitPrice * item.quantity;
         const finalTotal = Math.max(0, originalTotal - item.discount);
-        const discountText = item.discount > 0 ? ` 折扣NT$${item.discount.toLocaleString()}` : "";
-        return `${item.product.name} x${item.quantity}${discountText} 小計NT$${finalTotal.toLocaleString()}`;
+        const discountText = item.discount > 0 ? `，折扣NT$${item.discount.toLocaleString()}` : "";
+        return `${item.product.name} x${item.quantity}，單價NT$${item.unitPrice.toLocaleString()}${discountText}，小計NT$${finalTotal.toLocaleString()}`;
       });
       const noteRows = [
         draft.note,
@@ -826,13 +826,13 @@ export default function DesignerPreviewV2Page() {
         .product-meta { color: #8b95a3; font-size: 11px; font-weight: 800; }
         .product-check { width: 22px; height: 22px; border: 1.5px solid #dfe3ea; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 950; flex: 0 0 auto; }
         .product-item.selected .product-check { border-color: #148bd8; background: #148bd8; }
-        .product-controls { background: #eaf7ff; padding: 9px 11px 11px; display: grid; gap: 9px; }
+        .product-controls { background: #eaf7ff; padding: 9px 11px 11px; display: grid; gap: 4px; }
         .quantity-row { display: flex; align-items: center; gap: 8px; color: #6b7280; font-size: 12px; font-weight: 900; }
         .quantity-btn { width: 28px; height: 28px; border: 1px solid #cfe1f2; background: #fff; color: #1478c8; border-radius: 8px; font-size: 16px; font-weight: 950; cursor: pointer; }
         .quantity-value { color: #1f2937; min-width: 20px; text-align: center; font-size: 13px; font-weight: 950; }
-        .product-discount-grid { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
-        .product-discount-label { display: grid; gap: 5px; color: #6b7280; font-size: 11px; font-weight: 900; }
-        .product-subtotal { color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; }
+        .product-edit-line { display: grid; grid-template-columns: 1fr 128px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(20, 139, 216, .12); }
+        .product-edit-label { color: #6b7280; font-size: 12px; font-weight: 950; }
+        .product-subtotal { display: flex; justify-content: flex-end; color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; padding-top: 4px; }
         .selected-product-summary { margin-top: 10px; padding-top: 10px; border-top: 1px solid #edf0f4; display: grid; gap: 5px; }
         .selected-product-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #4b5563; font-size: 12px; font-weight: 850; }
         .selected-product-row strong { color: #1478c8; font-weight: 950; white-space: nowrap; }
@@ -1595,7 +1595,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     if (keyword && !`${product.name} ${category}`.toLowerCase().includes(keyword)) return false;
     return product.is_active !== false;
   });
-  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, (item.product.unit_price * item.quantity) - item.discount), 0);
+  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, (item.unitPrice * item.quantity) - item.discount), 0);
   const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + productSubtotal;
 
   function toggleProduct(product: BackendProduct) {
@@ -1604,7 +1604,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
       ...draft,
       productItems: exists
         ? draft.productItems.filter((item) => item.product.id !== product.id)
-        : [...draft.productItems, { product, quantity: 1, discount: 0 }],
+        : [...draft.productItems, { product, quantity: 1, unitPrice: product.unit_price, discount: 0 }],
     });
   }
 
@@ -1615,12 +1615,23 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     });
   }
 
+  function updateProductPrice(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        const unitPrice = Math.max(0, value);
+        return { ...item, unitPrice, discount: Math.min(item.discount, unitPrice * item.quantity) };
+      }),
+    });
+  }
+
   function updateProductDiscount(productId: number, value: number) {
     setDraft({
       ...draft,
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
-        const originalTotal = item.product.unit_price * item.quantity;
+        const originalTotal = item.unitPrice * item.quantity;
         return { ...item, discount: Math.min(Math.max(0, value), originalTotal) };
       }),
     });
@@ -1698,15 +1709,16 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
                             <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity - 1)}>−</button>
                             <span className="quantity-value">{selected.quantity}</span>
                             <button className="quantity-btn" onClick={() => updateProductQuantity(product.id, selected.quantity + 1)}>＋</button>
-                            <span style={{ marginLeft: "auto" }}>原價 NT${(product.unit_price * selected.quantity).toLocaleString()}</span>
                           </div>
-                          <div className="product-discount-grid">
-                            <label className="product-discount-label">
-                              商品折扣
-                              <input className="checkout-input" type="number" value={selected.discount || ""} onChange={(event) => updateProductDiscount(product.id, Number(event.target.value) || 0)} placeholder="0" />
-                            </label>
-                            <div className="product-subtotal">小計 NT${Math.max(0, (product.unit_price * selected.quantity) - selected.discount).toLocaleString()}</div>
+                          <div className="product-edit-line">
+                            <span className="product-edit-label">商品價格</span>
+                            <input className="checkout-input" type="number" value={selected.unitPrice || ""} onChange={(event) => updateProductPrice(product.id, Number(event.target.value) || 0)} placeholder="0" />
                           </div>
+                          <div className="product-edit-line">
+                            <span className="product-edit-label">商品折扣</span>
+                            <input className="checkout-input" type="number" value={selected.discount || ""} onChange={(event) => updateProductDiscount(product.id, Number(event.target.value) || 0)} placeholder="0" />
+                          </div>
+                          <div className="product-subtotal">小計 NT${Math.max(0, (selected.unitPrice * selected.quantity) - selected.discount).toLocaleString()}</div>
                         </div>
                       )}
                     </div>
@@ -1722,7 +1734,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
               {draft.productItems.map((item) => (
                 <div className="selected-product-row" key={item.product.id}>
                   <span>{item.product.name} x{item.quantity}</span>
-                  <strong>+NT${Math.max(0, (item.product.unit_price * item.quantity) - item.discount).toLocaleString()}</strong>
+                  <strong>+NT${Math.max(0, (item.unitPrice * item.quantity) - item.discount).toLocaleString()}</strong>
                 </div>
               ))}
               <div className="selected-product-row">
