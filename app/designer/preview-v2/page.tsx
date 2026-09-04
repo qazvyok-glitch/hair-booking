@@ -133,7 +133,7 @@ type BackendProductUsage = {
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
-type CheckoutServiceItem = { name: string; amount: number; discount: number };
+type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
@@ -516,20 +516,7 @@ export default function DesignerPreviewV2Page() {
         booking_id: checkoutAppointment.id || null,
         designer_id: backendSession.id,
         customer_name: checkoutAppointment.name || "現場客人",
-        service_items: [
-          {
-            name: draft.primaryServiceName,
-            amount: Math.max(0, draft.serviceAmount - draft.serviceDiscount),
-            original_amount: draft.serviceAmount,
-            discount: draft.serviceDiscount,
-          },
-          ...draft.extraServiceItems.map((item) => ({
-            name: item.name,
-            amount: Math.max(0, item.amount - item.discount),
-            original_amount: item.amount,
-            discount: item.discount,
-          })),
-        ],
+        service_items: distributeServiceDiscount(draft),
         total_amount: total,
         note: noteRows.join("\n"),
         payment_method: draft.paymentMethod,
@@ -1617,7 +1604,8 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
     return product.is_active !== false;
   });
   const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
-  const serviceSubtotal = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + draft.extraServiceItems.reduce((sum, item) => sum + Math.max(0, item.amount - item.discount), 0);
+  const serviceGross = draft.serviceAmount + draft.extraServiceItems.reduce((sum, item) => sum + item.amount, 0);
+  const serviceSubtotal = Math.max(0, serviceGross - draft.serviceDiscount);
   const total = serviceSubtotal + productSubtotal;
 
   function addServiceItem() {
@@ -1625,21 +1613,17 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
     const name = selectedService?.name || "其他服務";
     setDraft({
       ...draft,
-      extraServiceItems: [...draft.extraServiceItems, { name, amount: selectedService?.amount || 0, discount: 0 }],
+      extraServiceItems: [...draft.extraServiceItems, { name, amount: selectedService?.amount || 0 }],
     });
     setShowServicePicker(false);
   }
 
-  function updateExtraService(index: number, field: "amount" | "discount", value: number) {
+  function updateExtraService(index: number, value: number) {
     setDraft({
       ...draft,
       extraServiceItems: draft.extraServiceItems.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
-        if (field === "amount") {
-          const amount = Math.max(0, value);
-          return { ...item, amount, discount: Math.min(item.discount, amount) };
-        }
-        return { ...item, discount: Math.min(Math.max(0, value), item.amount) };
+        return { ...item, amount: Math.max(0, value) };
       }),
     });
   }
@@ -1736,13 +1720,12 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
             </div>
           )}
           <CheckoutNumber label={draft.primaryServiceName} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
-          <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
           {draft.extraServiceItems.map((item, index) => (
             <div key={`${item.name}-${index}`}>
-              <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, "amount", value)} />
-              <CheckoutNumber label="服務折扣" value={item.discount} onChange={(value) => updateExtraService(index, "discount", value)} />
+              <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, value)} />
             </div>
           ))}
+          <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: Math.min(Math.max(0, value), serviceGross) })} />
           <div className="checkout-section-total">
             <span>服務項目小計</span>
             <strong>NT${serviceSubtotal.toLocaleString()}</strong>
@@ -2260,6 +2243,26 @@ function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], fal
     priceLabel: "後台未設定",
     amount: 0,
   }));
+}
+
+function distributeServiceDiscount(draft: CheckoutDraft): BackendServiceItem[] {
+  let remainingDiscount = Math.min(
+    draft.serviceDiscount,
+    draft.serviceAmount + draft.extraServiceItems.reduce((sum, item) => sum + item.amount, 0)
+  );
+  return [
+    { name: draft.primaryServiceName, amount: draft.serviceAmount },
+    ...draft.extraServiceItems,
+  ].map((item) => {
+    const discount = Math.min(remainingDiscount, item.amount);
+    remainingDiscount -= discount;
+    return {
+      name: item.name,
+      amount: Math.max(0, item.amount - discount),
+      original_amount: item.amount,
+      discount,
+    };
+  });
 }
 
 function findCheckoutServiceOption(serviceName: string, options: CheckoutServiceOption[]) {
