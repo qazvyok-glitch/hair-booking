@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
@@ -206,10 +205,33 @@ const initialDesignerProfile: DesignerProfile = {
 };
 
 const demoDesignerPriceItems: BackendDesignerPriceItem[] = [
-  { id: 1, designer_id: 1, category: "剪髮", name: "剪髮", price_range: "NT$800", sort_order: 1, is_active: true },
-  { id: 2, designer_id: 1, category: "染髮", name: "染髮", price_range: "NT$1,800 起", sort_order: 2, is_active: true },
-  { id: 3, designer_id: 1, category: "燙髮", name: "燙髮", price_range: "NT$2,800 起", sort_order: 3, is_active: true },
-  { id: 4, designer_id: 1, category: "護髮", name: "護髮", price_range: "NT$1,200 起", sort_order: 4, is_active: true },
+  { id: 1, designer_id: 1, category: "剪髮", name: "成人｜剪髮（含髮浴）", price_range: "NT$800", sort_order: 1, is_active: true },
+  { id: 2, designer_id: 1, category: "剪髮", name: "成人｜單剪髮（不含髮浴）", price_range: "NT$650", sort_order: 2, is_active: true },
+  { id: 3, designer_id: 1, category: "剪髮", name: "兒童｜剪髮（含髮浴）", price_range: "NT$500", sort_order: 3, is_active: true },
+  { id: 4, designer_id: 1, category: "剪髮", name: "兒童｜單剪髮（不含髮浴）", price_range: "NT$450", sort_order: 4, is_active: true },
+  { id: 5, designer_id: 1, category: "頭皮養護", name: "精油髮浴", price_range: "NT$400", sort_order: 1, is_active: true },
+  { id: 6, designer_id: 1, category: "頭皮養護", name: "造型", price_range: "NT$200 起", sort_order: 2, is_active: true },
+  { id: 7, designer_id: 1, category: "頭皮養護", name: "增色洗", price_range: "NT$200 起", sort_order: 3, is_active: true },
+  { id: 8, designer_id: 1, category: "頭皮養護", name: "深層淨化髮浴（含基本造型）", price_range: "NT$1,000", sort_order: 4, is_active: true },
+  { id: 9, designer_id: 1, category: "頭皮養護", name: "高階頭皮深呼吸", price_range: "NT$1,700", sort_order: 5, is_active: true },
+  { id: 10, designer_id: 1, category: "護髮", name: "結構式護髮｜S", price_range: "NT$1,700", sort_order: 1, is_active: true },
+  { id: 11, designer_id: 1, category: "護髮", name: "結構式護髮｜M", price_range: "NT$1,900", sort_order: 2, is_active: true },
+  { id: 12, designer_id: 1, category: "護髮", name: "結構式護髮｜L", price_range: "NT$2,300", sort_order: 3, is_active: true },
+  { id: 13, designer_id: 1, category: "護髮", name: "結構式護髮｜XL", price_range: "NT$2,600", sort_order: 4, is_active: true },
+  { id: 14, designer_id: 1, category: "護髮", name: "快速護髮｜S", price_range: "NT$500", sort_order: 5, is_active: true },
+  { id: 15, designer_id: 1, category: "護髮", name: "快速護髮｜M", price_range: "NT$800", sort_order: 6, is_active: true },
+  { id: 16, designer_id: 1, category: "護髮", name: "快速護髮｜L", price_range: "NT$1,100", sort_order: 7, is_active: true },
+  { id: 17, designer_id: 1, category: "護髮", name: "快速護髮｜XL", price_range: "NT$1,500", sort_order: 8, is_active: true },
+  { id: 18, designer_id: 1, category: "染髮", name: "設計染（單色）｜S", price_range: "NT$2,200 起", sort_order: 1, is_active: true },
+  { id: 19, designer_id: 1, category: "染髮", name: "設計染（單色）｜M", price_range: "NT$2,500 起", sort_order: 2, is_active: true },
+  { id: 20, designer_id: 1, category: "染髮", name: "設計染（單色）｜L", price_range: "NT$3,000 起", sort_order: 3, is_active: true },
+  { id: 21, designer_id: 1, category: "染髮", name: "設計染（單色）｜XL", price_range: "NT$3,300 起", sort_order: 4, is_active: true },
+  { id: 22, designer_id: 1, category: "染髮", name: "補染髮根（2公分內，含洗髮及基礎頭皮隔離）", price_range: "NT$1,700", sort_order: 5, is_active: true },
+  { id: 23, designer_id: 1, category: "燙髮", name: "質感燙＋剪髮｜S", price_range: "NT$2,600 起", sort_order: 1, is_active: true },
+  { id: 24, designer_id: 1, category: "燙髮", name: "質感燙＋剪髮｜M", price_range: "NT$3,300 起", sort_order: 2, is_active: true },
+  { id: 25, designer_id: 1, category: "燙髮", name: "質感燙＋剪髮｜L", price_range: "NT$3,800 起", sort_order: 3, is_active: true },
+  { id: 26, designer_id: 1, category: "燙髮", name: "質感燙＋剪髮｜XL", price_range: "NT$4,200 起", sort_order: 4, is_active: true },
+  { id: 27, designer_id: 1, category: "燙髮", name: "瀏海設計燙（不含洗）", price_range: "NT$1,000－NT$1,500", sort_order: 5, is_active: true },
 ];
 
 const designerProfileStorageKey = "bc-designer-preview-v2-profile";
@@ -323,7 +345,7 @@ export default function DesignerPreviewV2Page() {
     setBackendBookings(bookings);
     setBackendTransactions(transactions);
     setBackendProductUsage(productUsage);
-    setDesignerPriceItems(priceItems);
+    setDesignerPriceItems(priceItems.length > 0 ? priceItems : demoDesignerPriceItems);
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
     setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
     setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
@@ -678,16 +700,22 @@ export default function DesignerPreviewV2Page() {
         .price-list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
         .price-list-title { color: #1f2937; font-size: 16px; font-weight: 950; }
         .readonly-badge { background: #e8f2ff; color: #1478c8; border-radius: 999px; padding: 5px 9px; font-size: 11px; font-weight: 950; white-space: nowrap; }
-        .price-image-wrap { border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; background: #050505; margin-bottom: 12px; }
-        .price-list-image { display: block; width: 100%; height: auto; }
-        .price-sync-label { color: #8b95a3; font-size: 11px; font-weight: 950; margin-bottom: 8px; }
-        .price-list-rows { display: grid; border: 1px solid #edf0f4; border-radius: 12px; overflow: hidden; background: #fff; }
-        .price-list-row { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: center; padding: 10px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
+        .price-list-subtitle { color: #8b95a3; font-size: 12px; font-weight: 850; margin: -4px 0 12px; }
+        .price-accordion { display: grid; gap: 8px; }
+        .price-category-panel { border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; background: #fff; }
+        .price-category-panel[open] { border-color: #c9e6ff; box-shadow: 0 8px 18px rgba(20, 139, 216, .08); }
+        .price-category-summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; color: #1f2937; font-size: 14px; font-weight: 950; cursor: pointer; }
+        .price-category-summary::-webkit-details-marker { display: none; }
+        .price-category-summary::after { content: "⌄"; color: #148bd8; font-size: 16px; font-weight: 950; transition: transform .18s ease; }
+        .price-category-panel[open] .price-category-summary::after { transform: rotate(180deg); }
+        .price-category-count { color: #8b95a3; font-size: 11px; font-weight: 850; margin-left: auto; }
+        .price-list-rows { display: grid; border-top: 1px solid #edf0f4; background: #fff; }
+        .price-list-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
         .price-list-row:last-child { border-bottom: none; }
-        .price-category { color: #8b95a3; font-size: 11px; font-weight: 900; }
         .price-name { color: #1f2937; font-weight: 950; }
         .price-value { color: #1478c8; font-weight: 950; white-space: nowrap; }
-        .price-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 12px; text-align: center; }
+        .price-note { border: 1px solid #edf0f4; background: #f8fafc; color: #6b7280; border-radius: 14px; padding: 12px; font-size: 12px; font-weight: 800; line-height: 1.55; margin-top: 10px; }
+        .price-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 12px; text-align: center; border: 1px solid #edf0f4; border-radius: 14px; background: #fff; }
         .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
         .full-width-btn { width: 100%; border: none; background: #148bd8; color: #fff; border-radius: 14px; padding: 13px 0; font-size: 14px; font-weight: 950; cursor: pointer; }
         .roster-calendar { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #edf0f4; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
@@ -884,9 +912,15 @@ function ReadOnlyProfileCard({ label, value, wide = false }: { label: string; va
 }
 
 function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPriceItem[] }) {
-  const groupedItems = priceItems
+  const activeItems = priceItems
     .filter((item) => item.is_active !== false)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const groupedItems = activeItems.reduce<Record<string, BackendDesignerPriceItem[]>>((groups, item) => {
+    const category = item.category || "其他服務";
+    groups[category] = [...(groups[category] || []), item];
+    return groups;
+  }, {});
+  const categories = sortPriceCategories(Object.keys(groupedItems));
 
   return (
     <section className="price-list-card">
@@ -894,21 +928,30 @@ function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPric
         <div className="price-list-title">我的價目表</div>
         <span className="readonly-badge">僅供查看</span>
       </div>
-      <div className="price-image-wrap">
-        <Image className="price-list-image" src="/designer-price-list-v2.png" alt="完整價目表" width={1324} height={1354} sizes="(max-width: 520px) 86vw, 420px" />
-      </div>
-      <div className="price-sync-label">後台同步價目</div>
-      <div className="price-list-rows">
-        {groupedItems.length > 0 ? groupedItems.map((item) => (
-          <div className="price-list-row" key={item.id}>
-            <span className="price-category">{item.category || "服務"}</span>
-            <span className="price-name">{item.name}</span>
-            <span className="price-value">{formatPriceRange(item.price_range)}</span>
-          </div>
-        )) : (
-          <div className="price-empty">目前尚未設定專屬價目表</div>
-        )}
-      </div>
+      <div className="price-list-subtitle">由後台同步，設計師端僅供查看。</div>
+      {categories.length > 0 ? (
+        <div className="price-accordion">
+          {categories.map((category, index) => (
+            <details className="price-category-panel" key={category} open={index === 0}>
+              <summary className="price-category-summary">
+                <span>{category}</span>
+                <span className="price-category-count">{groupedItems[category].length} 項</span>
+              </summary>
+              <div className="price-list-rows">
+                {groupedItems[category].map((item) => (
+                  <div className="price-list-row" key={item.id}>
+                    <span className="price-name">{item.name}</span>
+                    <span className="price-value">{formatPriceRange(item.price_range)}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      ) : (
+        <div className="price-empty">目前尚未設定專屬價目表</div>
+      )}
+      <div className="price-note">溫馨提醒：染、燙、護髮服務依髮長、髮量及實際需求調整收費。長度超過胸下或特殊髮況，將由設計師現場評估報價。</div>
       <div className="profile-note" style={{ margin: "10px 0 0" }}>價格由後台管理，如需調整請聯繫管理人員。</div>
     </section>
   );
@@ -1954,6 +1997,18 @@ function formatPriceRange(priceRange: string) {
   const normalizedPrice = priceRange.trim();
   if (normalizedPrice.includes("NT$")) return normalizedPrice;
   return normalizedPrice.replace(/\$/g, "NT$");
+}
+
+function sortPriceCategories(categories: string[]) {
+  const order = ["剪髮", "頭皮養護", "護髮", "染髮", "燙髮"];
+  return [...categories].sort((a, b) => {
+    const aIndex = order.indexOf(a);
+    const bIndex = order.indexOf(b);
+    if (aIndex === -1 && bIndex === -1) return a.localeCompare(b, "zh-Hant");
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
 }
 
 function getServiceGross(transaction: BackendTransaction) {
