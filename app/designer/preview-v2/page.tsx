@@ -809,6 +809,8 @@ export default function DesignerPreviewV2Page() {
         .single-range-card { border: 1px solid #e1e7ef; background: #f8fbff; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
         .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line:last-child { border-bottom: none; }
+        .checkout-section-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #1478c8; font-size: 13px; font-weight: 950; padding: 10px 0 0; }
+        .checkout-section-total strong { white-space: nowrap; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
         .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
         .checkout-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
@@ -1594,7 +1596,8 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     return product.is_active !== false;
   });
   const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
-  const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + productSubtotal;
+  const serviceSubtotal = Math.max(0, draft.serviceAmount - draft.serviceDiscount);
+  const total = serviceSubtotal + productSubtotal;
 
   function toggleProduct(product: BackendProduct) {
     const exists = draft.productItems.find((item) => item.product.id === product.id);
@@ -1674,6 +1677,10 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
           <div className="panel-label">服務項目</div>
           <CheckoutNumber label={row.service} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
           <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
+          <div className="checkout-section-total">
+            <span>服務項目小計</span>
+            <strong>NT${serviceSubtotal.toLocaleString()}</strong>
+          </div>
         </section>
         <section className="panel">
           <div className="checkout-section-head">
