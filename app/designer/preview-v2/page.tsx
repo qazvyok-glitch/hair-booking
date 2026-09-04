@@ -827,6 +827,9 @@ export default function DesignerPreviewV2Page() {
         .product-check { width: 22px; height: 22px; border: 1.5px solid #dfe3ea; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 950; flex: 0 0 auto; }
         .product-item.selected .product-check { border-color: #148bd8; background: #148bd8; }
         .product-checkout-lines { margin-top: 10px; border-top: 1px solid #edf0f4; }
+        .product-price-line { display: grid; grid-template-columns: 1fr 64px 92px; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .product-quantity-field { display: grid; gap: 3px; }
+        .product-quantity-label { color: #8b95a3; font-size: 10px; font-weight: 900; text-align: center; }
         .product-subtotal { display: flex; justify-content: flex-end; color: #1478c8; font-size: 13px; font-weight: 950; white-space: nowrap; padding: 8px 0 2px; }
         .selected-product-summary { margin-top: 8px; padding-top: 8px; border-top: 1px solid #edf0f4; display: grid; gap: 5px; }
         .selected-product-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #4b5563; font-size: 12px; font-weight: 850; }
@@ -1601,6 +1604,18 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
         ? draft.productItems.filter((item) => item.product.id !== product.id)
         : [...draft.productItems, { product, quantity: 1, unitPrice: product.unit_price, discount: 0 }],
     });
+    setShowProductPicker(false);
+  }
+
+  function updateProductQuantity(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        const quantity = Math.max(1, value);
+        return { ...item, quantity, discount: Math.min(item.discount, item.unitPrice * quantity) };
+      }),
+    });
   }
 
   function updateProductPrice(productId: number, value: number) {
@@ -1702,7 +1717,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
             <div className="product-checkout-lines">
               {draft.productItems.map((item) => (
                 <div key={item.product.id}>
-                  <CheckoutNumber label={item.product.name} value={item.unitPrice} onChange={(value) => updateProductPrice(item.product.id, value)} />
+                  <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.unitPrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
                   <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
                   <div className="product-subtotal">小計 NT${Math.max(0, (item.unitPrice * item.quantity) - item.discount).toLocaleString()}</div>
                 </div>
@@ -1738,6 +1753,19 @@ function CheckoutNumber({ label, value, onChange }: { label: string; value: numb
     <div className="checkout-line">
       <div className="row-service">{label}</div>
       <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+    </div>
+  );
+}
+
+function CheckoutProductNumber({ label, quantity, price, onQuantityChange, onPriceChange }: { label: string; quantity: number; price: number; onQuantityChange: (value: number) => void; onPriceChange: (value: number) => void }) {
+  return (
+    <div className="product-price-line">
+      <div className="row-service">{label}</div>
+      <label className="product-quantity-field">
+        <span className="product-quantity-label">數量</span>
+        <input className="checkout-input" type="number" min={1} value={quantity} onChange={(event) => onQuantityChange(Number(event.target.value) || 1)} />
+      </label>
+      <input className="checkout-input" type="number" value={price} onChange={(event) => onPriceChange(Number(event.target.value) || 0)} />
     </div>
   );
 }
