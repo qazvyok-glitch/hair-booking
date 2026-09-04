@@ -130,7 +130,7 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
-type CheckoutProductItem = { product: BackendProduct; quantity: number; unitPrice: number; discount: number };
+type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
@@ -499,10 +499,10 @@ export default function DesignerPreviewV2Page() {
     if (!checkoutAppointment) return;
     if (backendConnected && backendSession) {
       const productRows = draft.productItems.map((item) => {
-        const originalTotal = item.unitPrice * item.quantity;
-        const finalTotal = Math.max(0, originalTotal - item.discount);
-        const discountText = item.discount > 0 ? `，折扣NT$${item.discount.toLocaleString()}` : "";
-        return `${item.product.name} x${item.quantity}，單價NT$${item.unitPrice.toLocaleString()}${discountText}，小計NT$${finalTotal.toLocaleString()}`;
+      const originalTotal = item.linePrice;
+      const finalTotal = Math.max(0, originalTotal - item.discount);
+      const discountText = item.discount > 0 ? `，折扣NT$${item.discount.toLocaleString()}` : "";
+      return `${item.product.name} x${item.quantity}，金額NT$${item.linePrice.toLocaleString()}${discountText}，小計NT$${finalTotal.toLocaleString()}`;
       });
       const noteRows = [
         draft.note,
@@ -1593,7 +1593,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     if (keyword && !`${product.name} ${category}`.toLowerCase().includes(keyword)) return false;
     return product.is_active !== false;
   });
-  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, (item.unitPrice * item.quantity) - item.discount), 0);
+  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
   const total = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + productSubtotal;
 
   function toggleProduct(product: BackendProduct) {
@@ -1602,7 +1602,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
       ...draft,
       productItems: exists
         ? draft.productItems.filter((item) => item.product.id !== product.id)
-        : [...draft.productItems, { product, quantity: 1, unitPrice: product.unit_price, discount: 0 }],
+        : [...draft.productItems, { product, quantity: 1, linePrice: product.unit_price, discount: 0 }],
     });
     setShowProductPicker(false);
   }
@@ -1613,7 +1613,8 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
         const quantity = Math.max(1, value);
-        return { ...item, quantity, discount: Math.min(item.discount, item.unitPrice * quantity) };
+        const linePrice = item.product.unit_price * quantity;
+        return { ...item, quantity, linePrice, discount: Math.min(item.discount, linePrice) };
       }),
     });
   }
@@ -1623,8 +1624,8 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
       ...draft,
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
-        const unitPrice = Math.max(0, value);
-        return { ...item, unitPrice, discount: Math.min(item.discount, unitPrice * item.quantity) };
+        const linePrice = Math.max(0, value);
+        return { ...item, linePrice, discount: Math.min(item.discount, linePrice) };
       }),
     });
   }
@@ -1634,7 +1635,7 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
       ...draft,
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
-        const originalTotal = item.unitPrice * item.quantity;
+        const originalTotal = item.linePrice;
         return { ...item, discount: Math.min(Math.max(0, value), originalTotal) };
       }),
     });
@@ -1717,9 +1718,9 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
             <div className="product-checkout-lines">
               {draft.productItems.map((item) => (
                 <div key={item.product.id}>
-                  <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.unitPrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
+                  <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
                   <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
-                  <div className="product-subtotal">小計 NT${Math.max(0, (item.unitPrice * item.quantity) - item.discount).toLocaleString()}</div>
+                  <div className="product-subtotal">小計 NT${Math.max(0, item.linePrice - item.discount).toLocaleString()}</div>
                 </div>
               ))}
               <div className="selected-product-summary">
