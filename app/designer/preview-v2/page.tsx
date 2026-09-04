@@ -31,6 +31,7 @@ type Appointment = {
   image: string;
 };
 type CheckoutDraft = {
+  primaryServiceName: string;
   serviceAmount: number;
   serviceDiscount: number;
   extraServiceItems: CheckoutServiceItem[];
@@ -131,6 +132,7 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
+type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
 type CheckoutServiceItem = { name: string; amount: number; discount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
@@ -516,7 +518,7 @@ export default function DesignerPreviewV2Page() {
         customer_name: checkoutAppointment.name || "現場客人",
         service_items: [
           {
-            name: checkoutAppointment.service,
+            name: draft.primaryServiceName,
             amount: Math.max(0, draft.serviceAmount - draft.serviceDiscount),
             original_amount: draft.serviceAmount,
             discount: draft.serviceDiscount,
@@ -561,6 +563,7 @@ export default function DesignerPreviewV2Page() {
   const activeTeamLeaveItems = backendConnected ? backendTeamLeaveItems : teamLeaveItems;
   const activeDesignerOptions = backendConnected && backendDesigners.length > 0 ? backendDesigners.map(getDesignerLabel) : designerOptions;
   const activeServiceOptions = backendConnected && backendServices.length > 0 ? backendServices.map((service) => service.name) : ["剪髮（含髮浴）", "質感燙＋剪髮", "設計染（M）", "HHN深層結構護髮"];
+  const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems, activeServiceOptions);
   const defaultBookingDate = backendConnected ? selectedScheduleDate : "2026-08-12";
   const defaultBookingService = activeServiceOptions[0] || "剪髮（含髮浴）";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : demoTodayRows;
@@ -590,7 +593,7 @@ export default function DesignerPreviewV2Page() {
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
-      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={activeServiceOptions} products={backendConnected ? backendProducts : demoProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
+      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendConnected ? backendProducts : demoProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
@@ -1589,9 +1592,11 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
   );
 }
 
-function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onComplete, onClose }: { row: Appointment; serviceOptions: string[]; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
+function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onComplete, onClose }: { row: Appointment; serviceOptions: CheckoutServiceOption[]; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
+  const matchedMainService = findCheckoutServiceOption(row.service, serviceOptions);
   const [draft, setDraft] = useState<CheckoutDraft>({
-    serviceAmount: 3000,
+    primaryServiceName: matchedMainService?.name || row.service,
+    serviceAmount: matchedMainService?.amount || 3000,
     serviceDiscount: 0,
     extraServiceItems: [],
     productItems: [],
@@ -1599,7 +1604,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
     note: "",
   });
   const [showServicePicker, setShowServicePicker] = useState(false);
-  const [selectedServiceName, setSelectedServiceName] = useState(serviceOptions[0] || row.service);
+  const [selectedServiceKey, setSelectedServiceKey] = useState(serviceOptions[0]?.key || "");
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productCategory, setProductCategory] = useState("全部");
@@ -1616,10 +1621,11 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
   const total = serviceSubtotal + productSubtotal;
 
   function addServiceItem() {
-    const name = selectedServiceName || serviceOptions[0] || "其他服務";
+    const selectedService = serviceOptions.find((service) => service.key === selectedServiceKey) || serviceOptions[0];
+    const name = selectedService?.name || "其他服務";
     setDraft({
       ...draft,
-      extraServiceItems: [...draft.extraServiceItems, { name, amount: 0, discount: 0 }],
+      extraServiceItems: [...draft.extraServiceItems, { name, amount: selectedService?.amount || 0, discount: 0 }],
     });
     setShowServicePicker(false);
   }
@@ -1722,14 +1728,14 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
           {showServicePicker && (
             <div className="service-picker-box">
               <div className="service-picker-row">
-                <select className="checkout-select" value={selectedServiceName} onChange={(event) => setSelectedServiceName(event.target.value)}>
-                  {serviceOptions.map((service) => <option key={service}>{service}</option>)}
+                <select className="checkout-select" value={selectedServiceKey} onChange={(event) => setSelectedServiceKey(event.target.value)}>
+                  {serviceOptions.map((service) => <option key={service.key} value={service.key}>{service.name}｜{service.priceLabel}</option>)}
                 </select>
                 <button className="service-add-btn" onClick={addServiceItem}>加入</button>
               </div>
             </div>
           )}
-          <CheckoutNumber label={row.service} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
+          <CheckoutNumber label={draft.primaryServiceName} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
           <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
           {draft.extraServiceItems.map((item, index) => (
             <div key={`${item.name}-${index}`}>
@@ -2232,6 +2238,61 @@ function formatIncomeDateLabel(date: string) {
 function formatProfileDate(date: string) {
   if (!date) return "尚未設定";
   return date.replace(/-/g, "/");
+}
+
+function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], fallbackNames: string[]): CheckoutServiceOption[] {
+  const activePriceItems = priceItems
+    .filter((item) => item.is_active !== false)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  if (activePriceItems.length > 0) {
+    return activePriceItems.map((item) => ({
+      key: `price-${item.id}`,
+      name: item.name,
+      category: item.category || "其他服務",
+      priceLabel: formatPriceRange(item.price_range),
+      amount: getPriceRangeAmount(item.price_range),
+    }));
+  }
+  return fallbackNames.map((name) => ({
+    key: `fallback-${name}`,
+    name,
+    category: "服務項目",
+    priceLabel: "後台未設定",
+    amount: 0,
+  }));
+}
+
+function findCheckoutServiceOption(serviceName: string, options: CheckoutServiceOption[]) {
+  const normalizedServiceName = normalizeServiceName(serviceName);
+  const size = getServiceSize(serviceName);
+  const category = getServiceCategory(serviceName);
+  return options.find((option) => normalizeServiceName(option.name) === normalizedServiceName)
+    || options.find((option) => normalizeServiceName(option.name).includes(normalizedServiceName) || normalizedServiceName.includes(normalizeServiceName(option.name)))
+    || options.find((option) => option.category === category && (!size || getServiceSize(option.name) === size))
+    || options.find((option) => option.category === category);
+}
+
+function getPriceRangeAmount(priceRange: string) {
+  const match = priceRange.replace(/,/g, "").match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function normalizeServiceName(name: string) {
+  return name.toLowerCase().replace(/[()\uFF08\uFF09｜|、＋+\s]/g, "");
+}
+
+function getServiceSize(name: string) {
+  const match = name.match(/\b(XL|S|M|L)\b|[（(](XL|S|M|L)[）)]|[｜|](XL|S|M|L)\b/i);
+  return (match?.[1] || match?.[2] || match?.[3] || "").toUpperCase();
+}
+
+function getServiceCategory(name: string) {
+  if (name.includes("染")) return "染髮";
+  if (name.includes("燙")) return "燙髮";
+  if (name.includes("護")) return "護髮";
+  if (name.includes("頭皮")) return "頭皮養護";
+  if (name.includes("剪")) return "剪髮";
+  return "其他服務";
 }
 
 function formatPriceRange(priceRange: string) {
