@@ -33,6 +33,7 @@ type Appointment = {
 type CheckoutDraft = {
   serviceAmount: number;
   serviceDiscount: number;
+  extraServiceItems: CheckoutServiceItem[];
   productItems: CheckoutProductItem[];
   paymentMethod: string;
   note: string;
@@ -130,6 +131,7 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
+type CheckoutServiceItem = { name: string; amount: number; discount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
@@ -512,12 +514,20 @@ export default function DesignerPreviewV2Page() {
         booking_id: checkoutAppointment.id || null,
         designer_id: backendSession.id,
         customer_name: checkoutAppointment.name || "現場客人",
-        service_items: [{
-          name: checkoutAppointment.service,
-          amount: Math.max(0, draft.serviceAmount - draft.serviceDiscount),
-          original_amount: draft.serviceAmount,
-          discount: draft.serviceDiscount,
-        }],
+        service_items: [
+          {
+            name: checkoutAppointment.service,
+            amount: Math.max(0, draft.serviceAmount - draft.serviceDiscount),
+            original_amount: draft.serviceAmount,
+            discount: draft.serviceDiscount,
+          },
+          ...draft.extraServiceItems.map((item) => ({
+            name: item.name,
+            amount: Math.max(0, item.amount - item.discount),
+            original_amount: item.amount,
+            discount: item.discount,
+          })),
+        ],
         total_amount: total,
         note: noteRows.join("\n"),
         payment_method: draft.paymentMethod,
@@ -580,7 +590,7 @@ export default function DesignerPreviewV2Page() {
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
-      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} products={backendConnected ? backendProducts : demoProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
+      {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={activeServiceOptions} products={backendConnected ? backendProducts : demoProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeDemoBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
@@ -814,6 +824,9 @@ export default function DesignerPreviewV2Page() {
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
         .checkout-note { min-height: 70px; resize: none; margin-top: 8px; }
         .checkout-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+        .service-picker-box { display: grid; gap: 8px; margin: 8px 0 4px; }
+        .service-picker-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+        .service-add-btn { border: none; background: #1478c8; color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 950; cursor: pointer; white-space: nowrap; }
         .product-picker-toggle { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 950; cursor: pointer; white-space: nowrap; }
         .product-picker-hint { color: #8b95a3; font-size: 12px; font-weight: 800; line-height: 1.45; margin-bottom: 10px; }
         .product-search { margin-bottom: 8px; }
@@ -1576,14 +1589,17 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
   );
 }
 
-function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose }: { row: Appointment; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
+function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onComplete, onClose }: { row: Appointment; serviceOptions: string[]; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
   const [draft, setDraft] = useState<CheckoutDraft>({
     serviceAmount: 3000,
     serviceDiscount: 0,
+    extraServiceItems: [],
     productItems: [],
     paymentMethod: "現金",
     note: "",
   });
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const [selectedServiceName, setSelectedServiceName] = useState(serviceOptions[0] || row.service);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productCategory, setProductCategory] = useState("全部");
@@ -1596,8 +1612,31 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
     return product.is_active !== false;
   });
   const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
-  const serviceSubtotal = Math.max(0, draft.serviceAmount - draft.serviceDiscount);
+  const serviceSubtotal = Math.max(0, draft.serviceAmount - draft.serviceDiscount) + draft.extraServiceItems.reduce((sum, item) => sum + Math.max(0, item.amount - item.discount), 0);
   const total = serviceSubtotal + productSubtotal;
+
+  function addServiceItem() {
+    const name = selectedServiceName || serviceOptions[0] || "其他服務";
+    setDraft({
+      ...draft,
+      extraServiceItems: [...draft.extraServiceItems, { name, amount: 0, discount: 0 }],
+    });
+    setShowServicePicker(false);
+  }
+
+  function updateExtraService(index: number, field: "amount" | "discount", value: number) {
+    setDraft({
+      ...draft,
+      extraServiceItems: draft.extraServiceItems.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+        if (field === "amount") {
+          const amount = Math.max(0, value);
+          return { ...item, amount, discount: Math.min(item.discount, amount) };
+        }
+        return { ...item, discount: Math.min(Math.max(0, value), item.amount) };
+      }),
+    });
+  }
 
   function toggleProduct(product: BackendProduct) {
     const exists = draft.productItems.find((item) => item.product.id === product.id);
@@ -1674,9 +1713,30 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <section className="panel">
-          <div className="panel-label">服務項目</div>
+          <div className="checkout-section-head">
+            <div className="panel-label">服務項目</div>
+            <button className="product-picker-toggle" onClick={() => setShowServicePicker(!showServicePicker)}>
+              {showServicePicker ? "收起服務" : "選取服務"}
+            </button>
+          </div>
+          {showServicePicker && (
+            <div className="service-picker-box">
+              <div className="service-picker-row">
+                <select className="checkout-select" value={selectedServiceName} onChange={(event) => setSelectedServiceName(event.target.value)}>
+                  {serviceOptions.map((service) => <option key={service}>{service}</option>)}
+                </select>
+                <button className="service-add-btn" onClick={addServiceItem}>加入</button>
+              </div>
+            </div>
+          )}
           <CheckoutNumber label={row.service} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
           <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: value })} />
+          {draft.extraServiceItems.map((item, index) => (
+            <div key={`${item.name}-${index}`}>
+              <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, "amount", value)} />
+              <CheckoutNumber label="服務折扣" value={item.discount} onChange={(value) => updateExtraService(index, "discount", value)} />
+            </div>
+          ))}
           <div className="checkout-section-total">
             <span>服務項目小計</span>
             <strong>NT${serviceSubtotal.toLocaleString()}</strong>
@@ -1727,7 +1787,6 @@ function CheckoutModal({ row, products, complete, isSynced, onComplete, onClose 
                 <div key={item.product.id}>
                   <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
                   <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
-                  <div className="product-subtotal">小計 NT${Math.max(0, item.linePrice - item.discount).toLocaleString()}</div>
                 </div>
               ))}
               <div className="selected-product-summary">
