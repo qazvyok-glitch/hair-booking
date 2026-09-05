@@ -173,8 +173,6 @@ const initialDesignerProfile: DesignerProfile = {
   leftDate: "",
 };
 
-const designerProfileStorageKey = "bc-designer-preview-v2-profile";
-
 const customerRecords: CustomerRecord[] = [];
 
 const earningsRanges: Record<EarningsRange, EarningsData> = {
@@ -214,20 +212,7 @@ export default function DesignerPreviewV2Page() {
   const [backendLeaveItems, setBackendLeaveItems] = useState<CalendarRecords<LeaveItem>>({});
   const [backendTeamLeaveItems, setBackendTeamLeaveItems] = useState<CalendarRecords<LeaveItem>>({});
   const [customIncomeRange, setCustomIncomeRange] = useState<IncomeDateRange>(() => getDefaultIncomeDateRange());
-  const [designerProfile, setDesignerProfile] = useState<DesignerProfile>(() => {
-    if (typeof window === "undefined") return initialDesignerProfile;
-    const savedProfile = window.localStorage.getItem(designerProfileStorageKey);
-    if (!savedProfile) return initialDesignerProfile;
-    try {
-      return { ...initialDesignerProfile, ...JSON.parse(savedProfile) };
-    } catch {
-      return initialDesignerProfile;
-    }
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem(designerProfileStorageKey, JSON.stringify(designerProfile));
-  }, [designerProfile]);
+  const [designerProfile, setDesignerProfile] = useState<DesignerProfile>(initialDesignerProfile);
 
   useEffect(() => {
     let cancelled = false;
