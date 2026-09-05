@@ -29,6 +29,14 @@ type PriceItem = {
   price_range: string;
 };
 
+type ShopInfo = {
+  key: string;
+  value: string;
+  is_active: boolean;
+};
+
+const fallbackHairLengthImage = "/hair-length.png";
+
 const categoryNameEn: Record<string, string> = {
   shampoo: "Shampoo & Styling",
   cut: "Haircut",
@@ -141,6 +149,7 @@ export default function Step2() {
   const [showHairLengthGuide, setShowHairLengthGuide] = useState(false);
   const [loading, setLoading] = useState(true);
   const [priceData, setPriceData] = useState<PriceItem[]>([]);
+  const [hairLengthImageUrl, setHairLengthImageUrl] = useState(fallbackHairLengthImage);
   const isEnglish = language === "en";
 
   useEffect(() => {
@@ -150,7 +159,8 @@ export default function Step2() {
       supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("price_items").select("*").order("sort_order"),
       supabase.from("designer_price_items").select("*").eq("designer_id", designer.id).eq("is_active", true).order("sort_order"),
-    ]).then(([{ data: cats }, { data: svcs }, { data: prices }, { data: designerPrices }]) => {
+      supabase.from("shop_info").select("key, value, is_active").eq("key", "hair_length_image_url").maybeSingle(),
+    ]).then(([{ data: cats }, { data: svcs }, { data: prices }, { data: designerPrices }, { data: hairLengthImage }]) => {
       if (cats && svcs) {
         setCategories(cats.map((c: ServiceCategory) => {
           const allItems = svcs.filter((s: Service) => s.category_id === c.id);
@@ -169,6 +179,8 @@ export default function Step2() {
       }
       if (designerPrices && designerPrices.length > 0) setPriceData(designerPrices);
       else if (prices) setPriceData(prices);
+      const activeHairLengthImage = hairLengthImage as ShopInfo | null;
+      setHairLengthImageUrl(activeHairLengthImage?.is_active && activeHairLengthImage.value ? activeHairLengthImage.value : fallbackHairLengthImage);
       setLoading(false);
     });
   }, [designer, router]);
@@ -219,7 +231,7 @@ export default function Step2() {
           }}
         >
           <img
-            src="/hair-length.png"
+            src={hairLengthImageUrl}
             alt={isEnglish ? "Hair length guide" : "髮長標示圖"}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
@@ -266,7 +278,7 @@ export default function Step2() {
               ×
             </button>
             <img
-              src="/hair-length.png"
+              src={hairLengthImageUrl}
               alt={isEnglish ? "Hair length guide" : "髮長標示圖"}
               style={{ width: "100%", borderRadius: 12, display: "block" }}
             />

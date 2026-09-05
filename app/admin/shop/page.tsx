@@ -56,6 +56,17 @@ export default function AdminShop() {
     setForm({ key: "", label: "", value: "", sort_order: 0 });
   }
 
+  function handleImageFile(item: ShopInfo, file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setEdited((prev) => ({ ...prev, [item.id]: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -71,7 +82,7 @@ export default function AdminShop() {
 
       <div style={{ padding: 16 }}>
         <div style={{ background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#633806" }}>
-          修改後點「儲存」即時更新到關於我們頁面
+          修改後點「儲存」即時更新到顧客端與相關頁面
         </div>
 
         {items.map((item) => (
@@ -85,12 +96,39 @@ export default function AdminShop() {
                 {item.is_active ? "顯示中" : "已隱藏"}
               </button>
             </div>
+            {item.key === "hair_length_image_url" && (
+              <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "180px 1fr" : "1fr", gap: 12, marginBottom: 10 }}>
+                <img
+                  src={edited[item.id] ?? item.value}
+                  alt="髮長說明圖預覽"
+                  style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E5D8", background: "#F8F6EF" }}
+                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontSize: 12, color: "#888780", lineHeight: 1.6 }}>
+                    可貼圖片網址，也可直接選擇圖片。選好後請按「儲存」，顧客預約端會同步更新。
+                  </div>
+                  <label style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "8px 14px", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                    選擇圖片
+                    <input type="file" accept="image/*" onChange={(e) => handleImageFile(item, e.target.files?.[0])} style={{ display: "none" }} />
+                  </label>
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8 }}>
-              <input
-                value={edited[item.id] ?? item.value}
-                onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
-                style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}
-              />
+              {item.key === "hair_length_image_url" ? (
+                <textarea
+                  value={edited[item.id] ?? item.value}
+                  onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
+                  rows={3}
+                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", resize: "vertical" }}
+                />
+              ) : (
+                <input
+                  value={edited[item.id] ?? item.value}
+                  onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
+                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}
+                />
+              )}
               <button
                 onClick={() => handleSave(item)}
                 disabled={saving === item.id}
@@ -110,14 +148,14 @@ export default function AdminShop() {
               <div style={{ fontSize: 15, fontWeight: 600 }}>新增資訊項目</div>
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
-            {[
+            {([
               { key: "key", label: "識別碼（英文）", placeholder: "facebook" },
               { key: "label", label: "顯示標籤", placeholder: "Facebook" },
               { key: "value", label: "內容值", placeholder: "https://..." },
-            ].map(f => (
+            ] as { key: keyof typeof form; label: string; placeholder: string }[]).map(f => (
               <div key={f.key} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>{f.label}</div>
-                <input value={(form as any)[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <input value={form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
             ))}
             <button onClick={handleAdd} disabled={formSaving} style={{ width: "100%", padding: "12px 0", background: formSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: formSaving ? "default" : "pointer" }}>
