@@ -68,8 +68,8 @@ const serviceNameEn: Record<string, string> = {
 const noteEn: Record<string, string> = {
   "耳上": "Above ears",
   "下巴上": "Above chin",
-  "胸上": "Above chest",
-  "胸下": "Below chest",
+  "鎖骨上": "Above collarbone",
+  "鎖骨下": "Below collarbone",
   "國小以下": "Elementary school age or younger",
   "含洗髮及基礎頭皮隔離": "Includes shampoo and basic scalp protection",
 };
@@ -97,7 +97,7 @@ function displayDuration(duration: string, language: Language) {
 
 function displayNote(note: string, language: Language) {
   if (language === "zh" || !note) return note;
-  return noteEn[note] || note.replace("耳上", "Above ears").replace("下巴上", "Above chin").replace("胸上", "Above chest").replace("胸下", "Below chest");
+  return noteEn[note] || note.replace("耳上", "Above ears").replace("下巴上", "Above chin").replace("鎖骨上", "Above collarbone").replace("鎖骨下", "Below collarbone");
 }
 
 function displayPriceRange(priceRange: string, language: Language) {
@@ -122,7 +122,7 @@ function getServicePriceRange(serviceName: string, priceData: PriceItem[], langu
   return matched ? displayPriceRange(matched.price_range, language) : "";
 }
 
-function getLengthPriceOptions(priceRange: string, language: Language) {
+function getLengthPriceOptions(priceRange: string) {
   const parts = priceRange.split("/").map((part) => part.trim()).filter(Boolean);
   if (parts.length < 3 || parts.length > 4) return null;
   if (!parts.every((part) => /^\$[\d,]+$/.test(part))) return null;
@@ -313,7 +313,7 @@ export default function Step2() {
                 {cat.items.map((item) => {
                   const picked = serviceIds.includes(item.id);
                   const priceRange = getServicePriceRange(item.name, priceData, language);
-                  const lengthPriceOptions = getLengthPriceOptions(priceRange, language);
+                  const lengthPriceOptions = getLengthPriceOptions(priceRange);
                   return (
                     <div
                       key={item.id}

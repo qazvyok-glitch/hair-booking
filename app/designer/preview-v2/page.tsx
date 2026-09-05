@@ -954,7 +954,7 @@ function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPric
       ) : (
         <div className="price-empty">目前後台尚未設定價目表</div>
       )}
-      <div className="price-note">溫馨提醒：染、燙、護髮服務依髮長、髮量及實際需求調整收費。長度超過胸下或特殊髮況，將由設計師現場評估報價。</div>
+      <div className="price-note">溫馨提醒：染、燙、護髮服務依髮長、髮量及實際需求調整收費。長度超過鎖骨下或特殊髮況，將由設計師現場評估報價。</div>
       <div className="profile-note" style={{ margin: "10px 0 0" }}>價格由後台管理，如需調整請聯繫管理人員。</div>
     </section>
   );
