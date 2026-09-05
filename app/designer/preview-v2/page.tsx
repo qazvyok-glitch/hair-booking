@@ -1134,7 +1134,7 @@ function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointme
       <div className="page-heading-row">
         <div>
           <h1 className="page-title">今日</h1>
-          <div className="page-subtitle">8月12日 星期三</div>
+          <div className="page-subtitle">{formatTodaySubtitle()}</div>
         </div>
         <button className="add-booking-btn" onClick={onAddBooking}>＋新增預約</button>
       </div>
@@ -2158,6 +2158,12 @@ function formatScheduleDateLabel(date: string) {
   const parsedDate = new Date(`${date}T00:00:00+08:00`);
   const weekday = ["日", "一", "二", "三", "四", "五", "六"][parsedDate.getDay()];
   return `${parsedDate.getMonth() + 1}/${parsedDate.getDate()}（${weekday}）`;
+}
+
+function formatTodaySubtitle() {
+  const today = new Date();
+  const weekday = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][today.getDay()];
+  return `${today.getMonth() + 1}月${today.getDate()}日 ${weekday}`;
 }
 
 function isTimeStarted(time: string) {

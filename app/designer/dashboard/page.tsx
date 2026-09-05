@@ -103,8 +103,8 @@ export default function DesignerDashboard() {
   const todayTotalAmount = filteredTransactions
     .filter((t) => t.created_at?.slice(0, 10) === today)
     .reduce((sum, t) => sum + (t.total_amount || 0), 0);
-  const checkedOutTodayCount = todayBookings.filter((b) => isBookingCheckedOut(b.id)).length;
-  const overdueUncheckoutCount = todayBookings.filter((b) => b.status === "confirmed" && !isBookingCheckedOut(b.id) && isPastBookingTime(b.booking_time)).length;
+  const checkedOutTodayCount = todayBookings.filter((b) => isBookingCompleted(b)).length;
+  const overdueUncheckoutCount = todayBookings.filter((b) => b.status === "confirmed" && !isBookingCompleted(b) && isPastBookingTime(b.booking_time)).length;
   const displayBookings = tab === "today" ? todayBookings : upcomingBookings;
   const bookingTargetDesignerId = designer?.is_manager ? Number(newBooking.designer_id || 0) : designer?.id;
   const addBookingConflict = getAddBookingConflict();
@@ -112,12 +112,12 @@ export default function DesignerDashboard() {
   const selectedDesignerName = designer?.is_manager && designerFilter !== "all" ? getDesignerName(Number(designerFilter)) : "";
   const managerTodaySummaries = allDesigners.map((d) => {
     const designerBookings = todayBookings.filter((b) => b.designer_id === d.id);
-    const activeBookings = designerBookings.filter((b) => !isBookingCheckedOut(b.id));
+    const activeBookings = designerBookings.filter((b) => !isBookingCompleted(b));
     return {
       designer: d,
       bookings: designerBookings,
       pending: designerBookings.filter((b) => b.status === "pending").length,
-      checkedOut: designerBookings.filter((b) => isBookingCheckedOut(b.id)).length,
+      checkedOut: designerBookings.filter((b) => isBookingCompleted(b)).length,
       nextTime: activeBookings[0]?.booking_time || designerBookings[0]?.booking_time || "",
     };
   });
@@ -129,12 +129,17 @@ export default function DesignerDashboard() {
 
   function getStatusMeta(status: string) {
     if (status === "confirmed") return { label: "已確認", background: "#E1F5EE", color: "#085041", border: "#BFE6D7" };
+    if (status === "completed") return { label: "已完成", background: "#E8F2FF", color: "#0B66C3", border: "#B8D7F7" };
     if (status === "cancelled") return { label: "已取消", background: "#FCEBEB", color: "#A32D2D", border: "#F5C4C4" };
     return { label: "待確認", background: "#FAEEDA", color: "#633806", border: "#FAC775" };
   }
 
   function isBookingCheckedOut(bookingId: number) {
     return transactions.some((t) => t.booking_id === bookingId);
+  }
+
+  function isBookingCompleted(booking: Booking) {
+    return booking.status === "completed" || isBookingCheckedOut(booking.id);
   }
 
   function isPastBookingTime(time: string) {
@@ -163,7 +168,7 @@ export default function DesignerDashboard() {
   }
 
   function getBookingStatusMeta(booking: Booking) {
-    if (isBookingCheckedOut(booking.id)) return { label: "已結帳完成", background: "#ECE8DF", color: "#5F5E5A", border: "#D3D1C7" };
+    if (isBookingCompleted(booking)) return { label: "已完成", background: "#E8F2FF", color: "#0B66C3", border: "#B8D7F7" };
     return getStatusMeta(booking.status);
   }
 
@@ -419,7 +424,7 @@ export default function DesignerDashboard() {
           <div style={{ textAlign: "center", padding: "42px 16px", color: "#888780", fontSize: 14, background: "#fff", borderRadius: 16, border: "0.5px solid #D3D1C7" }}>目前沒有預約紀錄</div>
         ) : (
           displayBookings.map((b) => {
-            const checkedOut = isBookingCheckedOut(b.id);
+            const checkedOut = isBookingCompleted(b);
             const statusMeta = getBookingStatusMeta(b);
             return (
             <div key={b.id} onClick={() => setSelectedBooking(b)} style={{ background: checkedOut ? "#F1EFE8" : "#fff", borderRadius: 18, padding: 0, marginBottom: 12, border: "1px solid " + (checkedOut ? "#D3D1C7" : b.status === "pending" ? "#FAC775" : "#D3D1C7"), overflow: "hidden", boxShadow: checkedOut ? "none" : b.status === "pending" ? "0 8px 22px rgba(186,117,23,0.12)" : "0 6px 18px rgba(26,26,26,0.04)", cursor: "pointer", opacity: checkedOut ? 0.78 : 1 }}>
@@ -668,7 +673,7 @@ export default function DesignerDashboard() {
             </div>
 
             <div style={{ padding: "12px 16px 18px", borderTop: "0.5px solid #ECE8DF", background: "#fff" }}>
-              {isBookingCheckedOut(selectedBooking.id) ? (
+              {isBookingCompleted(selectedBooking) ? (
                 <div style={{ background: "#F1EFE8", color: "#5F5E5A", borderRadius: 14, padding: "13px 14px", fontSize: 13, fontWeight: 800, textAlign: "center", lineHeight: 1.5 }}>
                   此預約已結帳完成，僅可查看內容。
                 </div>

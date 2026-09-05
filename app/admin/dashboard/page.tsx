@@ -16,7 +16,7 @@ export default function AdminDashboard() {
     return () => window.removeEventListener("resize", check);
   }, []);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, confirmed: 0 });
+  const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, confirmed: 0, completed: 0 });
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [designerStats, setDesignerStats] = useState<Record<number, number>>({});
 
@@ -25,7 +25,7 @@ export default function AdminDashboard() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toLocaleDateString("en-CA");
       const now = new Date();
       const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
 
@@ -41,6 +41,7 @@ export default function AdminDashboard() {
           today: bookings.filter(b => b.booking_date === today).length,
           pending: bookings.filter(b => b.status === "pending").length,
           confirmed: bookings.filter(b => b.status === "confirmed").length,
+          completed: bookings.filter(b => b.status === "completed").length,
         });
       }
       if (des) setDesigners(des);
@@ -85,6 +86,7 @@ export default function AdminDashboard() {
             { label: "今日預約", value: stats.today, color: "#534AB7", bg: "#EEEDFE" },
             { label: "待確認", value: stats.pending, color: "#BA7517", bg: "#FAEEDA" },
             { label: "已確認", value: stats.confirmed, color: "#1D9E75", bg: "#E1F5EE" },
+            { label: "已完成", value: stats.completed, color: "#0B66C3", bg: "#E8F2FF" },
             { label: "總預約數", value: stats.total, color: "#2C2C2A", bg: "#fff" },
           ].map((s) => (
             <div key={s.label} style={{ background: s.bg, borderRadius: 12, padding: "14px", border: "0.5px solid #D3D1C7" }}>

@@ -508,8 +508,8 @@ export default function AdminMembers() {
                 .map(b => (
                   <div key={b.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #F1EFE8" }}>
                     <span style={{ fontSize: 13, color: "#2C2C2A" }}>{b.booking_date.replace(/-/g, "/")}</span>
-                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
-                      {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
+                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 8, background: b.status === "completed" ? "#E8F2FF" : b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "completed" ? "#0B66C3" : b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
+                      {b.status === "completed" ? "已完成" : b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
                     </span>
                   </div>
                 ))

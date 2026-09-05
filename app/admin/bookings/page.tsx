@@ -23,6 +23,13 @@ type Customer = { id: string; phone: string; customer_no: string };
 type Designer = { id: number; name: string };
 type Service = { id: number; name: string };
 
+function getStatusMeta(status?: string | null) {
+  if (status === "confirmed") return { label: "已確認", background: "#E1F5EE", color: "#085041" };
+  if (status === "completed") return { label: "已完成", background: "#E8F2FF", color: "#0B66C3" };
+  if (status === "cancelled") return { label: "已取消", background: "#FCEBEB", color: "#A32D2D" };
+  return { label: "待確認", background: "#FAEEDA", color: "#633806" };
+}
+
 export default function AdminBookings() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -114,6 +121,7 @@ export default function AdminBookings() {
             <option value="all">全部狀態</option>
             <option value="pending">待確認</option>
             <option value="confirmed">已確認</option>
+            <option value="completed">已完成</option>
             <option value="cancelled">已取消</option>
           </select>
           <select value={filterDesigner} onChange={(e) => setFilterDesigner(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none", background: "#fff" }}>
@@ -138,7 +146,9 @@ export default function AdminBookings() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b) => (
+                {filtered.map((b) => {
+                  const statusMeta = getStatusMeta(b.status);
+                  return (
                   <tr key={b.id} style={{ borderBottom: "0.5px solid #F1EFE8" }}>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{b.booking_date.replace(/-/g, "/")}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{b.booking_time}</td>
@@ -152,8 +162,8 @@ export default function AdminBookings() {
                       ) : "—"}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 500, background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
-                        {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
+                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 500, background: statusMeta.background, color: statusMeta.color }}>
+                        {statusMeta.label}
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>
@@ -165,12 +175,15 @@ export default function AdminBookings() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         ) : (
-          filtered.map((b) => (
+          filtered.map((b) => {
+            const statusMeta = getStatusMeta(b.status);
+            return (
             <div key={b.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <div>
@@ -180,8 +193,8 @@ export default function AdminBookings() {
                     <div style={{ fontSize: 10, color: "#534AB7", background: "#EEEDFE", borderRadius: 4, padding: "1px 6px", display: "inline-block", marginTop: 2 }}>{getCustomerNo(b.customer_phone)}</div>
                   )}
                 </div>
-                <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 500, height: "fit-content", background: b.status === "confirmed" ? "#E1F5EE" : b.status === "cancelled" ? "#FCEBEB" : "#FAEEDA", color: b.status === "confirmed" ? "#085041" : b.status === "cancelled" ? "#A32D2D" : "#633806" }}>
-                  {b.status === "confirmed" ? "已確認" : b.status === "cancelled" ? "已取消" : "待確認"}
+                <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 500, height: "fit-content", background: statusMeta.background, color: statusMeta.color }}>
+                  {statusMeta.label}
                 </span>
               </div>
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 2 }}>📅 {b.booking_date.replace(/-/g, "/")} {b.booking_time}</div>
@@ -200,7 +213,8 @@ export default function AdminBookings() {
                 </div>
               )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

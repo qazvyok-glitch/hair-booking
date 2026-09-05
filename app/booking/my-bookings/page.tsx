@@ -20,6 +20,7 @@ type Booking = {
 };
 
 type Service = { id: number; name: string };
+type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
 
 const serviceNameEn: Record<string, string> = {
   "精油髮浴洗": "Essential Oil Hair Bath",
@@ -49,8 +50,8 @@ const serviceNameEn: Record<string, string> = {
 };
 
 const statusText = {
-  zh: { pending: "待確認", confirmed: "已確認", cancelled: "已取消" },
-  en: { pending: "Pending", confirmed: "Confirmed", cancelled: "Cancelled" },
+  zh: { pending: "待確認", confirmed: "已確認", completed: "已完成", cancelled: "已取消" },
+  en: { pending: "Pending", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled" },
 };
 
 const DESIGNER_EN_NAMES: Record<string, string> = {
@@ -80,8 +81,13 @@ function displayServiceName(name: string, isEnglish: boolean) {
 
 function statusStyle(status?: string | null) {
   if (status === "confirmed") return { background: "#E1F5EE", color: "#085041" };
+  if (status === "completed") return { background: "#E8F2FF", color: "#0B66C3" };
   if (status === "cancelled") return { background: "#FCEBEB", color: "#A32D2D" };
   return { background: "#FAEEDA", color: "#633806" };
+}
+
+function getStatusLabel(status: string | null | undefined, language: "zh" | "en") {
+  return statusText[language][(status || "pending") as BookingStatus] || status || statusText[language].pending;
 }
 
 export default function MyBookingsPage() {
@@ -251,8 +257,8 @@ export default function MyBookingsPage() {
 
       <div style={{ background: "#f2e8e6", border: "0.5px solid #d9b8b0", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12, color: "#7a1f1f", lineHeight: 1.7 }}>
         {isEnglish
-          ? "Pending bookings can update notes, reference image, or be cancelled. Confirmed bookings must be changed with the stylist."
-          : "待確認預約可修改備註、參考圖片或取消；已確認預約如需更改，請聯繫設計師。"}
+          ? "Pending bookings can update notes, reference image, or be cancelled. Confirmed or completed bookings are view-only here."
+          : "待確認預約可修改備註、參考圖片或取消；已確認或已完成預約僅供查看。"}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -297,7 +303,7 @@ export default function MyBookingsPage() {
                   <div style={{ fontSize: 12, color: "#9a9188", marginTop: 2 }}>{booking.customer_phone}</div>
                 </div>
                 <span style={{ ...style, height: "fit-content", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700 }}>
-                  {statusText[language][(booking.status || "pending") as "pending" | "confirmed" | "cancelled"] || booking.status}
+                  {getStatusLabel(booking.status, language)}
                 </span>
               </div>
 
@@ -342,7 +348,9 @@ export default function MyBookingsPage() {
                 <div style={{ background: "#FAEEDA", borderRadius: 10, padding: "10px 12px", color: "#633806", fontSize: 12, lineHeight: 1.6 }}>
                   {booking.status === "confirmed"
                     ? (isEnglish ? "Confirmed bookings cannot be changed here. Please contact your stylist." : "已確認預約不可在此直接修改，請聯繫設計師。")
-                    : (isEnglish ? "Cancelled bookings are view-only." : "已取消預約僅供查看。")}
+                    : booking.status === "completed"
+                      ? (isEnglish ? "Completed bookings are view-only." : "已完成預約僅供查看。")
+                      : (isEnglish ? "Cancelled bookings are view-only." : "已取消預約僅供查看。")}
                 </div>
               )}
 
