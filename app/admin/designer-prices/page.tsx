@@ -323,9 +323,12 @@ export default function AdminDesignerPrices() {
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>設計師專屬價目表</div>
-          <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{selectedDesigner?.display_name || selectedDesigner?.name || "請選擇設計師"}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>← 返回</button>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>設計師專屬價目表</div>
+            <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{selectedDesigner?.display_name || selectedDesigner?.name || "請選擇設計師"}</div>
+          </div>
         </div>
         <button onClick={openNew} disabled={!selectedDesignerId} style={{ background: selectedDesignerId ? "#534AB7" : "#5F5E5A", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: selectedDesignerId ? "pointer" : "default" }}>＋ 新增</button>
       </div>
