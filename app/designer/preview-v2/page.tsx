@@ -1744,11 +1744,11 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
           )}
         </section>
         <section className="panel">
-          <div className="panel-label">付款與備註</div>
+          <div className="panel-label">付款與備註（備註僅設計師看）</div>
           <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
             {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
           </select>
-          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="商品交易備註、折扣原因..." />
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="備註（設計師看）：商品交易備註、折扣原因..." />
         </section>
         <div className="amount-preview"><span>客人應收總額</span><strong>NT${productSubtotal.toLocaleString()}</strong></div>
         <div className="modal-action-row">
@@ -2347,11 +2347,11 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
           )}
         </section>
         <section className="panel">
-          <div className="panel-label">付款與備註</div>
+          <div className="panel-label">付款與備註（備註僅設計師看）</div>
           <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
             {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
           </select>
-          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="折扣原因、顧客狀況、服務紀錄..." />
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="備註（設計師看）：折扣原因、顧客狀況、服務紀錄..." />
         </section>
         <div className="amount-preview"><span>客人應收總額</span><strong>NT${total.toLocaleString()}</strong></div>
         <div className="modal-action-row">
