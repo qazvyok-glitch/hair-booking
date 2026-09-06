@@ -8,7 +8,6 @@ type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
 type PendingScope = "self" | "team";
 type EarningsRange = "今日" | "本月" | "指定日期或區間";
-type SettingsPanel = "profile" | "roster";
 type PendingRow = {
   key: string;
   id?: number;
@@ -64,6 +63,7 @@ type CalendarItem = { text: string; tone: string; designer?: string; customer?: 
 type CalendarRecords<T> = Record<string, T[]>;
 type LeaveDraft = {
   date: string;
+  designer: string;
   type: "整天休假" | "指定時段不接客";
   startTime: string;
   endTime: string;
@@ -395,18 +395,20 @@ export default function DesignerPreviewV2Page() {
     alert("後台尚未連線，新增預約未送出。請重新整理後再試。");
   }
 
-  async function addSyncedLeave(date: string, item: LeaveItem) {
+  async function addSyncedLeave(date: string, item: LeaveItem, designerLabel?: string) {
     if (!backendConnected || !backendSession) {
       alert("後台尚未連線，排休未送出。請重新整理後再試。");
       return;
     }
+    const targetDesigner = designerLabel ? findDesignerByLabel(backendDesigners, designerLabel) : null;
+    const targetDesignerId = backendSession.is_manager && targetDesigner ? targetDesigner.id : backendSession.id;
 
     if (item.tone === "day-off") {
-      await supabase.from("designer_off_days").insert({ designer_id: backendSession.id, off_date: date });
+      await supabase.from("designer_off_days").insert({ designer_id: targetDesignerId, off_date: date });
     } else {
       const slots = getBlockedSlots(item.text);
       if (slots.length > 0) {
-        await supabase.from("designer_off_slots").insert(slots.map((slot) => ({ designer_id: backendSession.id, slot_date: date, slot_time: slot })));
+        await supabase.from("designer_off_slots").insert(slots.map((slot) => ({ designer_id: targetDesignerId, slot_date: date, slot_time: slot })));
       }
     }
     await loadBackendData(backendSession);
@@ -573,12 +575,12 @@ export default function DesignerPreviewV2Page() {
         <div className="screen-body">
           {backendLoading && <div className="sync-banner">正在同步後台資料...</div>}
           {showSettings ? (
-            <SettingsView profile={designerProfile} priceItems={designerPriceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addSyncedLeave} onBack={() => setShowSettings(false)} />
+            <SettingsView profile={designerProfile} priceItems={designerPriceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} onBack={() => setShowSettings(false)} />
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
-              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
+              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} />}
             </>
           )}
@@ -630,7 +632,9 @@ export default function DesignerPreviewV2Page() {
         .pill.progress { background: #e8f2ff; color: #126dc2; }
         .pill.done { background: #e8f7ef; color: #208051; }
         .small-action { min-width: 50px; border: 1px solid #2290e6; color: #1478c8; background: #fff; border-radius: 8px; padding: 6px 9px; font-weight: 850; font-size: 13px; cursor: pointer; }
+        .schedule-action-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
         .add-booking-btn { border: none; background: #148bd8; color: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; box-shadow: 0 8px 16px rgba(20,139,216,.16); }
+        .schedule-leave-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; }
         .pending-scope-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin: 0 0 16px; padding: 4px; border: 1px solid #e1e7ef; border-radius: 999px; background: #eef3f8; }
         .pending-scope-btn { border: none; border-radius: 999px; background: transparent; color: #6b7280; padding: 9px 4px; font-size: 13px; font-weight: 950; cursor: pointer; }
         .pending-scope-btn.active { background: #148bd8; color: #fff; box-shadow: 0 6px 14px rgba(20,139,216,.22); }
@@ -896,29 +900,23 @@ function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenS
   );
 }
 
-function SettingsView({ profile, priceItems, priceCategoryOrder, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; priceCategoryOrder: string[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: CalendarRecords<LeaveItem>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
-  const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
-
+function SettingsView({ profile, priceItems, priceCategoryOrder, onProfileChange, onAvatarUpload, isSynced, onBack }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; priceCategoryOrder: string[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; onBack: () => void }) {
   return (
     <>
       <div className="settings-heading">
         <div>
           <h1 className="page-title">設定</h1>
-          <div className="page-subtitle">個人資料與排班管理</div>
+          <div className="page-subtitle">個人資料管理</div>
         </div>
         <button className="back-text-btn" onClick={onBack}>返回</button>
       </div>
       <div className="settings-menu">
-        <button className={`settings-card ${activePanel === "profile" ? "active" : ""}`} onClick={() => setActivePanel("profile")}>
+        <button className="settings-card active">
           <div className="settings-card-title">個人資料</div>
           <div className="settings-card-desc">查看與編輯個人資訊</div>
         </button>
-        <button className={`settings-card ${activePanel === "roster" ? "active" : ""}`} onClick={() => setActivePanel("roster")}>
-          <div className="settings-card-title">排班表</div>
-          <div className="settings-card-desc">查看已安排休假</div>
-        </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} priceItems={priceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
+      <ProfileSettingsPanel profile={profile} priceItems={priceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} />
     </>
   );
 }
@@ -1034,112 +1032,6 @@ function DesignerPriceListCard({ priceItems, priceCategoryOrder }: { priceItems:
   );
 }
 
-function RosterSettingsPanel({ leaveItems, onAddLeave }: { leaveItems: CalendarRecords<LeaveItem>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void> }) {
-  const [showLeaveForm, setShowLeaveForm] = useState(false);
-  const [rosterMonth, setRosterMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
-  const [draft, setDraft] = useState<LeaveDraft>({
-    date: new Date().toLocaleDateString("en-CA"),
-    type: "整天休假",
-    startTime: "13:00",
-    endTime: "17:00",
-    note: "",
-  });
-  const [year, month] = rosterMonth.split("-").map(Number);
-  const firstDay = new Date(year, month - 1, 1).getDay();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const rosterCells: (string | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, index) => formatDateKey(year, month, index + 1)),
-  ];
-  while (rosterCells.length % 7 !== 0) rosterCells.push(null);
-  const leaveRows = Object.entries(leaveItems).flatMap(([date, items]) =>
-    items.map((item) => ({ date, item }))
-  ).sort((a, b) => a.date.localeCompare(b.date));
-
-  async function submitLeave() {
-    const isFullDay = draft.type === "整天休假";
-    const text = isFullDay ? "整天休假" : `${draft.startTime}-${draft.endTime} 不接客`;
-    await onAddLeave(draft.date, { text, tone: isFullDay ? "day-off" : "blocked", designer: "Cherry" });
-    setShowLeaveForm(false);
-  }
-
-  function changeRosterMonth(offset: number) {
-    const next = new Date(year, month - 1 + offset, 1);
-    setRosterMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`);
-  }
-
-  function openLeaveForm(date: string) {
-    setDraft((prev) => ({ ...prev, date }));
-    setShowLeaveForm(true);
-  }
-
-  return (
-    <section className="panel">
-      <div className="panel-label">排班表</div>
-      <div className="calendar-header">
-        <button className="circle-nav" onClick={() => changeRosterMonth(-1)}>‹</button>
-        <div className="month-title">{year}年{month}月</div>
-        <button className="circle-nav" onClick={() => changeRosterMonth(1)}>›</button>
-      </div>
-      <div className="weekday-grid">
-        {["日", "一", "二", "三", "四", "五", "六"].map((day) => <div key={day}>{day}</div>)}
-      </div>
-      <div className="roster-calendar">
-        {rosterCells.map((fullDate, index) => {
-          if (!fullDate) return <div className="roster-day empty" key={`empty-${index}`} />;
-          const date = Number(fullDate.split("-")[2]);
-          const items = leaveItems[fullDate] || [];
-          const toneClass = items.some((item) => item.tone === "day-off") ? "has-leave" : items.length > 0 ? "has-blocked" : "";
-          return (
-            <button className={`roster-day ${toneClass}`} key={fullDate} onClick={() => openLeaveForm(fullDate)}>
-              <span>{date}</span>
-              {items.map((item) => <span className={`leave-chip ${item.tone}`} key={item.text}>{item.text}</span>)}
-            </button>
-          );
-        })}
-      </div>
-      <div className="leave-list">
-        {leaveRows.map(({ date, item }, index) => (
-          <div className="leave-row" key={`${date}-${item.text}-${index}`}>
-            <strong>{formatScheduleDateLabel(date)}</strong>
-            <span>{item.text}</span>
-          </div>
-        ))}
-      </div>
-      {showLeaveForm && (
-        <div className="leave-form">
-          <div className="booking-field">
-            <div className="booking-label">日期</div>
-            <input className="checkout-input" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
-          </div>
-          <div className="booking-field">
-            <div className="booking-label">類型</div>
-            <div className="leave-type-grid">
-              {(["整天休假", "指定時段不接客"] as LeaveDraft["type"][]).map((type) => (
-                <button className={`leave-type-btn ${draft.type === type ? "active" : ""}`} key={type} onClick={() => setDraft({ ...draft, type })}>{type}</button>
-              ))}
-            </div>
-          </div>
-          {draft.type === "指定時段不接客" && (
-            <div className="detail-grid">
-              <BookingInput label="開始時間" value={draft.startTime} onChange={(value) => setDraft({ ...draft, startTime: value })} />
-              <BookingInput label="結束時間" value={draft.endTime} onChange={(value) => setDraft({ ...draft, endTime: value })} />
-            </div>
-          )}
-          <div className="booking-field">
-            <div className="booking-label">備註</div>
-            <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="例如：進修課、家庭日、臨時不接客..." />
-          </div>
-          <div className="modal-action-row">
-            <button className="secondary-modal-btn" onClick={() => setShowLeaveForm(false)}>取消</button>
-            <button className="primary-modal-btn" onClick={submitLeave}>加入排班表</button>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointment[]; onView: (row: Appointment) => void; onCheckout: (row: Appointment) => void; onAddBooking: () => void }) {
   const statusCounts = rows.reduce(
     (counts, row) => ({
@@ -1224,8 +1116,9 @@ function PendingView({ rows, decisions, pendingCount, isManager, pendingScope, o
   );
 }
 
-function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSource, leaveItems, teamLeaveItemsSource, isManager, designerName, onModeChange, onSelectDate, onAddBooking }: { mode: ScheduleMode; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; teamScheduleItemsSource: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; teamLeaveItemsSource: CalendarRecords<LeaveItem>; isManager: boolean; designerName: string; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void }) {
+function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSource, leaveItems, teamLeaveItemsSource, isManager, designerName, designerOptions, isSynced, onModeChange, onSelectDate, onAddBooking, onAddLeave }: { mode: ScheduleMode; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; teamScheduleItemsSource: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; teamLeaveItemsSource: CalendarRecords<LeaveItem>; isManager: boolean; designerName: string; designerOptions: string[]; isSynced: boolean; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void; onAddLeave: (date: string, item: LeaveItem, designerLabel?: string) => void | Promise<void> }) {
   const [scope, setScope] = useState<"自己" | "全員">("自己");
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
   const visibleScheduleItems = scope === "全員" ? mergeCalendarRecords(scheduleItems, teamScheduleItemsSource) : filterCalendarRecords(scheduleItems, designerName);
   const visibleLeaveItems = scope === "全員" ? mergeCalendarRecords(leaveItems, teamLeaveItemsSource) : filterCalendarRecords(leaveItems, designerName);
 
@@ -1236,7 +1129,10 @@ function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSour
           <h1 className="page-title">排程</h1>
           <div className="page-subtitle">{formatScheduleDateLabel(selectedDate)}</div>
         </div>
-        <button className="add-booking-btn" onClick={() => onAddBooking(selectedDate, "10:00")}>＋新增預約</button>
+        <div className="schedule-action-row">
+          <button className="add-booking-btn" onClick={() => onAddBooking(selectedDate, "10:00")}>＋新增預約</button>
+          <button className="schedule-leave-btn" onClick={() => setShowLeaveForm(true)}>排班公休</button>
+        </div>
       </div>
       <div className="segmented">
         {(["3日", "週", "月"] as ScheduleMode[]).map((item) => (
@@ -1259,7 +1155,90 @@ function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSour
       ) : (
         <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} />
       )}
+      {showLeaveForm && (
+        <ScheduleLeaveModal
+          selectedDate={selectedDate}
+          isManager={isManager}
+          designerName={designerName}
+          designerOptions={designerOptions}
+          isSynced={isSynced}
+          onSubmit={async (date, item, targetDesigner) => {
+            await onAddLeave(date, item, targetDesigner);
+            setShowLeaveForm(false);
+          }}
+          onClose={() => setShowLeaveForm(false)}
+        />
+      )}
     </>
+  );
+}
+
+function ScheduleLeaveModal({ selectedDate, isManager, designerName, designerOptions, isSynced, onSubmit, onClose }: { selectedDate: string; isManager: boolean; designerName: string; designerOptions: string[]; isSynced: boolean; onSubmit: (date: string, item: LeaveItem, designerLabel?: string) => void | Promise<void>; onClose: () => void }) {
+  const defaultDesigner = designerOptions.find((item) => item.includes(designerName)) || designerOptions[0] || designerName;
+  const [draft, setDraft] = useState<LeaveDraft>({
+    date: selectedDate,
+    designer: defaultDesigner,
+    type: "整天休假",
+    startTime: "13:00",
+    endTime: "17:00",
+    note: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function submitLeave() {
+    const isFullDay = draft.type === "整天休假";
+    const text = isFullDay ? "整天休假" : `${draft.startTime}-${draft.endTime} 不接客`;
+    setSaving(true);
+    await onSubmit(draft.date, { text, tone: isFullDay ? "day-off" : "blocked", designer: draft.designer }, draft.designer);
+    setSaving(false);
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">排班公休</div>
+            <div className="modal-subtitle">設定休假或指定時段不接客，送出後同步後台。</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        {isManager && (
+          <div className="booking-field">
+            <div className="booking-label">設計師</div>
+            <select className="checkout-select" value={draft.designer} onChange={(event) => setDraft({ ...draft, designer: event.target.value })}>
+              {designerOptions.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="booking-field">
+          <div className="booking-label">日期</div>
+          <input className="checkout-input" type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
+        </div>
+        <div className="booking-field">
+          <div className="booking-label">類型</div>
+          <div className="leave-type-grid">
+            {(["整天休假", "指定時段不接客"] as LeaveDraft["type"][]).map((type) => (
+              <button className={`leave-type-btn ${draft.type === type ? "active" : ""}`} key={type} onClick={() => setDraft({ ...draft, type })}>{type}</button>
+            ))}
+          </div>
+        </div>
+        {draft.type === "指定時段不接客" && (
+          <div className="detail-grid">
+            <BookingInput label="開始時間" value={draft.startTime} onChange={(value) => setDraft({ ...draft, startTime: value })} />
+            <BookingInput label="結束時間" value={draft.endTime} onChange={(value) => setDraft({ ...draft, endTime: value })} />
+          </div>
+        )}
+        <div className="booking-field">
+          <div className="booking-label">備註</div>
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="例如：進修課、家庭日、臨時不接客..." />
+        </div>
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving} onClick={submitLeave}>{isSynced ? saving ? "同步中..." : "加入排班公休" : "等待後台連線"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
