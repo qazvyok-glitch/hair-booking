@@ -1013,12 +1013,16 @@ export default function DesignerPreviewV2Page() {
         .shop-use-preview { background: #0f3326; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
-        .booking-extra-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-        .add-extra-service-btn { min-width: 64px; height: 42px; white-space: nowrap; }
-        .add-extra-service-btn:disabled { border-color: #dfe3ea; color: #a3acb8; cursor: not-allowed; }
-        .booking-extra-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-        .booking-extra-chip { display: inline-flex; align-items: center; gap: 6px; background: #eaf7ff; color: #1478c8; border: 1px solid #bfe6ff; border-radius: 999px; padding: 6px 8px 6px 10px; font-size: 12px; font-weight: 900; }
-        .booking-extra-chip button { width: 18px; height: 18px; border: none; border-radius: 50%; background: #fff; color: #1478c8; font-weight: 900; cursor: pointer; line-height: 1; }
+        .booking-service-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+        .booking-service-count { color: #8b95a3; font-size: 11px; font-weight: 800; }
+        .booking-selected-services { display: grid; gap: 8px; }
+        .booking-selected-service { display: grid; grid-template-columns: 48px 1fr 28px; align-items: center; gap: 8px; border: 1px solid #dfe3ea; background: #fff; border-radius: 12px; padding: 10px; }
+        .booking-selected-service span { color: #1478c8; background: #eaf7ff; border-radius: 999px; padding: 4px 6px; font-size: 10px; font-weight: 950; text-align: center; }
+        .booking-selected-service strong { color: #1f2937; font-size: 13px; font-weight: 900; line-height: 1.4; }
+        .booking-selected-service button { width: 28px; height: 28px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 16px; font-weight: 950; cursor: pointer; }
+        .booking-service-picker { display: grid; gap: 8px; max-height: 230px; overflow-y: auto; margin-top: 10px; padding: 2px 2px 2px 0; }
+        .booking-service-option { width: 100%; border: 1px solid #dfe3ea; background: #f8fbff; color: #1f2937; border-radius: 12px; padding: 10px 11px; text-align: left; font-size: 13px; font-weight: 900; line-height: 1.4; cursor: pointer; }
+        .booking-service-option:hover { border-color: #148bd8; background: #eaf7ff; color: #1478c8; }
         .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
         .customer-result-list { display: grid; gap: 8px; margin-top: 9px; }
         .customer-result { width: 100%; border: 1px solid #e1e7ef; background: #fff; color: #1f2937; border-radius: 12px; padding: 10px 11px; text-align: left; cursor: pointer; }
@@ -2430,8 +2434,9 @@ function CheckoutProductNumber({ label, quantity, price, onQuantityChange, onPri
 function AddBookingModal({ draft, complete, designerOptions, serviceOptions, customerRecords, isSynced, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; designerOptions: string[]; serviceOptions: string[]; customerRecords: CustomerRecord[]; isSynced: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const availableExtraServices = serviceOptions.filter((item) => item !== draft.service && !draft.extraServices.includes(item));
-  const [nextExtraService, setNextExtraService] = useState(availableExtraServices[0] || "");
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const selectedServiceNames = getBookingServiceNames(draft);
+  const availableServiceOptions = serviceOptions.filter((item) => !selectedServiceNames.includes(item));
   const searchText = customerSearch.trim().toLowerCase();
   const matchedCustomers = searchText
     ? customerRecords.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(searchText)).slice(0, 3)
@@ -2439,6 +2444,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
   const selectedCustomer = customerRecords.find((customer) => customer.id === selectedCustomerId);
 
   function applyCustomer(customer: CustomerRecord) {
+    const customerServices = splitBookingServiceNames(customer.lastService);
     setSelectedCustomerId(customer.id);
     setCustomerSearch(`${customer.name} / ${customer.phone}`);
     onChange({
@@ -2446,27 +2452,28 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
       name: customer.name,
       phone: customer.phone,
       referrer: customer.referrer,
-      service: customer.lastService || draft.service,
-      extraServices: [],
+      service: customerServices[0] || draft.service,
+      extraServices: customerServices.slice(1),
       note: customer.note,
     });
   }
 
-  useEffect(() => {
-    if (!availableExtraServices.length) {
-      setNextExtraService("");
+  function addBookingService(serviceName: string) {
+    if (!serviceName || selectedServiceNames.includes(serviceName)) return;
+    if (!draft.service) {
+      onChange({ ...draft, service: serviceName });
       return;
     }
-    if (!availableExtraServices.includes(nextExtraService)) setNextExtraService(availableExtraServices[0]);
-  }, [availableExtraServices, nextExtraService]);
-
-  function addExtraService() {
-    if (!nextExtraService) return;
-    onChange({ ...draft, extraServices: [...draft.extraServices, nextExtraService] });
+    onChange({ ...draft, extraServices: [...draft.extraServices, serviceName] });
   }
 
-  function removeExtraService(serviceName: string) {
-    onChange({ ...draft, extraServices: draft.extraServices.filter((item) => item !== serviceName) });
+  function removeBookingService(serviceName: string) {
+    const nextServices = selectedServiceNames.filter((item) => item !== serviceName);
+    if (nextServices.length === 0) {
+      onChange({ ...draft, service: serviceOptions[0] || "", extraServices: [] });
+      return;
+    }
+    onChange({ ...draft, service: nextServices[0], extraServices: nextServices.slice(1) });
   }
 
   if (complete) {
@@ -2555,29 +2562,33 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
           <BookingInput label="介紹人" value={draft.referrer} onChange={(value) => onChange({ ...draft, referrer: value })} />
         </div>
         <div className="booking-field">
-          <div className="booking-label">服務項目</div>
-          <select className="checkout-select" value={draft.service} onChange={(event) => onChange({ ...draft, service: event.target.value })}>
-            {serviceOptions.map((item) => <option key={item}>{item}</option>)}
-            {serviceOptions.length === 0 && <option>後台尚未設定服務項目</option>}
-          </select>
-        </div>
-        <div className="booking-field">
-          <div className="booking-label">其他服務</div>
-          <div className="booking-extra-row">
-            <select className="checkout-select" value={nextExtraService} disabled={availableExtraServices.length === 0} onChange={(event) => setNextExtraService(event.target.value)}>
-              {availableExtraServices.map((item) => <option key={item}>{item}</option>)}
-              {availableExtraServices.length === 0 && <option>沒有可新增的其他服務</option>}
-            </select>
-            <button className="small-action add-extra-service-btn" disabled={!nextExtraService} onClick={addExtraService}>＋新增</button>
+          <div className="booking-service-head">
+            <div>
+              <div className="booking-label">服務項目</div>
+              <div className="booking-service-count">已選 {selectedServiceNames.length} 項，結帳會自動帶入</div>
+            </div>
+            <button className="product-picker-toggle" onClick={() => setShowServicePicker(!showServicePicker)}>
+              {showServicePicker ? "收起" : "＋新增服務"}
+            </button>
           </div>
-          {draft.extraServices.length > 0 && (
-            <div className="booking-extra-list">
-              {draft.extraServices.map((item) => (
-                <span className="booking-extra-chip" key={item}>
-                  {item}
-                  <button onClick={() => removeExtraService(item)} aria-label={`移除 ${item}`}>×</button>
-                </span>
-              ))}
+          <div className="booking-selected-services">
+            {selectedServiceNames.map((item, index) => (
+              <div className="booking-selected-service" key={item}>
+                <span>{index === 0 ? "主服務" : "加做"}</span>
+                <strong>{item}</strong>
+                <button onClick={() => removeBookingService(item)} aria-label={`移除 ${item}`}>×</button>
+              </div>
+            ))}
+          </div>
+          {showServicePicker && (
+            <div className="booking-service-picker">
+              {availableServiceOptions.length > 0 ? availableServiceOptions.map((item) => (
+                <button className="booking-service-option" key={item} onClick={() => addBookingService(item)}>
+                  ＋ {item}
+                </button>
+              )) : (
+                <div className="customer-empty">目前沒有可新增的服務項目</div>
+              )}
             </div>
           )}
         </div>
