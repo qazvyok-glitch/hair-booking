@@ -6,14 +6,37 @@ import AdminBottomNav from "../components/BottomNav";
 
 type PriceItem = { id: number; category: string; name: string; price_range: string; sort_order: number };
 
-function sortPriceItems(list: PriceItem[]) {
-  return [...list].sort((a, b) => a.category.localeCompare(b.category) || (a.sort_order || a.id) - (b.sort_order || b.id));
+const publicCategoryOrderKey = "price_category_order";
+
+function mergeCategoryOrder(savedOrder: string[], currentCategories: string[]) {
+  return [...savedOrder.filter((category) => currentCategories.includes(category)), ...currentCategories.filter((category) => !savedOrder.includes(category))];
+}
+
+function readCategoryOrder(value?: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function sortPriceItems(list: PriceItem[], categoryOrder: string[] = []) {
+  return [...list].sort((a, b) => {
+    const aCategoryIndex = categoryOrder.indexOf(a.category);
+    const bCategoryIndex = categoryOrder.indexOf(b.category);
+    const categorySort = (aCategoryIndex === -1 ? Number.MAX_SAFE_INTEGER : aCategoryIndex) - (bCategoryIndex === -1 ? Number.MAX_SAFE_INTEGER : bCategoryIndex);
+    return categorySort || a.category.localeCompare(b.category) || (a.sort_order || a.id) - (b.sort_order || b.id);
+  });
 }
 
 export default function AdminPrices() {
   const router = useRouter();
   const [items, setItems] = useState<PriceItem[]>([]);
   const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
+  const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
+  const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -35,15 +58,22 @@ export default function AdminPrices() {
     fetchData();
   }, [router]);
 
-  function fetchData() {
-    supabase.from("price_items").select("*").order("category").order("sort_order").then(({ data }) => {
-      if (data) setItems(sortPriceItems(data));
+  async function fetchData() {
+    const [{ data }, { data: categorySetting }] = await Promise.all([
+      supabase.from("price_items").select("*").order("category").order("sort_order"),
+      supabase.from("shop_info").select("id, value").eq("key", publicCategoryOrderKey).maybeSingle(),
+    ]);
+    if (data) {
+      const currentCategories = [...new Set(data.map((p) => p.category))].filter(Boolean);
+      const nextCategoryOrder = mergeCategoryOrder(readCategoryOrder(categorySetting?.value), currentCategories);
+      setCategoryOrder(nextCategoryOrder);
+      setItems(sortPriceItems(data, nextCategoryOrder));
       setLoading(false);
-    });
+    }
   }
 
-  const categories = [...new Set(items.map(p => p.category))].filter(Boolean);
-  const filtered = filterCategory === "all" ? items : items.filter(p => p.category === filterCategory);
+  const categories = mergeCategoryOrder(categoryOrder, [...new Set(items.map(p => p.category))].filter(Boolean));
+  const filtered = filterCategory === "all" ? sortPriceItems(items, categories) : sortPriceItems(items.filter(p => p.category === filterCategory), categories);
 
   function openNew() {
     setEditing(null);
@@ -64,11 +94,17 @@ export default function AdminPrices() {
     setSaving(true);
     if (editing) {
       await supabase.from("price_items").update(form).eq("id", editing.id);
-      setItems(sortPriceItems(items.map(p => p.id === editing.id ? { ...p, ...form } : p)));
+      const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set(items.map(p => p.id === editing.id ? form.category : p.category))].filter(Boolean));
+      setCategoryOrder(nextCategories);
+      setItems(sortPriceItems(items.map(p => p.id === editing.id ? { ...p, ...form } : p), nextCategories));
     } else {
       const nextSortOrder = items.filter((item) => item.category === form.category).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
       const { data } = await supabase.from("price_items").insert({ ...form, sort_order: nextSortOrder }).select().single();
-      if (data) setItems(sortPriceItems([...items, data]));
+      if (data) {
+        const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set([...items.map((item) => item.category), data.category])].filter(Boolean));
+        setCategoryOrder(nextCategories);
+        setItems(sortPriceItems([...items, data], nextCategories));
+      }
     }
     setSaving(false);
     setShowForm(false);
@@ -88,7 +124,7 @@ export default function AdminPrices() {
       return;
     }
 
-    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category));
+    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category), categoryOrder);
     const fromIndex = categoryItems.findIndex((item) => item.id === dragged.id);
     const toIndex = categoryItems.findIndex((item) => item.id === target.id);
     if (fromIndex < 0 || toIndex < 0) return;
@@ -97,13 +133,41 @@ export default function AdminPrices() {
     const [moved] = reordered.splice(fromIndex, 1);
     reordered.splice(toIndex, 0, moved);
     const nextCategoryItems = reordered.map((item, index) => ({ ...item, sort_order: index + 1 }));
-    const nextItems = sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item));
+    const nextItems = sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item), categoryOrder);
     setItems(nextItems);
     setDraggingPriceId(null);
 
     const results = await Promise.all(nextCategoryItems.map((item) => supabase.from("price_items").update({ sort_order: item.sort_order }).eq("id", item.id)));
     if (results.some(({ error }) => error)) {
       alert("排序更新失敗，請再試一次");
+      fetchData();
+    }
+  }
+
+  async function saveCategoryOrder(nextOrder: string[]) {
+    const { data: existing } = await supabase.from("shop_info").select("id").eq("key", publicCategoryOrderKey).maybeSingle();
+    if (existing?.id) {
+      return supabase.from("shop_info").update({ value: JSON.stringify(nextOrder), is_active: true }).eq("id", existing.id);
+    }
+    return supabase.from("shop_info").insert({ key: publicCategoryOrderKey, label: "價目表大項目排序", value: JSON.stringify(nextOrder), sort_order: 20, is_active: true });
+  }
+
+  async function reorderCategory(targetCategory: string) {
+    if (!draggingCategory || draggingCategory === targetCategory) return;
+    const fromIndex = categories.indexOf(draggingCategory);
+    const toIndex = categories.indexOf(targetCategory);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const nextOrder = [...categories];
+    const [moved] = nextOrder.splice(fromIndex, 1);
+    nextOrder.splice(toIndex, 0, moved);
+    setCategoryOrder(nextOrder);
+    setItems(sortPriceItems(items, nextOrder));
+    setDraggingCategory(null);
+
+    const { error } = await saveCategoryOrder(nextOrder);
+    if (error) {
+      alert("大項目排序更新失敗，請再試一次");
       fetchData();
     }
   }
@@ -126,7 +190,19 @@ export default function AdminPrices() {
         <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
           <button onClick={() => setFilterCategory("all")} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: filterCategory === "all" ? "#534AB7" : "#fff", color: filterCategory === "all" ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>全部</button>
           {categories.map(cat => (
-            <button key={cat} onClick={() => setFilterCategory(cat)} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: filterCategory === cat ? "#534AB7" : "#fff", color: filterCategory === cat ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{cat}</button>
+            <button
+              key={cat}
+              draggable
+              onDragStart={() => setDraggingCategory(cat)}
+              onDragEnd={() => setDraggingCategory(null)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => reorderCategory(cat)}
+              onClick={() => setFilterCategory(cat)}
+              title="拖曳調整大項目排序"
+              style={{ padding: "5px 10px 5px 12px", borderRadius: 20, border: "none", background: filterCategory === cat ? "#534AB7" : draggingCategory === cat ? "#F8F7F3" : "#fff", color: filterCategory === cat ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "grab", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              {cat}<span style={{ fontSize: 12, opacity: 0.75 }}>☰</span>
+            </button>
           ))}
         </div>
 

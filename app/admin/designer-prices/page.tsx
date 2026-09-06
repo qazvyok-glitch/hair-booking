@@ -12,8 +12,33 @@ type DesignerPriceItem = PriceItem & {
   is_active: boolean;
 };
 
-function sortPriceItems<T extends PriceItem>(list: T[]) {
-  return [...list].sort((a, b) => a.category.localeCompare(b.category) || (a.sort_order || a.id) - (b.sort_order || b.id));
+const publicCategoryOrderKey = "price_category_order";
+
+function designerCategoryOrderKey(designerId: number) {
+  return `designer_price_category_order_${designerId}`;
+}
+
+function mergeCategoryOrder(savedOrder: string[], currentCategories: string[]) {
+  return [...savedOrder.filter((category) => currentCategories.includes(category)), ...currentCategories.filter((category) => !savedOrder.includes(category))];
+}
+
+function readCategoryOrder(value?: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function sortPriceItems<T extends PriceItem>(list: T[], categoryOrder: string[] = []) {
+  return [...list].sort((a, b) => {
+    const aCategoryIndex = categoryOrder.indexOf(a.category);
+    const bCategoryIndex = categoryOrder.indexOf(b.category);
+    const categorySort = (aCategoryIndex === -1 ? Number.MAX_SAFE_INTEGER : aCategoryIndex) - (bCategoryIndex === -1 ? Number.MAX_SAFE_INTEGER : bCategoryIndex);
+    return categorySort || a.category.localeCompare(b.category) || (a.sort_order || a.id) - (b.sort_order || b.id);
+  });
 }
 
 export default function AdminDesignerPrices() {
@@ -22,6 +47,8 @@ export default function AdminDesignerPrices() {
   const [baseItems, setBaseItems] = useState<PriceItem[]>([]);
   const [items, setItems] = useState<DesignerPriceItem[]>([]);
   const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
+  const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
+  const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
   const [selectedDesignerId, setSelectedDesignerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -51,7 +78,8 @@ export default function AdminDesignerPrices() {
       ]);
       const loadedDesigners = designerData || [];
       setDesigners(loadedDesigners);
-      setBaseItems(sortPriceItems(priceData || []));
+      const publicCategories = [...new Set((priceData || []).map((p) => p.category))].filter(Boolean);
+      setBaseItems(sortPriceItems(priceData || [], publicCategories));
       setSelectedDesignerId(designerIdFromUrl || loadedDesigners[0]?.id || null);
       setLoading(false);
     }
@@ -65,19 +93,26 @@ export default function AdminDesignerPrices() {
   }, [selectedDesignerId]);
 
   async function fetchDesignerPrices(designerId: number) {
-    const { data } = await supabase
-      .from("designer_price_items")
-      .select("*")
-      .eq("designer_id", designerId)
-      .order("category")
-      .order("sort_order");
-    setItems(sortPriceItems(data || []));
+    const [{ data }, { data: designerCategorySetting }, { data: publicCategorySetting }] = await Promise.all([
+      supabase
+        .from("designer_price_items")
+        .select("*")
+        .eq("designer_id", designerId)
+        .order("category")
+        .order("sort_order"),
+      supabase.from("shop_info").select("id, value").eq("key", designerCategoryOrderKey(designerId)).maybeSingle(),
+      supabase.from("shop_info").select("id, value").eq("key", publicCategoryOrderKey).maybeSingle(),
+    ]);
+    const currentCategories = [...new Set((data || []).map((p) => p.category))].filter(Boolean);
+    const nextCategoryOrder = mergeCategoryOrder(readCategoryOrder(designerCategorySetting?.value || publicCategorySetting?.value), currentCategories);
+    setCategoryOrder(nextCategoryOrder);
+    setItems(sortPriceItems(data || [], nextCategoryOrder));
   }
 
   const selectedDesigner = designers.find((d) => d.id === selectedDesignerId);
-  const visibleCategories = [...new Set(items.map((p) => p.category))].filter(Boolean);
-  const allCategories = [...new Set([...baseItems.map((p) => p.category), ...items.map((p) => p.category)])].filter(Boolean);
-  const filtered = filterCategory === "all" ? items : items.filter((p) => p.category === filterCategory);
+  const visibleCategories = mergeCategoryOrder(categoryOrder, [...new Set(items.map((p) => p.category))].filter(Boolean));
+  const allCategories = mergeCategoryOrder(categoryOrder, [...new Set([...baseItems.map((p) => p.category), ...items.map((p) => p.category)])].filter(Boolean));
+  const filtered = filterCategory === "all" ? sortPriceItems(items, visibleCategories) : sortPriceItems(items.filter((p) => p.category === filterCategory), visibleCategories);
 
   function openNew() {
     setEditing(null);
@@ -166,7 +201,7 @@ export default function AdminDesignerPrices() {
       return;
     }
 
-    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category));
+    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category), categoryOrder);
     const fromIndex = categoryItems.findIndex((item) => item.id === dragged.id);
     const toIndex = categoryItems.findIndex((item) => item.id === target.id);
     if (fromIndex < 0 || toIndex < 0) return;
@@ -175,7 +210,7 @@ export default function AdminDesignerPrices() {
     const [moved] = reordered.splice(fromIndex, 1);
     reordered.splice(toIndex, 0, moved);
     const nextCategoryItems = reordered.map((item, index) => ({ ...item, sort_order: index + 1 }));
-    setItems(sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item)));
+    setItems(sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item), categoryOrder));
     setDraggingPriceId(null);
 
     const results = await Promise.all(nextCategoryItems.map((item) => (
@@ -184,6 +219,36 @@ export default function AdminDesignerPrices() {
 
     if (results.some(({ error }) => error)) {
       alert("排序更新失敗，請再試一次");
+      if (selectedDesignerId) fetchDesignerPrices(selectedDesignerId);
+    }
+  }
+
+  async function saveCategoryOrder(nextOrder: string[]) {
+    if (!selectedDesignerId) return { error: new Error("No designer selected") };
+    const key = designerCategoryOrderKey(selectedDesignerId);
+    const { data: existing } = await supabase.from("shop_info").select("id").eq("key", key).maybeSingle();
+    if (existing?.id) {
+      return supabase.from("shop_info").update({ value: JSON.stringify(nextOrder), is_active: true }).eq("id", existing.id);
+    }
+    return supabase.from("shop_info").insert({ key, label: `${selectedDesigner?.display_name || selectedDesigner?.name || "設計師"}價目表大項目排序`, value: JSON.stringify(nextOrder), sort_order: 21, is_active: true });
+  }
+
+  async function reorderCategory(targetCategory: string) {
+    if (!draggingCategory || draggingCategory === targetCategory) return;
+    const fromIndex = visibleCategories.indexOf(draggingCategory);
+    const toIndex = visibleCategories.indexOf(targetCategory);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const nextOrder = [...visibleCategories];
+    const [moved] = nextOrder.splice(fromIndex, 1);
+    nextOrder.splice(toIndex, 0, moved);
+    setCategoryOrder(nextOrder);
+    setItems(sortPriceItems(items, nextOrder));
+    setDraggingCategory(null);
+
+    const { error } = await saveCategoryOrder(nextOrder);
+    if (error) {
+      alert("大項目排序更新失敗，請再試一次");
       if (selectedDesignerId) fetchDesignerPrices(selectedDesignerId);
     }
   }
@@ -223,7 +288,19 @@ export default function AdminDesignerPrices() {
         <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
           <button onClick={() => setFilterCategory("all")} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: filterCategory === "all" ? "#534AB7" : "#fff", color: filterCategory === "all" ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>全部</button>
           {visibleCategories.map((cat) => (
-            <button key={cat} onClick={() => setFilterCategory(cat)} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: filterCategory === cat ? "#534AB7" : "#fff", color: filterCategory === cat ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{cat}</button>
+            <button
+              key={cat}
+              draggable
+              onDragStart={() => setDraggingCategory(cat)}
+              onDragEnd={() => setDraggingCategory(null)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => reorderCategory(cat)}
+              onClick={() => setFilterCategory(cat)}
+              title="拖曳調整大項目排序"
+              style={{ padding: "5px 10px 5px 12px", borderRadius: 20, border: "none", background: filterCategory === cat ? "#534AB7" : draggingCategory === cat ? "#F8F7F3" : "#fff", color: filterCategory === cat ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "grab", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              {cat}<span style={{ fontSize: 12, opacity: 0.75 }}>☰</span>
+            </button>
           ))}
         </div>
 
