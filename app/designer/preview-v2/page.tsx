@@ -2170,12 +2170,18 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
 }
 
 function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onComplete, onClose }: { row: Appointment; serviceOptions: CheckoutServiceOption[]; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: CheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
-  const matchedMainService = findCheckoutServiceOption(row.service, serviceOptions);
+  const appointmentServiceNames = splitBookingServiceNames(row.service);
+  const primaryServiceName = appointmentServiceNames[0] || row.service;
+  const matchedMainService = findCheckoutServiceOption(primaryServiceName, serviceOptions);
+  const appointmentExtraServices = appointmentServiceNames.slice(1).map((serviceName) => {
+    const matchedService = findCheckoutServiceOption(serviceName, serviceOptions);
+    return { name: matchedService?.name || serviceName, amount: matchedService?.amount || 0 };
+  });
   const [draft, setDraft] = useState<CheckoutDraft>({
-    primaryServiceName: matchedMainService?.name || row.service,
+    primaryServiceName: matchedMainService?.name || primaryServiceName,
     serviceAmount: matchedMainService?.amount || 0,
     serviceDiscount: 0,
-    extraServiceItems: [],
+    extraServiceItems: appointmentExtraServices,
     productItems: [],
     paymentMethod: "現金",
     note: "",
@@ -2968,6 +2974,10 @@ function findCheckoutServiceOption(serviceName: string, options: CheckoutService
     || options.find((option) => normalizeServiceName(option.name).includes(normalizedServiceName) || normalizedServiceName.includes(normalizeServiceName(option.name)))
     || options.find((option) => option.category === category && (!size || getServiceSize(option.name) === size))
     || options.find((option) => option.category === category);
+}
+
+function splitBookingServiceNames(serviceName: string) {
+  return serviceName.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function getPriceRangeAmount(priceRange: string) {
