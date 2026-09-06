@@ -974,6 +974,9 @@ export default function DesignerPreviewV2Page() {
         .single-range-card { border: 1px solid #e1e7ef; background: #f8fbff; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
         .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line:last-child { border-bottom: none; }
+        .checkout-input-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+        .checkout-remove-btn { width: 34px; height: 34px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 18px; font-weight: 950; cursor: pointer; }
+        .checkout-remove-btn:hover { background: #ffe7eb; color: #ef244e; }
         .checkout-section-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #1478c8; font-size: 13px; font-weight: 950; padding: 10px 0 0; }
         .checkout-section-total strong { white-space: nowrap; }
         .checkout-input, .checkout-select, .checkout-note { width: 100%; border: 1px solid #dfe3ea; border-radius: 10px; padding: 9px 10px; font-size: 14px; box-sizing: border-box; background: #fff; color: #1f2937; }
@@ -2207,6 +2210,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
   const serviceGross = draft.serviceAmount + draft.extraServiceItems.reduce((sum, item) => sum + item.amount, 0);
   const serviceSubtotal = Math.max(0, serviceGross - draft.serviceDiscount);
   const total = serviceSubtotal + productSubtotal;
+  const canCompleteCheckout = isSynced && serviceGross > 0;
 
   function addServiceItem() {
     const selectedService = serviceOptions.find((service) => service.key === selectedServiceKey) || serviceOptions[0];
@@ -2220,6 +2224,27 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
       extraServiceItems: [...draft.extraServiceItems, { name, amount: selectedService?.amount || 0 }],
     });
     setShowServicePicker(false);
+  }
+
+  function removePrimaryService() {
+    const [nextPrimary, ...nextExtraServices] = draft.extraServiceItems;
+    setDraft({
+      ...draft,
+      primaryServiceName: nextPrimary?.name || "",
+      serviceAmount: nextPrimary?.amount || 0,
+      extraServiceItems: nextExtraServices,
+      serviceDiscount: Math.min(draft.serviceDiscount, nextExtraServices.reduce((sum, item) => sum + item.amount, 0) + (nextPrimary?.amount || 0)),
+    });
+  }
+
+  function removeExtraService(index: number) {
+    const nextExtraServices = draft.extraServiceItems.filter((_, itemIndex) => itemIndex !== index);
+    const nextServiceGross = draft.serviceAmount + nextExtraServices.reduce((sum, item) => sum + item.amount, 0);
+    setDraft({
+      ...draft,
+      extraServiceItems: nextExtraServices,
+      serviceDiscount: Math.min(draft.serviceDiscount, nextServiceGross),
+    });
   }
 
   function updateExtraService(index: number, value: number) {
@@ -2324,10 +2349,14 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
               </div>
             </div>
           )}
-          <CheckoutNumber label={draft.primaryServiceName} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} />
+          {draft.primaryServiceName ? (
+            <CheckoutNumber label={draft.primaryServiceName} value={draft.serviceAmount} onChange={(value) => setDraft({ ...draft, serviceAmount: value })} onRemove={removePrimaryService} />
+          ) : (
+            <div className="product-empty">尚未選擇服務，請按上方「選取服務」加入。</div>
+          )}
           {draft.extraServiceItems.map((item, index) => (
             <div key={`${item.name}-${index}`}>
-              <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, value)} />
+              <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, value)} onRemove={() => removeExtraService(index)} />
             </div>
           ))}
           <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: Math.min(Math.max(0, value), serviceGross) })} />
@@ -2402,18 +2431,21 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
         <div className="amount-preview"><span>客人應收總額</span><strong>NT${total.toLocaleString()}</strong></div>
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>稍後處理</button>
-          <button className="primary-modal-btn" disabled={!isSynced} onClick={() => onComplete(draft, total)}>{isSynced ? "建立並同步交易" : "等待後台連線"}</button>
+          <button className="primary-modal-btn" disabled={!canCompleteCheckout} onClick={() => onComplete(draft, total)}>{isSynced ? serviceGross > 0 ? "建立並同步交易" : "請先選擇服務" : "等待後台連線"}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function CheckoutNumber({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function CheckoutNumber({ label, value, onChange, onRemove }: { label: string; value: number; onChange: (value: number) => void; onRemove?: () => void }) {
   return (
     <div className="checkout-line">
       <div className="row-service">{label}</div>
-      <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+      <div className="checkout-input-actions">
+        <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+        {onRemove && <button className="checkout-remove-btn" onClick={onRemove} aria-label={`移除 ${label}`}>×</button>}
+      </div>
     </div>
   );
 }
