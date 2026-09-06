@@ -6,6 +6,7 @@ import { supabase } from "../../../lib/supabase";
 type TabKey = "today" | "pending" | "calendar" | "earnings";
 type ScheduleMode = "3日" | "週" | "月";
 type PendingDecision = "pending" | "accepted" | "declined";
+type PendingScope = "self" | "team";
 type EarningsRange = "今日" | "本月" | "指定日期或區間";
 type SettingsPanel = "profile" | "roster";
 type PendingRow = {
@@ -17,6 +18,7 @@ type PendingRow = {
   phone: string;
   service: string;
   detail: string;
+  designer?: string;
 };
 type Appointment = {
   id?: number;
@@ -190,6 +192,7 @@ export default function DesignerPreviewV2Page() {
   const [checkoutComplete, setCheckoutComplete] = useState(false);
   const [pendingDecisions, setPendingDecisions] = useState<Record<string, PendingDecision>>({});
   const [selectedPending, setSelectedPending] = useState<PendingRow | null>(null);
+  const [pendingScope, setPendingScope] = useState<PendingScope>("self");
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>("月");
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
@@ -505,7 +508,11 @@ export default function DesignerPreviewV2Page() {
   const defaultBookingDate = selectedScheduleDate;
   const defaultBookingService = activeServiceOptions[0] || "";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
-  const activePendingRows = backendConnected ? mapBookingsToPendingRows(backendBookings, backendServices) : pendingRows;
+  const isManager = backendSession?.is_manager ?? false;
+  const visiblePendingBookings = isManager && pendingScope === "team"
+    ? backendBookings
+    : backendBookings.filter((booking) => !backendSession || booking.designer_id === backendSession.id);
+  const activePendingRows = backendConnected ? mapBookingsToPendingRows(visiblePendingBookings, backendServices, isManager && pendingScope === "team") : pendingRows;
   const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage, customIncomeRange) : withCustomIncomeRange(earningsRanges, customIncomeRange);
   const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage, customIncomeRange) : null;
   const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
@@ -521,7 +528,7 @@ export default function DesignerPreviewV2Page() {
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} onOpen={setSelectedPending} />}
+              {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} />}
             </>
@@ -574,9 +581,13 @@ export default function DesignerPreviewV2Page() {
         .pill.done { background: #e8f7ef; color: #208051; }
         .small-action { min-width: 50px; border: 1px solid #2290e6; color: #1478c8; background: #fff; border-radius: 8px; padding: 6px 9px; font-weight: 850; font-size: 13px; cursor: pointer; }
         .add-booking-btn { border: none; background: #148bd8; color: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 950; white-space: nowrap; cursor: pointer; box-shadow: 0 8px 16px rgba(20,139,216,.16); }
+        .pending-scope-tabs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin: 0 0 16px; padding: 4px; border: 1px solid #e1e7ef; border-radius: 999px; background: #eef3f8; }
+        .pending-scope-btn { border: none; border-radius: 999px; background: transparent; color: #6b7280; padding: 9px 4px; font-size: 13px; font-weight: 950; cursor: pointer; }
+        .pending-scope-btn.active { background: #148bd8; color: #fff; box-shadow: 0 6px 14px rgba(20,139,216,.22); }
         .pending-list { display: grid; gap: 14px; }
         .pending-card { min-height: 118px; display: grid; grid-template-columns: 58px 1fr 78px; gap: 10px; align-items: center; padding: 14px; }
         .pending-card.is-done { opacity: .74; }
+        .pending-designer { color: #1478c8; font-size: 13px; font-weight: 950; margin-bottom: 4px; }
         .pending-actions { display: grid; gap: 9px; }
         .accept-btn, .decline-btn { border-radius: 8px; padding: 8px 0; background: #fff; font-weight: 900; font-size: 14px; cursor: pointer; }
         .accept-btn { border: 1px solid #f59f2c; color: #e67600; }
@@ -1115,11 +1126,17 @@ function TodayView({ rows, onView, onCheckout, onAddBooking }: { rows: Appointme
   );
 }
 
-function PendingView({ rows, decisions, pendingCount, onOpen }: { rows: PendingRow[]; decisions: Record<string, PendingDecision>; pendingCount: number; onOpen: (row: PendingRow) => void }) {
+function PendingView({ rows, decisions, pendingCount, isManager, pendingScope, onScopeChange, onOpen }: { rows: PendingRow[]; decisions: Record<string, PendingDecision>; pendingCount: number; isManager: boolean; pendingScope: PendingScope; onScopeChange: (scope: PendingScope) => void; onOpen: (row: PendingRow) => void }) {
   return (
     <>
       <h1 className="page-title">待確認</h1>
       <div className="page-subtitle">目前有 {pendingCount} 筆預約待回覆</div>
+      {isManager && (
+        <div className="pending-scope-tabs" aria-label="待確認範圍">
+          <button className={`pending-scope-btn ${pendingScope === "self" ? "active" : ""}`} onClick={() => onScopeChange("self")}>我的待確認</button>
+          <button className={`pending-scope-btn ${pendingScope === "team" ? "active" : ""}`} onClick={() => onScopeChange("team")}>全員待確認</button>
+        </div>
+      )}
       <section className="pending-list">
         {rows.map((row) => {
           const decision = decisions[row.key] || "pending";
@@ -1131,6 +1148,7 @@ function PendingView({ rows, decisions, pendingCount, onOpen }: { rows: PendingR
               </div>
               <div>
                 <div className="row-name">{row.name}</div>
+                {row.designer && <div className="pending-designer">設計師：{row.designer}</div>}
                 <div className="row-service">{row.service}</div>
                 <div className={`row-service ${row.detail.includes("翻譯") ? "note-text" : ""}`}>{row.detail}</div>
               </div>
@@ -1510,6 +1528,7 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         <div className="detail-grid">
+          {row.designer && <DetailCard label="設計師" value={row.designer} />}
           <DetailCard label="電話" value={row.phone} />
           <DetailCard label="服務項目" value={row.service} />
           <DetailCard label="顧客備註" value={row.detail} />
@@ -2030,19 +2049,23 @@ function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: Backen
     .sort((a, b) => a.time.localeCompare(b.time));
 }
 
-function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendService[]): PendingRow[] {
+function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendService[], showDesigner = false): PendingRow[] {
   return bookings
     .filter((booking) => booking.status === "pending")
-    .map((booking) => ({
-      key: String(booking.id),
-      id: booking.id,
-      date: formatScheduleDateLabel(booking.booking_date),
-      time: booking.booking_time,
-      name: booking.customer_name || "訪客",
-      phone: booking.customer_phone || "未填電話",
-      service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
-      detail: booking.note || "未填備註",
-    }))
+    .map((booking) => {
+      const designerName = booking.designers?.display_name || booking.designers?.name || booking.designers?.nickname || "未指定設計師";
+      return {
+        key: String(booking.id),
+        id: booking.id,
+        date: formatScheduleDateLabel(booking.booking_date),
+        time: booking.booking_time,
+        name: booking.customer_name || "訪客",
+        phone: booking.customer_phone || "未填電話",
+        service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
+        detail: booking.note || "未填備註",
+        designer: showDesigner ? designerName : undefined,
+      };
+    })
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 }
 
