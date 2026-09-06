@@ -16,7 +16,8 @@ type Member = {
 
 type Booking = {
   id: number;
-  user_id: string;
+  user_id?: string | null;
+  customer_phone?: string | null;
   booking_date: string;
   status: string;
 };
@@ -81,7 +82,7 @@ export default function AdminMembers() {
   async function fetchData() {
     const [{ data: mData }, { data: bData }, { data: nData }, { data: pData }, { data: dData }] = await Promise.all([
       supabase.from("customers").select("*").order("customer_no"),
-      supabase.from("bookings").select("id, user_id, booking_date, status"),
+      supabase.from("bookings").select("id, user_id, customer_phone, booking_date, status"),
       supabase.from("customer_notes").select("*").order("customer_name"),
       supabase.from("customer_photos").select("*").order("taken_at", { ascending: false }),
       supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
@@ -202,8 +203,17 @@ export default function AdminMembers() {
     setImporting(false);
   }
 
-  function getMemberBookings(userId: string) {
-    return bookings.filter(b => b.user_id === userId);
+  function normalizePhone(phone?: string | null) {
+    return (phone || "").replace(/\D/g, "");
+  }
+
+  function getMemberBookings(member: Member) {
+    const memberPhone = normalizePhone(member.phone);
+    return bookings.filter((booking) => {
+      const sameMemberId = booking.user_id && booking.user_id === member.id;
+      const samePhone = memberPhone && normalizePhone(booking.customer_phone) === memberPhone;
+      return sameMemberId || samePhone;
+    });
   }
 
   function getMemberNotes(phone: string) {
@@ -306,7 +316,7 @@ export default function AdminMembers() {
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#5F5E5A" }}>{m.phone || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#5F5E5A" }}>{m.referrer || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.email || "—"}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getMemberBookings(m.id).length} 次</td>
+                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getMemberBookings(m).length} 次</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.created_at?.slice(0, 10).replace(/-/g, "/")}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteMember(m.id, m.name||""); }} style={{ background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}>刪除</button>
@@ -318,7 +328,7 @@ export default function AdminMembers() {
           </div>
         ) : (
           filtered.map((m) => {
-            const memberBookings = getMemberBookings(m.id);
+            const memberBookings = getMemberBookings(m);
             return (
               <div key={m.id} onClick={() => openMember(m)} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7", cursor: "pointer" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -466,7 +476,7 @@ export default function AdminMembers() {
                 { label: "介紹人", value: selectedMember.referrer || "—" },
                 { label: "Email", value: selectedMember.email || "—" },
                 { label: "加入日期", value: selectedMember.created_at?.slice(0, 10).replace(/-/g, "/") || "—" },
-                { label: "預約次數", value: `${getMemberBookings(selectedMember.id).length} 次` },
+                { label: "預約次數", value: `${getMemberBookings(selectedMember).length} 次` },
               ].map(item => (
                 <div key={item.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
                   <span style={{ color: "#888780" }}>{item.label}</span>
@@ -515,12 +525,12 @@ export default function AdminMembers() {
 
             {/* 預約紀錄 */}
             <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 8, marginTop: 4 }}>
-              預約紀錄（{getMemberBookings(selectedMember.id).length} 筆）
+              預約紀錄（{getMemberBookings(selectedMember).length} 筆）
             </div>
-            {getMemberBookings(selectedMember.id).length === 0 ? (
+            {getMemberBookings(selectedMember).length === 0 ? (
               <div style={{ textAlign: "center", padding: "16px 0", color: "#888780", fontSize: 13 }}>尚無預約紀錄</div>
             ) : (
-              getMemberBookings(selectedMember.id)
+              getMemberBookings(selectedMember)
                 .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
                 .map(b => (
                   <div key={b.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #F1EFE8" }}>
