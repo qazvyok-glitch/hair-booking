@@ -22,17 +22,70 @@ type Customer = { id: string; phone: string; customer_no: string };
 
 type Designer = { id: number; name: string };
 type Service = { id: number; name: string };
+type OffDay = { designer_id: number; off_date: string };
+type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
+type ScheduleRow =
+  | { type: "booking"; id: number; booking: Booking; date: string; time: string; designer_id: number; status: string }
+  | { type: "off-day"; id: string; date: string; time: string; designer_id: number; status: "off_day" }
+  | { type: "off-slot"; id: string; date: string; time: string; designer_id: number; status: "blocked"; label: string };
 
 function getStatusMeta(status?: string | null) {
   if (status === "confirmed") return { label: "已確認", background: "#E1F5EE", color: "#085041" };
   if (status === "completed") return { label: "已完成", background: "#E8F2FF", color: "#0B66C3" };
   if (status === "cancelled") return { label: "已取消", background: "#FCEBEB", color: "#A32D2D" };
+  if (status === "off_day") return { label: "公休", background: "#FFF3DE", color: "#A85600" };
+  if (status === "blocked") return { label: "不接客", background: "#EAF7FF", color: "#0B66C3" };
   return { label: "待確認", background: "#FAEEDA", color: "#633806" };
 }
 
 function getServiceNamesFromNote(note?: string | null) {
   const matched = (note || "").match(/預約服務項目：([^\n]+)/);
   return matched?.[1]?.trim() || "";
+}
+
+function buildScheduleRows(bookings: Booking[], offDays: OffDay[], offSlots: OffSlot[]): ScheduleRow[] {
+  const bookingRows: ScheduleRow[] = bookings.map((booking) => ({
+    type: "booking",
+    id: booking.id,
+    booking,
+    date: booking.booking_date,
+    time: booking.booking_time,
+    designer_id: booking.designer_id,
+    status: booking.status,
+  }));
+  const offDayRows: ScheduleRow[] = offDays.map((day) => ({
+    type: "off-day",
+    id: `off-day-${day.designer_id}-${day.off_date}`,
+    date: day.off_date,
+    time: "整天",
+    designer_id: day.designer_id,
+    status: "off_day",
+  }));
+  const slotsByDesignerDate = offSlots.reduce<Record<string, OffSlot[]>>((groups, slot) => {
+    const key = `${slot.designer_id}-${slot.slot_date}`;
+    groups[key] = [...(groups[key] || []), slot];
+    return groups;
+  }, {});
+  const offSlotRows: ScheduleRow[] = Object.entries(slotsByDesignerDate).map(([key, slots]) => {
+    const sortedSlots = slots.map((slot) => slot.slot_time).sort();
+    const first = slots[0];
+    const label = sortedSlots.length > 1 ? `${sortedSlots[0]}-${sortedSlots[sortedSlots.length - 1]} 不接客` : `${sortedSlots[0]} 不接客`;
+    return {
+      type: "off-slot",
+      id: `off-slot-${key}`,
+      date: first.slot_date,
+      time: sortedSlots[0] || "—",
+      designer_id: first.designer_id,
+      status: "blocked",
+      label,
+    };
+  });
+
+  return [...bookingRows, ...offDayRows, ...offSlotRows].sort((a, b) => {
+    const dateCompare = b.date.localeCompare(a.date);
+    if (dateCompare !== 0) return dateCompare;
+    return b.time.localeCompare(a.time);
+  });
 }
 
 export default function AdminBookings() {
@@ -47,6 +100,8 @@ export default function AdminBookings() {
   const [filterDate, setFilterDate] = useState("");
   const [search, setSearch] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [offDays, setOffDays] = useState<OffDay[]>([]);
+  const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -60,16 +115,20 @@ export default function AdminBookings() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }] = await Promise.all([
+      const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
         supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("services").select("id, name"),
         supabase.from("customers").select("id, phone, customer_no"),
+        supabase.from("designer_off_days").select("designer_id, off_date"),
+        supabase.from("designer_off_slots").select("designer_id, slot_date, slot_time"),
       ]);
       if (bData) setBookings(bData);
       if (dData) setDesigners(dData);
       if (sData) setServices(sData);
       if (cData) setCustomers(cData);
+      if (offDayData) setOffDays(offDayData);
+      if (offSlotData) setOffSlots(offSlotData);
       setLoading(false);
     }
     fetchData();
@@ -97,11 +156,16 @@ export default function AdminBookings() {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
   }
 
-  const filtered = bookings.filter(b => {
-    if (filterStatus !== "all" && b.status !== filterStatus) return false;
-    if (filterDesigner !== "all" && String(b.designer_id) !== filterDesigner) return false;
-    if (filterDate && b.booking_date !== filterDate) return false;
-    if (search && !b.customer_name?.includes(search) && !b.customer_phone?.includes(search)) return false;
+  const scheduleRows = buildScheduleRows(bookings, offDays, offSlots);
+  const filtered = scheduleRows.filter(row => {
+    if (filterStatus !== "all" && row.status !== filterStatus) return false;
+    if (filterDesigner !== "all" && String(row.designer_id) !== filterDesigner) return false;
+    if (filterDate && row.date !== filterDate) return false;
+    if (search) {
+      if (row.type !== "booking") return false;
+      const b = row.booking;
+      if (!b.customer_name?.includes(search) && !b.customer_phone?.includes(search)) return false;
+    }
     return true;
   });
 
@@ -133,6 +197,8 @@ export default function AdminBookings() {
             <option value="confirmed">已確認</option>
             <option value="completed">已完成</option>
             <option value="cancelled">已取消</option>
+            <option value="off_day">公休</option>
+            <option value="blocked">不接客</option>
           </select>
           <select value={filterDesigner} onChange={(e) => setFilterDesigner(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none", background: "#fff" }}>
             <option value="all">全部設計師</option>
@@ -156,8 +222,28 @@ export default function AdminBookings() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((b) => {
-                  const statusMeta = getStatusMeta(b.status);
+                {filtered.map((row) => {
+                  const statusMeta = getStatusMeta(row.status);
+                  if (row.type !== "booking") {
+                    return (
+                      <tr key={row.id} style={{ borderBottom: "0.5px solid #F1EFE8", background: row.type === "off-day" ? "#FFFBF3" : "#F8FBFF" }}>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{row.date.replace(/-/g, "/")}</td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{row.time}</td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#888780" }}>—</td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#888780" }}>—</td>
+                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getDesignerName(row.designer_id)}</td>
+                        <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A", maxWidth: 200 }}>{row.type === "off-day" ? "整天公休" : row.label}</td>
+                        <td style={{ padding: "10px 12px", fontSize: 12 }}>—</td>
+                        <td style={{ padding: "10px 12px" }}>
+                          <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 500, background: statusMeta.background, color: statusMeta.color }}>
+                            {statusMeta.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>—</td>
+                      </tr>
+                    );
+                  }
+                  const b = row.booking;
                   return (
                   <tr key={b.id} style={{ borderBottom: "0.5px solid #F1EFE8" }}>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{b.booking_date.replace(/-/g, "/")}</td>
@@ -191,8 +277,25 @@ export default function AdminBookings() {
             </table>
           </div>
         ) : (
-          filtered.map((b) => {
-            const statusMeta = getStatusMeta(b.status);
+          filtered.map((row) => {
+            const statusMeta = getStatusMeta(row.status);
+            if (row.type !== "booking") {
+              return (
+                <div key={row.id} style={{ background: row.type === "off-day" ? "#FFFBF3" : "#F8FBFF", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{getDesignerName(row.designer_id)}</div>
+                      <div style={{ fontSize: 12, color: "#888780" }}>{row.date.replace(/-/g, "/")} {row.time}</div>
+                    </div>
+                    <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, fontWeight: 500, height: "fit-content", background: statusMeta.background, color: statusMeta.color }}>
+                      {statusMeta.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#5F5E5A" }}>{row.type === "off-day" ? "整天公休" : row.label}</div>
+                </div>
+              );
+            }
+            const b = row.booking;
             return (
             <div key={b.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 8, border: "0.5px solid #D3D1C7" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
