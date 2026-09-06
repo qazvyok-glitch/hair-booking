@@ -46,6 +46,7 @@ type BookingDraft = {
   designer: string;
   name: string;
   phone: string;
+  referrer: string;
   service: string;
   note: string;
 };
@@ -53,6 +54,7 @@ type CustomerRecord = {
   id: string;
   name: string;
   phone: string;
+  referrer: string;
   lastService: string;
   note: string;
   lastVisit: string;
@@ -138,11 +140,11 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
-type BackendCustomer = { id: string; name?: string | null; phone?: string | null; customer_no?: string | null };
+type BackendCustomer = { id: string; name?: string | null; phone?: string | null; customer_no?: string | null; referrer?: string | null };
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
-type ProductCheckoutDraft = { customerName: string; customerPhone: string; productItems: CheckoutProductItem[]; productDiscount: number; paymentMethod: string; note: string };
+type ProductCheckoutDraft = { customerName: string; customerPhone: string; customerReferrer: string; productItems: CheckoutProductItem[]; productDiscount: number; paymentMethod: string; note: string };
 type SelfUseMaterialItem = { product: BackendProduct; quantity: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { date?: string; name: string; item: string; amount: string };
@@ -266,7 +268,7 @@ export default function DesignerPreviewV2Page() {
       transactionQuery.eq("designer_id", session.id),
       productUsageQuery.eq("designer_id", session.id),
       supabase.from("products").select("id, name, unit, unit_price, category, stock_quantity, is_active, sort_order").eq("is_active", true).order("category").order("sort_order"),
-      supabase.from("customers").select("id, name, phone, customer_no").order("customer_no"),
+      supabase.from("customers").select("id, name, phone, customer_no, referrer").order("customer_no"),
       supabase.from("price_items").select("id, category, name, price_range, sort_order").order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
       supabase.from("shop_info").select("key, value, is_active").in("key", ["price_category_order", designerCategoryOrderKey(session.id)]),
@@ -284,6 +286,7 @@ export default function DesignerPreviewV2Page() {
       id: customer.id,
       name: customer.name || customer.customer_no || "未命名顧客",
       phone: customer.phone || "",
+      referrer: customer.referrer || "",
       lastService: "",
       note: customer.customer_no ? `會員編號 ${customer.customer_no}` : "",
       lastVisit: "",
@@ -367,15 +370,17 @@ export default function DesignerPreviewV2Page() {
       }
       const customerName = bookingDraft.name.trim() || "新顧客";
       const customerPhone = bookingDraft.phone.trim();
+      const customerReferrer = bookingDraft.referrer.trim();
       if (customerPhone) {
         const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", customerPhone).maybeSingle();
         if (existingCustomer?.id) {
-          await supabase.from("customers").update({ name: customerName }).eq("id", existingCustomer.id);
+          await supabase.from("customers").update({ name: customerName, referrer: customerReferrer || null }).eq("id", existingCustomer.id);
         } else {
           await supabase.from("customers").insert({
             id: crypto.randomUUID(),
             name: customerName,
             phone: customerPhone,
+            referrer: customerReferrer || null,
           });
         }
       }
@@ -525,15 +530,17 @@ export default function DesignerPreviewV2Page() {
 
     const customerName = draft.customerName.trim() || "現場客人";
     const customerPhone = draft.customerPhone.trim();
+    const customerReferrer = draft.customerReferrer.trim();
     if (customerPhone) {
       const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", customerPhone).maybeSingle();
       if (existingCustomer?.id) {
-        await supabase.from("customers").update({ name: customerName }).eq("id", existingCustomer.id);
+        await supabase.from("customers").update({ name: customerName, referrer: customerReferrer || null }).eq("id", existingCustomer.id);
       } else {
         await supabase.from("customers").insert({
           id: crypto.randomUUID(),
           name: customerName,
           phone: customerPhone,
+          referrer: customerReferrer || null,
         });
       }
     }
@@ -1577,6 +1584,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
   const [draft, setDraft] = useState<ProductCheckoutDraft>({
     customerName: "",
     customerPhone: "",
+    customerReferrer: "",
     productItems: [],
     productDiscount: 0,
     paymentMethod: "現金",
@@ -1681,6 +1689,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
           <div className="detail-grid">
             <input className="checkout-input" value={draft.customerName} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} placeholder="顧客姓名（必填）" />
             <input className="checkout-input" value={draft.customerPhone} onChange={(event) => setDraft({ ...draft, customerPhone: event.target.value })} placeholder="電話（必填，供顧客端查詢）" />
+            <input className="checkout-input" value={draft.customerReferrer} onChange={(event) => setDraft({ ...draft, customerReferrer: event.target.value })} placeholder="介紹人（選填）" />
           </div>
         </section>
         <section className="panel">
@@ -2401,6 +2410,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
       ...draft,
       name: customer.name,
       phone: customer.phone,
+      referrer: customer.referrer,
       service: customer.lastService || draft.service,
       note: customer.note,
     });
@@ -2420,6 +2430,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
             <DetailCard label="日期時間" value={`${draft.date} ${draft.time}`} />
             <DetailCard label="設計師" value={draft.designer} />
             <DetailCard label="電話" value={draft.phone || "未填電話"} />
+            <DetailCard label="介紹人" value={draft.referrer || "未填介紹人"} />
             <DetailCard label="服務" value={draft.service || "未選服務"} />
             <DetailCard label="顧客資料" value={selectedCustomer ? "已帶入既有顧客紀錄" : "新顧客，完成後自動建立資料"} />
             <DetailCard label="預約備註" value={draft.note || "未填備註"} />
@@ -2471,7 +2482,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
                   <strong>{customer.name}</strong>
                   <em>{customer.phone}</em>
                 </span>
-                <small>{customer.lastVisit} · {customer.lastService}</small>
+                <small>{customer.referrer ? `介紹人：${customer.referrer}` : `${customer.lastVisit} · ${customer.lastService}`}</small>
               </button>
             )) : (
               <div className="customer-empty">找不到顧客，完成預約後會建立新顧客資料。</div>
@@ -2488,6 +2499,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
           <BookingInput label="時間" value={draft.time} onChange={(value) => onChange({ ...draft, time: value })} />
           <BookingInput label="客人姓名" value={draft.name} onChange={(value) => onChange({ ...draft, name: value })} />
           <BookingInput label="電話" value={draft.phone} onChange={(value) => onChange({ ...draft, phone: value })} />
+          <BookingInput label="介紹人" value={draft.referrer} onChange={(value) => onChange({ ...draft, referrer: value })} />
         </div>
         <div className="booking-field">
           <div className="booking-label">服務項目</div>
@@ -2525,6 +2537,7 @@ function createBookingDraft(date = new Date().toLocaleDateString("en-CA"), time 
     designer,
     name: "",
     phone: "",
+    referrer: "",
     service,
     note: "",
   };

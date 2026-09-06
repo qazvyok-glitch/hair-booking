@@ -8,6 +8,7 @@ export default function MemberSetup() {
   const [user, setUser] = useState<any>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [referrer, setReferrer] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -21,6 +22,7 @@ export default function MemberSetup() {
       if (data) {
         if (data.name) setName(data.name);
         if (data.phone) setPhone(data.phone);
+        if (data.referrer) setReferrer(data.referrer);
         if (data.name && data.phone) {
           router.push("/booking/step/1");
           return;
@@ -44,6 +46,7 @@ export default function MemberSetup() {
       name,
       phone,
       email: user.email,
+      referrer: referrer.trim() || null,
       customer_no: existing?.customer_no || undefined,
     });
     await supabase.auth.updateUser({ data: { full_name: name, phone } });
@@ -71,9 +74,13 @@ export default function MemberSetup() {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="王小明" style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #444", fontSize: 14, outline: "none", background: "#2A2A2A", color: "#fff", boxSizing: "border-box" }} />
         </div>
 
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>手機號碼</div>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0912-345-678" type="tel" style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #444", fontSize: 14, outline: "none", background: "#2A2A2A", color: "#fff", boxSizing: "border-box" }} />
+        </div>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>介紹人（選填）</div>
+          <input value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="例如：Cherry、朋友小美" style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #444", fontSize: 14, outline: "none", background: "#2A2A2A", color: "#fff", boxSizing: "border-box" }} />
         </div>
 
         <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "13px 0", background: saving ? "#444" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>

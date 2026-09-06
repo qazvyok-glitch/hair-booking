@@ -9,6 +9,7 @@ type Member = {
   name: string;
   phone: string;
   email: string;
+  referrer?: string | null;
   customer_no: string;
   created_at: string;
 };
@@ -57,9 +58,9 @@ export default function AdminMembers() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{success: number, skip: number, errors: string[]} | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", phone: "", email: "" });
+  const [addForm, setAddForm] = useState({ name: "", phone: "", email: "", referrer: "" });
   const [addSaving, setAddSaving] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", phone: "" });
+  const [editForm, setEditForm] = useState({ name: "", phone: "", referrer: "" });
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState("");
@@ -97,6 +98,7 @@ export default function AdminMembers() {
     (m.name || "").includes(search) ||
     (m.phone || "").includes(search) ||
     (m.email || "").includes(search) ||
+    (m.referrer || "").includes(search) ||
     (m.customer_no || "").includes(search)
   );
 
@@ -113,11 +115,12 @@ export default function AdminMembers() {
       name: addForm.name,
       phone: addForm.phone,
       email: addForm.email || null,
+      referrer: addForm.referrer || null,
     });
     if (error) {
       alert("新增失敗：" + error.message);
     } else {
-      setAddForm({ name: "", phone: "", email: "" });
+      setAddForm({ name: "", phone: "", email: "", referrer: "" });
       setShowAddMember(false);
       fetchData();
     }
@@ -218,7 +221,7 @@ export default function AdminMembers() {
   async function handleSave() {
     if (!selectedMember) return;
     setSaving(true);
-    await supabase.from("customers").update({ name: editForm.name, phone: editForm.phone }).eq("id", selectedMember.id);
+    await supabase.from("customers").update({ name: editForm.name, phone: editForm.phone, referrer: editForm.referrer || null }).eq("id", selectedMember.id);
     setMembers(members.map(m => m.id === selectedMember.id ? { ...m, ...editForm } : m));
     setSelectedMember({ ...selectedMember, ...editForm });
     setSaving(false);
@@ -227,7 +230,7 @@ export default function AdminMembers() {
 
   function openMember(m: Member) {
     setSelectedMember(m);
-    setEditForm({ name: m.name || "", phone: m.phone || "" });
+    setEditForm({ name: m.name || "", phone: m.phone || "", referrer: m.referrer || "" });
     setShowEdit(false);
   }
 
@@ -288,7 +291,7 @@ export default function AdminMembers() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["編號", "姓名", "電話", "Email", "預約次數", "加入日期", "操作"].map(h => (
+                  {["編號", "姓名", "電話", "介紹人", "Email", "預約次數", "加入日期", "操作"].map(h => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
@@ -301,6 +304,7 @@ export default function AdminMembers() {
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A", fontWeight: 500 }}>{m.name || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#5F5E5A" }}>{m.phone || "—"}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#5F5E5A" }}>{m.referrer || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.email || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getMemberBookings(m.id).length} 次</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{m.created_at?.slice(0, 10).replace(/-/g, "/")}</td>
@@ -324,6 +328,7 @@ export default function AdminMembers() {
                       <span style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{m.name || "未填寫"}</span>
                     </div>
                     <div style={{ fontSize: 12, color: "#888780" }}>{m.phone || "—"}</div>
+                    <div style={{ fontSize: 11, color: "#5F5E5A" }}>介紹人：{m.referrer || "—"}</div>
                     <div style={{ fontSize: 11, color: "#888780" }}>{m.email || "—"}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -406,6 +411,10 @@ export default function AdminMembers() {
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>Email（選填）</div>
               <input value={addForm.email} onChange={e => setAddForm({...addForm, email: e.target.value})} placeholder="email@example.com" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>介紹人（選填）</div>
+              <input value={addForm.referrer} onChange={e => setAddForm({...addForm, referrer: e.target.value})} placeholder="例如：Cherry、朋友小美" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
             <button onClick={handleAddMember} disabled={addSaving} style={{ width: "100%", padding: "12px 0", background: addSaving ? "#D3D1C7" : "#1D9E75", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: addSaving ? "default" : "pointer" }}>
               {addSaving ? "新增中..." : "確認新增"}
             </button>
@@ -440,6 +449,10 @@ export default function AdminMembers() {
                   <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>電話</div>
                   <input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                 </div>
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>介紹人</div>
+                  <input value={editForm.referrer} onChange={(e) => setEditForm({ ...editForm, referrer: e.target.value })} placeholder="例如：Cherry、朋友小美" style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
                 <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "9px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
                   {saving ? "儲存中..." : "儲存"}
                 </button>
@@ -450,6 +463,7 @@ export default function AdminMembers() {
             <div style={{ background: "#F1EFE8", borderRadius: 12, padding: 14, marginBottom: 14 }}>
               {[
                 { label: "電話", value: selectedMember.phone || "—" },
+                { label: "介紹人", value: selectedMember.referrer || "—" },
                 { label: "Email", value: selectedMember.email || "—" },
                 { label: "加入日期", value: selectedMember.created_at?.slice(0, 10).replace(/-/g, "/") || "—" },
                 { label: "預約次數", value: `${getMemberBookings(selectedMember.id).length} 次` },

@@ -62,6 +62,7 @@ export default function Step1() {
   const [profileName, setProfileName] = useState(customerName || "");
   const [profilePhone, setProfilePhone] = useState(contactValue || "");
   const [profileEmail, setProfileEmail] = useState("");
+  const [profileReferrer, setProfileReferrer] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const canContinue = selected !== null && selected.id !== 0;
   const isEnglish = language === "en";
@@ -103,6 +104,7 @@ export default function Step1() {
       name: profileName.trim(),
       phone: profilePhone.trim(),
       email: profileEmail.trim() || null,
+      referrer: profileReferrer.trim() || null,
     });
     setCustomerName(profileName.trim());
     setContact("phone", profilePhone.trim());
@@ -140,6 +142,10 @@ export default function Step1() {
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>{isEnglish ? "Email (optional)" : "Email（選填）"}</div>
               <input value={profileEmail} onChange={(e) => setProfileEmail(e.target.value)} placeholder="example@email.com" type="email" style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>{isEnglish ? "Referrer (optional)" : "介紹人（選填）"}</div>
+              <input value={profileReferrer} onChange={(e) => setProfileReferrer(e.target.value)} placeholder={isEnglish ? "Who referred you?" : "例如：Cherry、朋友小美"} style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
             </div>
             <button onClick={handleSaveProfile} disabled={savingProfile} style={{ width: "100%", padding: "13px 0", background: savingProfile ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: savingProfile ? "default" : "pointer" }}>
               {savingProfile ? (isEnglish ? "Saving..." : "儲存中...") : (isEnglish ? "Start Choosing Stylist" : "開始選擇設計師")}

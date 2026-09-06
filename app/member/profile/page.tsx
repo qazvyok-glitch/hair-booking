@@ -26,6 +26,7 @@ export default function MemberProfile() {
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editReferrer, setEditReferrer] = useState("");
   const [customerNo, setCustomerNo] = useState("");
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,11 +39,12 @@ export default function MemberProfile() {
 
       const { data: customerData } = await supabase
         .from("customers")
-        .select("phone, customer_no")
+        .select("phone, customer_no, referrer")
         .eq("id", session.user.id)
         .single();
       if (customerData?.phone) setEditPhone(customerData.phone);
       if (customerData?.customer_no) setCustomerNo(customerData.customer_no);
+      if (customerData?.referrer) setEditReferrer(customerData.referrer);
 
       const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
         supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false }),
@@ -115,10 +117,14 @@ export default function MemberProfile() {
                 <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>手機號碼</div>
                 <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="09xx-xxx-xxx" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>介紹人（選填）</div>
+                <input value={editReferrer} onChange={(e) => setEditReferrer(e.target.value)} placeholder="例如：Cherry、朋友小美" style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
               <button
                 onClick={async () => {
                   setSaving(true);
-                  await supabase.from("customers").upsert({ id: user.id, name: editName, phone: editPhone, email: user.email });
+                  await supabase.from("customers").upsert({ id: user.id, name: editName, phone: editPhone, email: user.email, referrer: editReferrer.trim() || null });
                   await supabase.auth.updateUser({ data: { full_name: editName } });
                   setSaving(false);
                   setShowEdit(false);
