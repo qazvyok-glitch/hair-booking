@@ -1523,6 +1523,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
   });
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("全部");
+  const [showProductPicker, setShowProductPicker] = useState(true);
   const [saving, setSaving] = useState(false);
   const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
   const filteredProducts = products.filter((product) => {
@@ -1547,6 +1548,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
       productItems,
       productDiscount: Math.min(draft.productDiscount, nextGross),
     });
+    if (!exists) setShowProductPicker(false);
   }
 
   function updateProductQuantity(productId: number, value: number) {
@@ -1623,35 +1625,42 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
         <section className="panel">
           <div className="checkout-section-head">
             <div className="panel-label">客人購買商品</div>
+            <button className="product-picker-toggle" onClick={() => setShowProductPicker(!showProductPicker)}>
+              {showProductPicker ? "收起商品" : draft.productItems.length > 0 ? "繼續選商品" : "選取商品"}
+            </button>
           </div>
           <div className="product-picker-hint">商品品項由後台同步，可打字搜尋，也可用分類快速找。</div>
-          <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋商品名稱或分類..." />
-          <div className="product-category-tabs">
-            {categories.map((item) => (
-              <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
-                {item}
-              </button>
-            ))}
-          </div>
-          <div className="product-list">
-            {filteredProducts.length > 0 ? filteredProducts.map((product) => {
-              const selected = draft.productItems.find((item) => item.product.id === product.id);
-              const unitText = product.unit ? ` / ${product.unit}` : "";
-              return (
-                <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
-                  <button className="product-pick-row" onClick={() => toggleProduct(product)}>
-                    <span>
-                      <span className="product-name">{product.name}</span>
-                      <span className="product-meta">{product.category || "未分類"} · NT${product.unit_price.toLocaleString()}{unitText}</span>
-                    </span>
-                    <span className="product-check">{selected ? "✓" : ""}</span>
+          {showProductPicker && (
+            <>
+              <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋商品名稱或分類..." />
+              <div className="product-category-tabs">
+                {categories.map((item) => (
+                  <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
+                    {item}
                   </button>
-                </div>
-              );
-            }) : (
-              <div className="product-empty">找不到符合的商品</div>
-            )}
-          </div>
+                ))}
+              </div>
+              <div className="product-list">
+                {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+                  const selected = draft.productItems.find((item) => item.product.id === product.id);
+                  const unitText = product.unit ? ` / ${product.unit}` : "";
+                  return (
+                    <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                      <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                        <span>
+                          <span className="product-name">{product.name}</span>
+                          <span className="product-meta">{product.category || "未分類"} · NT${product.unit_price.toLocaleString()}{unitText}</span>
+                        </span>
+                        <span className="product-check">{selected ? "✓" : ""}</span>
+                      </button>
+                    </div>
+                  );
+                }) : (
+                  <div className="product-empty">找不到符合的商品</div>
+                )}
+              </div>
+            </>
+          )}
           {draft.productItems.length > 0 && (
             <div className="product-checkout-lines">
               {draft.productItems.map((item) => (
