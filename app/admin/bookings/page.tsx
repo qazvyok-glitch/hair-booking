@@ -24,6 +24,7 @@ type Designer = { id: number; name: string };
 type Service = { id: number; name: string };
 type OffDay = { designer_id: number; off_date: string };
 type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
+type ViewMode = "calendar" | "list";
 type ScheduleRow =
   | { type: "booking"; id: number; booking: Booking; date: string; time: string; designer_id: number; status: string }
   | { type: "off-day"; id: string; date: string; time: string; designer_id: number; status: "off_day" }
@@ -88,6 +89,42 @@ function buildScheduleRows(bookings: Booking[], offDays: OffDay[], offSlots: Off
   });
 }
 
+function formatDateKey(year: number, month: number, date: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
+}
+
+function formatDisplayDate(date: string) {
+  return date.replace(/-/g, "/");
+}
+
+function getMonthCells(monthKey: string) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells: (string | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, index) => formatDateKey(year, month, index + 1)),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  return { year, month, cells };
+}
+
+function getScheduleRowText(row: ScheduleRow, getDesignerName: (id: number) => string, getServiceNames: (ids: number[], note?: string | null) => string) {
+  if (row.type === "off-day") return `${getDesignerName(row.designer_id)} 整天公休`;
+  if (row.type === "off-slot") return `${getDesignerName(row.designer_id)} ${row.label}`;
+  return `${row.time} ${getDesignerName(row.designer_id)} ${row.booking.customer_name || "訪客"} ${getServiceNames(row.booking.service_ids, row.booking.note)}`;
+}
+
+function getDaySummary(rows: ScheduleRow[]) {
+  return [
+    { key: "confirmed", label: "已確認", count: rows.filter((row) => row.status === "confirmed").length, color: "#37C967" },
+    { key: "pending", label: "待確認", count: rows.filter((row) => row.status === "pending").length, color: "#F5B400" },
+    { key: "completed", label: "已完成", count: rows.filter((row) => row.status === "completed").length, color: "#4F8FEA" },
+    { key: "cancelled", label: "已取消", count: rows.filter((row) => row.status === "cancelled").length, color: "#C7001E" },
+    { key: "leave", label: "公休/不接客", count: rows.filter((row) => row.type !== "booking").length, color: "#7C7C83" },
+  ].filter((item) => item.count > 0);
+}
+
 export default function AdminBookings() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -102,6 +139,9 @@ export default function AdminBookings() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [offDays, setOffDays] = useState<OffDay[]>([]);
   const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString("en-CA"));
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -157,17 +197,30 @@ export default function AdminBookings() {
   }
 
   const scheduleRows = buildScheduleRows(bookings, offDays, offSlots);
-  const filtered = scheduleRows.filter(row => {
+  const filterRows = (row: ScheduleRow, includeDate: boolean) => {
     if (filterStatus !== "all" && row.status !== filterStatus) return false;
     if (filterDesigner !== "all" && String(row.designer_id) !== filterDesigner) return false;
-    if (filterDate && row.date !== filterDate) return false;
+    if (includeDate && filterDate && row.date !== filterDate) return false;
     if (search) {
       if (row.type !== "booking") return false;
       const b = row.booking;
       if (!b.customer_name?.includes(search) && !b.customer_phone?.includes(search)) return false;
     }
     return true;
-  });
+  };
+  const filtered = scheduleRows.filter((row) => filterRows(row, true));
+  const calendarRows = scheduleRows.filter((row) => filterRows(row, false));
+  const { year: calendarYear, month: calendarMonthNumber, cells: calendarCells } = getMonthCells(calendarMonth);
+  const monthRows = calendarRows.filter((row) => row.date.slice(0, 7) === calendarMonth);
+  const selectedDayRows = calendarRows.filter((row) => row.date === selectedDate);
+
+  function changeCalendarMonth(offset: number) {
+    const [year, month] = calendarMonth.split("-").map(Number);
+    const next = new Date(year, month - 1 + offset, 1);
+    const nextMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+    setCalendarMonth(nextMonth);
+    setSelectedDate(formatDateKey(next.getFullYear(), next.getMonth() + 1, 1));
+  }
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -204,14 +257,133 @@ export default function AdminBookings() {
             <option value="all">全部設計師</option>
             {designers.map(d => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
           </select>
-          <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none" }} />
+          <input type="date" value={filterDate} onChange={(e) => { setFilterDate(e.target.value); if (e.target.value) { setSelectedDate(e.target.value); setCalendarMonth(e.target.value.slice(0, 7)); } }} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none" }} />
           {(filterStatus !== "all" || filterDesigner !== "all" || filterDate || search) && (
             <button onClick={() => { setFilterStatus("all"); setFilterDesigner("all"); setFilterDate(""); setSearch(""); }} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#FCEBEB", color: "#A32D2D", fontSize: 12, cursor: "pointer" }}>清除篩選</button>
           )}
         </div>
 
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 10, padding: 3 }}>
+            {(["calendar", "list"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                style={{
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "7px 14px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  background: viewMode === mode ? "#534AB7" : "transparent",
+                  color: viewMode === mode ? "#fff" : "#5F5E5A",
+                }}
+              >
+                {mode === "calendar" ? "月曆" : "列表"}
+              </button>
+            ))}
+          </div>
+          {viewMode === "calendar" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => changeCalendarMonth(-1)} style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 18 }}>‹</button>
+              <button onClick={() => { const today = new Date().toLocaleDateString("en-CA"); setCalendarMonth(today.slice(0, 7)); setSelectedDate(today); }} style={{ height: 34, borderRadius: 8, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 12, padding: "0 14px" }}>今天</button>
+              <button onClick={() => changeCalendarMonth(1)} style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid #D3D1C7", background: "#fff", cursor: "pointer", fontSize: 18 }}>›</button>
+            </div>
+          )}
+        </div>
+
+        {viewMode === "calendar" && (
+          <>
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14, marginBottom: 12 }}>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                {getDaySummary(monthRows).map((item) => (
+                  <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 6, color: "#5F5E5A", fontSize: 12, fontWeight: 600 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: 99, background: item.color }} />
+                    <span>{item.count} {item.label}</span>
+                  </div>
+                ))}
+                {monthRows.length === 0 && <div style={{ color: "#888780", fontSize: 12 }}>本月目前沒有預約或公休資料</div>}
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "14px 16px", display: "flex", justifyContent: "center", alignItems: "center", borderBottom: "0.5px solid #E8E5DA" }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#2C2C2A" }}>{calendarYear}年{calendarMonthNumber}月</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", background: "#FAF9F5", borderBottom: "0.5px solid #E8E5DA" }}>
+                {["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"].map((day) => (
+                  <div key={day} style={{ padding: "8px 4px", textAlign: "center", fontSize: isDesktop ? 13 : 10, fontWeight: 700, color: "#2C2C2A" }}>{isDesktop ? day : day.replace("星期", "")}</div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}>
+                {calendarCells.map((date, index) => {
+                  if (!date) return <div key={`empty-${index}`} style={{ minHeight: isDesktop ? 118 : 86, borderRight: "0.5px solid #E8E5DA", borderBottom: "0.5px solid #E8E5DA", background: "#FBFAF7" }} />;
+                  const rows = calendarRows.filter((row) => row.date === date);
+                  const day = Number(date.split("-")[2]);
+                  const isSelected = selectedDate === date;
+                  const isSunday = new Date(`${date}T00:00:00`).getDay() === 0;
+                  return (
+                    <button
+                      key={date}
+                      onClick={() => { setSelectedDate(date); setFilterDate(""); }}
+                      style={{
+                        minHeight: isDesktop ? 118 : 86,
+                        border: "none",
+                        borderRight: "0.5px solid #E8E5DA",
+                        borderBottom: "0.5px solid #E8E5DA",
+                        background: isSelected ? "#F4E6F1" : "#fff",
+                        padding: isDesktop ? 8 : 5,
+                        textAlign: "left",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div style={{ textAlign: "right", color: isSunday ? "#D27D7D" : "#888780", fontSize: isDesktop ? 16 : 12, fontWeight: 700, marginBottom: 6 }}>{day}日</div>
+                      {getDaySummary(rows).slice(0, isDesktop ? 4 : 3).map((item) => (
+                        <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: isDesktop ? 12 : 9, fontWeight: 600, color: "#6B6860", lineHeight: 1.35, whiteSpace: "nowrap" }}>
+                          <span style={{ width: 7, height: 7, borderRadius: 99, background: item.color, flex: "0 0 auto" }} />
+                          <span>{item.count} {item.label}</span>
+                        </div>
+                      ))}
+                      {rows.length > 0 && getDaySummary(rows).length === 0 && <div style={{ fontSize: 11, color: "#888780" }}>{rows.length} 筆</div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "12px 14px", background: "#FAF9F5", borderBottom: "0.5px solid #E8E5DA", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#2C2C2A" }}>{formatDisplayDate(selectedDate)} 明細</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>預約、公休與不接客時段整合顯示</div>
+                </div>
+                <div style={{ fontSize: 12, color: "#888780" }}>共 {selectedDayRows.length} 筆</div>
+              </div>
+              {selectedDayRows.length > 0 ? selectedDayRows.map((row) => {
+                const statusMeta = getStatusMeta(row.status);
+                return (
+                  <div key={`detail-${row.id}`} style={{ display: "grid", gridTemplateColumns: isDesktop ? "86px 1fr 96px" : "62px 1fr", gap: 10, alignItems: "center", padding: "12px 14px", borderTop: "0.5px solid #F1EFE8" }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{row.time}</div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{getScheduleRowText(row, getDesignerName, getServiceNames)}</div>
+                      {row.type === "booking" && <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>{row.booking.customer_phone || "未填電話"}</div>}
+                    </div>
+                    <span style={{ justifySelf: isDesktop ? "end" : "start", fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 600, background: statusMeta.background, color: statusMeta.color }}>
+                      {statusMeta.label}
+                    </span>
+                  </div>
+                );
+              }) : (
+                <div style={{ padding: 18, color: "#888780", fontSize: 13 }}>這一天目前沒有預約或公休資料</div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* 預約列表 */}
-        {isDesktop ? (
+        {viewMode === "list" && (isDesktop ? (
           <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -328,7 +500,7 @@ export default function AdminBookings() {
             </div>
             );
           })
-        )}
+        ))}
       </div>
 
       <AdminBottomNav current="bookings" />
