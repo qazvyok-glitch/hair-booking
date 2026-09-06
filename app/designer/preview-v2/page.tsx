@@ -143,7 +143,7 @@ type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type SelfUseMaterialItem = { product: BackendProduct; quantity: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
-type IncomeDetailRow = { name: string; item: string; amount: string };
+type IncomeDetailRow = { date?: string; name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
 type IncomeDetailGroupsByRange = Record<EarningsRange, IncomeDetailGroup[]>;
 type IncomeDateRange = { startDate: string; endDate: string };
@@ -715,7 +715,7 @@ export default function DesignerPreviewV2Page() {
         .income-detail-list { display: grid; gap: 14px; }
         .income-detail-section { border: 1px solid #edf0f4; border-radius: 14px; background: #fff; overflow: hidden; }
         .income-detail-title { padding: 10px 12px; background: #f8fafc; color: #1f2937; font-size: 14px; font-weight: 950; }
-        .income-detail-row { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid #edf0f4; color: #374151; font-size: 12px; font-weight: 800; }
+        .income-detail-row { display: grid; grid-template-columns: 46px 54px 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid #edf0f4; color: #374151; font-size: 12px; font-weight: 800; }
         .income-detail-row strong { color: #1f2937; font-size: 13px; }
         .income-detail-row span { color: #6b7280; line-height: 1.35; }
         .income-detail-row em { color: #1478c8; font-style: normal; font-weight: 950; white-space: nowrap; }
@@ -1480,12 +1480,13 @@ function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: E
             <section className="income-detail-section" key={group.title}>
               <div className="income-detail-title">{group.title}</div>
               {group.rows.length > 0 ? group.rows.map((row) => (
-                <div className="income-detail-row" key={`${group.title}-${row.name}-${row.item}`}>
+                <div className="income-detail-row" key={`${group.title}-${row.date || ""}-${row.name}-${row.item}`}>
+                  <strong>{row.date || "-"}</strong>
                   <strong>{row.name}</strong>
                   <span>{row.item}</span>
                   <em>{row.amount}</em>
                 </div>
-              )) : <div className="income-detail-row"><strong>-</strong><span>目前沒有明細</span><em>-</em></div>}
+              )) : <div className="income-detail-row"><strong>-</strong><strong>-</strong><span>目前沒有明細</span><em>-</em></div>}
             </section>
           ))}
         </div>
@@ -2282,15 +2283,17 @@ function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: Bac
   const rangeProductUsage = productUsage.filter((usage) => isDateInEarningsRange(usage.used_at, range, customRange));
   const serviceRows = rangeTransactions.flatMap((transaction) =>
     (transaction.service_items || []).map((service) => ({
+      date: formatIncomeDetailDate(transaction.created_at),
       name: transaction.customer_name || "訪客",
       item: service.name,
       amount: formatCurrency(Number(service.original_amount || service.amount || 0)),
     }))
   );
   const productRows = rangeTransactions.flatMap((transaction) =>
-    extractProductSaleRows(transaction.note || "", transaction.customer_name || "訪客")
+    extractProductSaleRows(transaction.note || "", transaction.customer_name || "訪客", formatIncomeDetailDate(transaction.created_at))
   );
   const selfUseRows = rangeProductUsage.map((usage) => ({
+    date: formatIncomeDetailDate(usage.used_at),
     name: "自領",
     item: `${usage.product_name} x${usage.quantity || 1}`,
     amount: formatCurrency(Number(usage.total_cost || 0)),
@@ -2545,7 +2548,7 @@ function getProductDiscountTotal(note: string) {
   return matches.reduce((total, match) => total + Number(match[1].replace(/,/g, "")), 0);
 }
 
-function extractProductSaleRows(note: string, customerName: string): IncomeDetailRow[] {
+function extractProductSaleRows(note: string, customerName: string, date?: string): IncomeDetailRow[] {
   const productSection = note.split("客人購買商品：")[1];
   if (!productSection) return [];
   return productSection
@@ -2554,9 +2557,15 @@ function extractProductSaleRows(note: string, customerName: string): IncomeDetai
       const amountMatch = item.match(/小計NT\$?([\d,]+)/);
       const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 0;
       const itemName = item.replace(/，?小計NT\$?[\d,]+.*/, "").trim();
-      return { name: customerName, item: itemName || "商品銷售", amount: formatCurrency(amount) };
+      return { date, name: customerName, item: itemName || "商品銷售", amount: formatCurrency(amount) };
     })
     .filter((row) => parseCurrency(row.amount) > 0);
+}
+
+function formatIncomeDetailDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.replace(/^\d{4}-0?/, "").replace("-", "/");
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 function formatCurrency(amount: number) {
