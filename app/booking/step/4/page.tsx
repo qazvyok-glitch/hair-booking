@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
 import { useLanguageStore } from "../../../../store/languageStore";
@@ -50,9 +50,14 @@ function displayServiceName(name: string, isEnglish: boolean) {
   return size ? `${translated} (${size})` : translated;
 }
 
+function buildBookingNote(selectedServiceNames: string[], customerNote: string) {
+  const serviceLine = selectedServiceNames.length > 0 ? `預約服務項目：${selectedServiceNames.join("、")}` : "";
+  return [serviceLine, customerNote.trim()].filter(Boolean).join("\n\n");
+}
+
 export default function Step4() {
   const router = useRouter();
-  const { designer, serviceIds, date, time, contactValue, customerName, reset } = useBookingStore();
+  const { designer, serviceIds, selectedServices, date, time, contactValue, customerName, reset } = useBookingStore();
   const { language } = useLanguageStore();
   const [name, setName] = useState(customerName || "");
   const [contact, setContact] = useState(contactValue || "");
@@ -63,15 +68,13 @@ export default function Step4() {
   const [submitting, setSubmitting] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const isEnglish = language === "en";
+  const displayServices = useMemo(
+    () => selectedServices.length > 0 ? selectedServices.map((service) => ({ id: service.id, name: service.name })) : services,
+    [selectedServices, services]
+  );
 
   useEffect(() => {
-    if (customerName) setName(customerName);
-    if (contactValue) setContact(contactValue);
-  }, [customerName, contactValue]);
-
-  useEffect(() => {
-    if (serviceIds.length === 0) {
-      setServices([]);
+    if (selectedServices.length > 0 || serviceIds.length === 0) {
       return;
     }
 
@@ -83,7 +86,7 @@ export default function Step4() {
         if (!data) return;
         setServices(serviceIds.map((id) => data.find((service) => service.id === id)).filter(Boolean) as Service[]);
       });
-  }, [serviceIds]);
+  }, [serviceIds, selectedServices]);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -177,7 +180,7 @@ export default function Step4() {
       booking_time: time,
       customer_name: name,
       customer_phone: contact,
-      note: note,
+      note: buildBookingNote(displayServices.map((service) => service.name), note),
       status: "pending",
       reference_image_url: referenceImageUrl,
       user_id: session?.user?.id || null,
@@ -244,9 +247,9 @@ export default function Step4() {
         </div>
         <div style={{ padding: "8px 0 2px" }}>
           <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>{isEnglish ? "Selected Services" : "預約服務項目"}</div>
-          {services.length > 0 ? (
+          {displayServices.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {services.map((service) => (
+              {displayServices.map((service) => (
                 <div key={service.id} style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", lineHeight: 1.5 }}>
                   ・{displayServiceName(service.name, isEnglish)}
                 </div>

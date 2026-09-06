@@ -114,6 +114,7 @@ type BackendBooking = {
 };
 type BackendOffDay = { designer_id: number; off_date: string };
 type BackendOffSlot = { designer_id: number; slot_date: string; slot_time: string };
+type BackendShopInfo = { key: string; value: string; is_active: boolean };
 type BackendServiceItem = { id?: number; name: string; amount?: number; original_amount?: number; discount?: number };
 type BackendTransaction = {
   id: number;
@@ -207,6 +208,7 @@ export default function DesignerPreviewV2Page() {
   const [backendProducts, setBackendProducts] = useState<BackendProduct[]>([]);
   const [backendCustomers, setBackendCustomers] = useState<CustomerRecord[]>(customerRecords);
   const [designerPriceItems, setDesignerPriceItems] = useState<BackendDesignerPriceItem[]>([]);
+  const [priceCategoryOrder, setPriceCategoryOrder] = useState<string[]>([]);
   const [backendScheduleItems, setBackendScheduleItems] = useState<CalendarRecords<ScheduleItem>>({});
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<CalendarRecords<ScheduleItem>>({});
   const [backendLeaveItems, setBackendLeaveItems] = useState<CalendarRecords<LeaveItem>>({});
@@ -245,7 +247,7 @@ export default function DesignerPreviewV2Page() {
       .order("booking_time");
     const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
       supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
@@ -255,6 +257,7 @@ export default function DesignerPreviewV2Page() {
       supabase.from("customers").select("id, name, phone, customer_no").order("customer_no"),
       supabase.from("price_items").select("id, category, name, price_range, sort_order").order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
+      supabase.from("shop_info").select("key, value, is_active").in("key", ["price_category_order", designerCategoryOrderKey(session.id)]),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
     ]);
@@ -275,6 +278,11 @@ export default function DesignerPreviewV2Page() {
     }));
     const publicPriceItems = (publicPriceData || []) as BackendPriceItem[];
     const designerSpecificPriceItems = (priceData || []) as BackendDesignerPriceItem[];
+    const categorySettings = (categorySettingData || []) as BackendShopInfo[];
+    const nextPriceCategoryOrder = readCategoryOrder(
+      categorySettings.find((item) => item.key === designerCategoryOrderKey(session.id) && item.is_active)?.value
+      || categorySettings.find((item) => item.key === "price_category_order" && item.is_active)?.value
+    );
     const priceItems = designerSpecificPriceItems.length > 0
       ? designerSpecificPriceItems
       : publicPriceItems.map((item) => ({
@@ -297,7 +305,8 @@ export default function DesignerPreviewV2Page() {
     setBackendProductUsage(productUsage);
     setBackendProducts(products);
     setBackendCustomers(customers);
-    setDesignerPriceItems(priceItems);
+    setPriceCategoryOrder(nextPriceCategoryOrder);
+    setDesignerPriceItems(sortDesignerPriceItems(priceItems, nextPriceCategoryOrder));
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
     setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
     setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
@@ -492,7 +501,7 @@ export default function DesignerPreviewV2Page() {
   const activeTeamLeaveItems = backendConnected ? backendTeamLeaveItems : teamLeaveItems;
   const activeDesignerOptions = backendDesigners.length > 0 ? backendDesigners.map(getDesignerLabel) : [designerProfile.name];
   const activeServiceOptions = backendServices.length > 0 ? backendServices.map((service) => service.name) : [];
-  const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems);
+  const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems, priceCategoryOrder);
   const defaultBookingDate = selectedScheduleDate;
   const defaultBookingService = activeServiceOptions[0] || "";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
@@ -508,7 +517,7 @@ export default function DesignerPreviewV2Page() {
         <div className="screen-body">
           {backendLoading && <div className="sync-banner">正在同步後台資料...</div>}
           {showSettings ? (
-            <SettingsView profile={designerProfile} priceItems={designerPriceItems} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addSyncedLeave} onBack={() => setShowSettings(false)} />
+            <SettingsView profile={designerProfile} priceItems={designerPriceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={saveDesignerProfile} onAvatarUpload={uploadDesignerAvatar} isSynced={backendConnected} leaveItems={activeLeaveItems} onAddLeave={addSyncedLeave} onBack={() => setShowSettings(false)} />
           ) : (
             <>
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
@@ -820,7 +829,7 @@ function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenS
   );
 }
 
-function SettingsView({ profile, priceItems, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: CalendarRecords<LeaveItem>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
+function SettingsView({ profile, priceItems, priceCategoryOrder, onProfileChange, onAvatarUpload, isSynced, leaveItems, onAddLeave, onBack }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; priceCategoryOrder: string[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean; leaveItems: CalendarRecords<LeaveItem>; onAddLeave: (date: string, item: LeaveItem) => void | Promise<void>; onBack: () => void }) {
   const [activePanel, setActivePanel] = useState<SettingsPanel>("profile");
 
   return (
@@ -842,12 +851,12 @@ function SettingsView({ profile, priceItems, onProfileChange, onAvatarUpload, is
           <div className="settings-card-desc">查看已安排休假</div>
         </button>
       </div>
-      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} priceItems={priceItems} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
+      {activePanel === "profile" ? <ProfileSettingsPanel profile={profile} priceItems={priceItems} priceCategoryOrder={priceCategoryOrder} onProfileChange={onProfileChange} onAvatarUpload={onAvatarUpload} isSynced={isSynced} /> : <RosterSettingsPanel leaveItems={leaveItems} onAddLeave={onAddLeave} />}
     </>
   );
 }
 
-function ProfileSettingsPanel({ profile, priceItems, onProfileChange, onAvatarUpload, isSynced }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean }) {
+function ProfileSettingsPanel({ profile, priceItems, priceCategoryOrder, onProfileChange, onAvatarUpload, isSynced }: { profile: DesignerProfile; priceItems: BackendDesignerPriceItem[]; priceCategoryOrder: string[]; onProfileChange: (profile: DesignerProfile) => void | Promise<void>; onAvatarUpload?: (file: File) => Promise<string | null>; isSynced: boolean }) {
   const [draft, setDraft] = useState(profile);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -898,7 +907,7 @@ function ProfileSettingsPanel({ profile, priceItems, onProfileChange, onAvatarUp
         <ProfileInput label="專長" value={draft.specialties} onChange={(value) => updateDraft("specialties", value)} />
         <ReadOnlyProfileCard label="加入日期" value={formatProfileDate(draft.joinedDate)} wide />
       </div>
-      <DesignerPriceListCard priceItems={priceItems} />
+      <DesignerPriceListCard priceItems={priceItems} priceCategoryOrder={priceCategoryOrder} />
       <div className="profile-note">{isSynced ? "目前已連線後台，儲存後會同步顯示在顧客預約端與後台設計師資料。" : "後台尚未連線，請重新整理後再操作。"}</div>
       <button className="full-width-btn" onClick={saveProfile}>{saving ? "同步中..." : saved ? "已更新個人資訊" : "儲存個人資訊"}</button>
     </section>
@@ -914,16 +923,14 @@ function ReadOnlyProfileCard({ label, value, wide = false }: { label: string; va
   );
 }
 
-function DesignerPriceListCard({ priceItems }: { priceItems: BackendDesignerPriceItem[] }) {
-  const activeItems = priceItems
-    .filter((item) => item.is_active !== false)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+function DesignerPriceListCard({ priceItems, priceCategoryOrder }: { priceItems: BackendDesignerPriceItem[]; priceCategoryOrder: string[] }) {
+  const activeItems = sortDesignerPriceItems(priceItems.filter((item) => item.is_active !== false), priceCategoryOrder);
   const groupedItems = activeItems.reduce<Record<string, BackendDesignerPriceItem[]>>((groups, item) => {
     const category = item.category || "其他服務";
     groups[category] = [...(groups[category] || []), item];
     return groups;
   }, {});
-  const categories = sortPriceCategories(Object.keys(groupedItems));
+  const categories = sortPriceCategories(Object.keys(groupedItems), priceCategoryOrder);
 
   return (
     <section className="price-list-card">
@@ -1962,7 +1969,7 @@ function mapBookingsToCalendar(bookings: BackendBooking[], services: BackendServ
   return bookings.reduce<CalendarRecords<ScheduleItem>>((records, booking) => {
     const designer = designers.find((item) => item.id === booking.designer_id);
     const designerName = booking.designers?.display_name || booking.designers?.name || (designer ? getDesignerLabel(designer) : "未指定");
-    const serviceName = getServiceNamesFromBackend(booking.service_ids || [], services);
+    const serviceName = getServiceNamesFromBackend(booking.service_ids || [], services, booking.note);
     const text = `${booking.booking_time} ${designerName} ${serviceName}`;
     records[booking.booking_date] = [...(records[booking.booking_date] || []), {
       text,
@@ -2012,7 +2019,7 @@ function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: Backen
         time: booking.booking_time,
         name: booking.customer_name || "訪客",
         phone: booking.customer_phone || "未填電話",
-        service: getServiceNamesFromBackend(booking.service_ids || [], services),
+        service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
         status: isDone ? "已完成" : isProgress ? "服務中" : "即將到來",
         tone: isDone ? "done" : isProgress ? "progress" : "upcoming",
         action: isProgress ? "結帳" : "查看",
@@ -2033,7 +2040,7 @@ function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendS
       time: booking.booking_time,
       name: booking.customer_name || "訪客",
       phone: booking.customer_phone || "未填電話",
-      service: getServiceNamesFromBackend(booking.service_ids || [], services),
+      service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
       detail: booking.note || "未填備註",
     }))
     .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
@@ -2102,7 +2109,14 @@ function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: Bac
   ];
 }
 
-function getServiceNamesFromBackend(ids: number[], services: BackendService[]) {
+function getServiceNamesFromNote(note?: string | null) {
+  const matched = (note || "").match(/預約服務項目：([^\n]+)/);
+  return matched?.[1]?.trim() || "";
+}
+
+function getServiceNamesFromBackend(ids: number[], services: BackendService[], note?: string | null) {
+  const noteServiceNames = getServiceNamesFromNote(note);
+  if (noteServiceNames) return noteServiceNames;
   if (!ids.length) return "預約";
   return ids.map((id) => services.find((service) => service.id === id)?.name).filter(Boolean).join("、") || "預約";
 }
@@ -2202,10 +2216,8 @@ function formatProfileDate(date: string) {
   return date.replace(/-/g, "/");
 }
 
-function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[]): CheckoutServiceOption[] {
-  const activePriceItems = priceItems
-    .filter((item) => item.is_active !== false)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], categoryOrder: string[]): CheckoutServiceOption[] {
+  const activePriceItems = sortDesignerPriceItems(priceItems.filter((item) => item.is_active !== false), categoryOrder);
   if (activePriceItems.length > 0) {
     return activePriceItems.map((item) => ({
       key: `price-${item.id}`,
@@ -2278,11 +2290,42 @@ function formatPriceRange(priceRange: string) {
   return normalizedPrice.replace(/\$/g, "NT$");
 }
 
-function sortPriceCategories(categories: string[]) {
-  const order = ["剪髮", "頭皮養護", "護髮", "染髮", "燙髮"];
+function designerCategoryOrderKey(designerId: number) {
+  return `designer_price_category_order_${designerId}`;
+}
+
+function readCategoryOrder(value?: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function priceCategoryText(category: string) {
+  return category.replace(/[^\p{Script=Han}A-Za-z]/gu, "").toLowerCase();
+}
+
+function priceCategoryOrderIndex(category: string, order: string[]) {
+  const target = priceCategoryText(category);
+  const index = order.findIndex((item) => {
+    const ordered = priceCategoryText(item);
+    return ordered.includes(target) || target.includes(ordered) || ordered.slice(0, 2) === target.slice(0, 2);
+  });
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function sortDesignerPriceItems<T extends BackendDesignerPriceItem>(items: T[], categoryOrder: string[]) {
+  return [...items].sort((a, b) => priceCategoryOrderIndex(a.category, categoryOrder) - priceCategoryOrderIndex(b.category, categoryOrder) || (a.sort_order || a.id) - (b.sort_order || b.id));
+}
+
+function sortPriceCategories(categories: string[], categoryOrder: string[] = []) {
+  const order = categoryOrder.length > 0 ? categoryOrder : ["剪髮", "頭皮養護", "護髮", "染髮", "燙髮"];
   return [...categories].sort((a, b) => {
-    const aIndex = order.indexOf(a);
-    const bIndex = order.indexOf(b);
+    const aIndex = categoryOrder.length > 0 ? priceCategoryOrderIndex(a, order) : order.indexOf(a);
+    const bIndex = categoryOrder.length > 0 ? priceCategoryOrderIndex(b, order) : order.indexOf(b);
     if (aIndex === -1 && bIndex === -1) return a.localeCompare(b, "zh-Hant");
     if (aIndex === -1) return 1;
     if (bIndex === -1) return -1;

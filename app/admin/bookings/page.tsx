@@ -30,6 +30,11 @@ function getStatusMeta(status?: string | null) {
   return { label: "待確認", background: "#FAEEDA", color: "#633806" };
 }
 
+function getServiceNamesFromNote(note?: string | null) {
+  const matched = (note || "").match(/預約服務項目：([^\n]+)/);
+  return matched?.[1]?.trim() || "";
+}
+
 export default function AdminBookings() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -80,7 +85,9 @@ export default function AdminBookings() {
     return customers.find(c => c.phone === phone)?.customer_no || null;
   }
 
-  function getServiceNames(ids: number[]) {
+  function getServiceNames(ids: number[], note?: string | null) {
+    const noteServiceNames = getServiceNamesFromNote(note);
+    if (noteServiceNames) return noteServiceNames;
     if (!ids || ids.length === 0) return "—";
     return ids.map(id => services.find(s => s.id === id)?.name || "").filter(Boolean).join("、");
   }
@@ -155,7 +162,7 @@ export default function AdminBookings() {
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{b.customer_name || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#888780" }}>{b.customer_phone || "—"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{getDesignerName(b.designer_id)}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A", maxWidth: 200 }}>{getServiceNames(b.service_ids)}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A", maxWidth: 200 }}>{getServiceNames(b.service_ids, b.note)}</td>
                     <td style={{ padding: "10px 12px", fontSize: 12 }}>
                       {b.reference_image_url ? (
                         <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ color: "#534AB7", fontWeight: 600, textDecoration: "none" }}>查看</a>
@@ -199,7 +206,7 @@ export default function AdminBookings() {
               </div>
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 2 }}>📅 {b.booking_date.replace(/-/g, "/")} {b.booking_time}</div>
               <div style={{ fontSize: 12, color: "#5F5E5A", marginBottom: 2 }}>設計師：{getDesignerName(b.designer_id)}</div>
-              <div style={{ fontSize: 12, color: "#5F5E5A" }}>服務：{getServiceNames(b.service_ids)}</div>
+              <div style={{ fontSize: 12, color: "#5F5E5A" }}>服務：{getServiceNames(b.service_ids, b.note)}</div>
               {b.reference_image_url && (
                 <a href={b.reference_image_url} target="_blank" rel="noreferrer" style={{ display: "block", marginTop: 8, textDecoration: "none" }}>
                   <div style={{ fontSize: 11, color: "#534AB7", fontWeight: 600, marginBottom: 5 }}>查看參考圖片</div>

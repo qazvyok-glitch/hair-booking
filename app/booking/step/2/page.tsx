@@ -11,6 +11,8 @@ type Service = {
   duration: string;
   note: string;
   category_id: number;
+  category?: string;
+  price_range?: string;
 };
 
 type ServiceCategory = {
@@ -27,6 +29,7 @@ type PriceItem = {
   category: string;
   name: string;
   price_range: string;
+  sort_order?: number | null;
 };
 
 type ShopInfo = {
@@ -38,6 +41,10 @@ type ShopInfo = {
 const fallbackHairLengthImage = "/hair-length.png";
 const hairLengthImageKey = "hair_length_image_url";
 const priceCategoryOrderKey = "price_category_order";
+
+function designerCategoryOrderKey(designerId: number) {
+  return `designer_price_category_order_${designerId}`;
+}
 
 const categoryNameEn: Record<string, string> = {
   shampoo: "Shampoo & Styling",
@@ -171,7 +178,35 @@ function sortServiceCategories(list: ServiceCategory[], order: string[]) {
 }
 
 function sortPriceItems(list: PriceItem[], order: string[]) {
-  return [...list].sort((a, b) => categoryOrderIndex(a.category, order) - categoryOrderIndex(b.category, order) || a.id - b.id);
+  return [...list].sort((a, b) => categoryOrderIndex(a.category, order) - categoryOrderIndex(b.category, order) || (a.sort_order || a.id) - (b.sort_order || b.id));
+}
+
+function buildCategoriesFromPriceItems(list: PriceItem[], order: string[]) {
+  const sortedItems = sortPriceItems(list, order);
+  const grouped = sortedItems.reduce<Record<string, Service[]>>((groups, item) => {
+    const category = item.category || "其他服務";
+    groups[category] = [
+      ...(groups[category] || []),
+      {
+        id: item.id,
+        name: item.name,
+        duration: "",
+        note: "",
+        category_id: 0,
+        category,
+        price_range: item.price_range,
+      },
+    ];
+    return groups;
+  }, {});
+  return Object.entries(grouped).map(([category, items], index) => ({
+    id: index + 1,
+    name: category,
+    label: category,
+    color: "#f2e8e6",
+    text_color: "#1a1a1a",
+    items,
+  }));
 }
 
 export default function Step2() {
@@ -191,13 +226,20 @@ export default function Step2() {
     Promise.all([
       supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
-      supabase.from("price_items").select("*").order("sort_order"),
-      supabase.from("designer_price_items").select("*").eq("designer_id", designer.id).eq("is_active", true).order("sort_order"),
-      supabase.from("shop_info").select("key, value, is_active").in("key", [hairLengthImageKey, priceCategoryOrderKey]),
+      supabase.from("price_items").select("*").order("category").order("sort_order"),
+      supabase.from("designer_price_items").select("*").eq("designer_id", designer.id).eq("is_active", true).order("category").order("sort_order"),
+      supabase.from("shop_info").select("key, value, is_active").in("key", [hairLengthImageKey, priceCategoryOrderKey, designerCategoryOrderKey(designer.id)]),
     ]).then(([{ data: cats }, { data: svcs }, { data: prices }, { data: designerPrices }, { data: settings }]) => {
       const shopSettings = (settings || []) as ShopInfo[];
-      const categoryOrder = readCategoryOrder(shopSettings.find((item) => item.key === priceCategoryOrderKey && item.is_active)?.value);
-      if (cats && svcs) {
+      const categoryOrder = readCategoryOrder(
+        shopSettings.find((item) => item.key === designerCategoryOrderKey(designer.id) && item.is_active)?.value
+        || shopSettings.find((item) => item.key === priceCategoryOrderKey && item.is_active)?.value
+      );
+      const activePriceData = designerPrices && designerPrices.length > 0 ? designerPrices : prices || [];
+      setPriceData(sortPriceItems(activePriceData, categoryOrder));
+      if (activePriceData.length > 0) {
+        setCategories(buildCategoriesFromPriceItems(activePriceData, categoryOrder));
+      } else if (cats && svcs) {
         const serviceCategories = cats.map((c: ServiceCategory) => {
           const allItems = svcs.filter((s: Service) => s.category_id === c.id);
           // 合併 S/M/L/XL 變體，只顯示基本名稱
@@ -214,8 +256,6 @@ export default function Step2() {
         });
         setCategories(sortServiceCategories(serviceCategories, categoryOrder));
       }
-      if (designerPrices && designerPrices.length > 0) setPriceData(sortPriceItems(designerPrices, categoryOrder));
-      else if (prices) setPriceData(sortPriceItems(prices, categoryOrder));
       const activeHairLengthImage = shopSettings.find((item) => item.key === hairLengthImageKey);
       setHairLengthImageUrl(activeHairLengthImage?.is_active && activeHairLengthImage.value ? activeHairLengthImage.value : fallbackHairLengthImage);
       setLoading(false);
@@ -361,12 +401,12 @@ export default function Step2() {
               <div style={{ border: "0.5px solid #e5dbd0", borderTop: "none", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
                 {cat.items.map((item) => {
                   const picked = serviceIds.includes(item.id);
-                  const priceRange = getServicePriceRange(item.name, priceData, language);
+                  const priceRange = item.price_range ? displayPriceRange(item.price_range, language) : getServicePriceRange(item.name, priceData, language);
                   const lengthPriceOptions = getLengthPriceOptions(priceRange);
                   return (
                     <div
                       key={item.id}
-                      onClick={() => toggleService(item.id)}
+                      onClick={() => toggleService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange })}
                       style={{
                         padding: "11px 14px",
                         background: picked ? "#f2e8e6" : "#fdfaf7",

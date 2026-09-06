@@ -90,6 +90,11 @@ function getStatusLabel(status: string | null | undefined, language: "zh" | "en"
   return statusText[language][(status || "pending") as BookingStatus] || status || statusText[language].pending;
 }
 
+function getServiceNamesFromNote(note?: string | null) {
+  const matched = (note || "").match(/預約服務項目：([^\n]+)/);
+  return matched?.[1]?.trim() || "";
+}
+
 export default function MyBookingsPage() {
   const router = useRouter();
   const { contactValue } = useBookingStore();
@@ -107,7 +112,15 @@ export default function MyBookingsPage() {
 
   const isValid = phone.replace(/\D/g, "").length >= 8;
 
-  function serviceNames(ids: number[]) {
+  function serviceNames(ids: number[], note?: string | null) {
+    const noteServiceNames = getServiceNamesFromNote(note);
+    if (noteServiceNames) {
+      return noteServiceNames
+        .split("、")
+        .filter(Boolean)
+        .map((name) => displayServiceName(name, isEnglish))
+        .join(isEnglish ? ", " : "、");
+    }
     if (!ids || ids.length === 0) return "—";
     return ids
       .map((id) => services.find((service) => service.id === id)?.name || "")
@@ -310,7 +323,7 @@ export default function MyBookingsPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#5f5a55", lineHeight: 1.5, marginBottom: 12 }}>
                 <div>{isEnglish ? "Stylist" : "設計師"}：<b style={{ color: "#1a1a1a" }}>{designerName(booking)}</b></div>
                 <div>{isEnglish ? "Date / Time" : "日期時間"}：<b style={{ color: "#1a1a1a" }}>{booking.booking_date.replace(/-/g, "/")} {booking.booking_time}</b></div>
-                <div>{isEnglish ? "Services" : "服務項目"}：{serviceNames(booking.service_ids || [])}</div>
+                <div>{isEnglish ? "Services" : "服務項目"}：{serviceNames(booking.service_ids || [], booking.note)}</div>
                 {booking.created_at && <div>{isEnglish ? "Created" : "建立時間"}：{booking.created_at.slice(0, 16).replace("T", " ")}</div>}
               </div>
 
