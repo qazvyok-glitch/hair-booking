@@ -6,6 +6,7 @@ import AdminBottomNav from "../components/BottomNav";
 
 type Designer = { id: number; name: string; display_name?: string; nickname?: string };
 type PriceItem = { id: number; category: string; name: string; price_range: string; sort_order: number };
+type ShopInfo = { id: number; key: string; label: string; value: string; is_active: boolean };
 type DesignerPriceItem = PriceItem & {
   designer_id: number;
   price_item_id: number | null;
@@ -13,6 +14,7 @@ type DesignerPriceItem = PriceItem & {
 };
 
 const publicCategoryOrderKey = "price_category_order";
+const hairLengthImageKey = "hair_length_image_url";
 
 function designerCategoryOrderKey(designerId: number) {
   return `designer_price_category_order_${designerId}`;
@@ -49,6 +51,9 @@ export default function AdminDesignerPrices() {
   const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
   const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
   const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
+  const [hairLengthImage, setHairLengthImage] = useState<ShopInfo | null>(null);
+  const [hairLengthDraft, setHairLengthDraft] = useState("");
+  const [savingHairLength, setSavingHairLength] = useState(false);
   const [selectedDesignerId, setSelectedDesignerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -72,14 +77,19 @@ export default function AdminDesignerPrices() {
     async function fetchInitialData() {
       const params = new URLSearchParams(window.location.search);
       const designerIdFromUrl = Number(params.get("designerId") || 0);
-      const [{ data: designerData }, { data: priceData }] = await Promise.all([
+      const [{ data: designerData }, { data: priceData }, { data: hairLengthSetting }] = await Promise.all([
         supabase.from("designers").select("id, name, display_name, nickname").order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("price_items").select("*").order("category").order("sort_order"),
+        supabase.from("shop_info").select("id, key, label, value, is_active").eq("key", hairLengthImageKey).maybeSingle(),
       ]);
       const loadedDesigners = designerData || [];
       setDesigners(loadedDesigners);
       const publicCategories = [...new Set((priceData || []).map((p) => p.category))].filter(Boolean);
       setBaseItems(sortPriceItems(priceData || [], publicCategories));
+      if (hairLengthSetting) {
+        setHairLengthImage(hairLengthSetting);
+        setHairLengthDraft(hairLengthSetting.value || "");
+      }
       setSelectedDesignerId(designerIdFromUrl || loadedDesigners[0]?.id || null);
       setLoading(false);
     }
@@ -107,6 +117,42 @@ export default function AdminDesignerPrices() {
     const nextCategoryOrder = mergeCategoryOrder(readCategoryOrder(designerCategorySetting?.value || publicCategorySetting?.value), currentCategories);
     setCategoryOrder(nextCategoryOrder);
     setItems(sortPriceItems(data || [], nextCategoryOrder));
+  }
+
+  function handleHairLengthFile(file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setHairLengthDraft(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveHairLengthImage() {
+    if (!hairLengthDraft.trim()) {
+      alert("請先選擇圖片或貼上圖片網址");
+      return;
+    }
+    setSavingHairLength(true);
+    if (hairLengthImage?.id) {
+      const { data, error } = await supabase
+        .from("shop_info")
+        .update({ label: "髮長說明圖", value: hairLengthDraft, is_active: true })
+        .eq("id", hairLengthImage.id)
+        .select("id, key, label, value, is_active")
+        .single();
+      if (error) alert("髮長說明圖儲存失敗，請再試一次");
+      if (data) setHairLengthImage(data);
+    } else {
+      const { data, error } = await supabase
+        .from("shop_info")
+        .insert({ key: hairLengthImageKey, label: "髮長說明圖", value: hairLengthDraft, sort_order: 13, is_active: true })
+        .select("id, key, label, value, is_active")
+        .single();
+      if (error) alert("髮長說明圖儲存失敗，請再試一次");
+      if (data) setHairLengthImage(data);
+    }
+    setSavingHairLength(false);
   }
 
   const selectedDesigner = designers.find((d) => d.id === selectedDesignerId);
@@ -282,6 +328,32 @@ export default function AdminDesignerPrices() {
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <button onClick={copyBasePrices} disabled={!selectedDesignerId || saving} style={{ background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: selectedDesignerId && !saving ? "pointer" : "default" }}>複製店公版</button>
             <button onClick={() => router.push("/admin/prices")} style={{ background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>編輯店公版</button>
+          </div>
+        </div>
+
+        <div style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>髮長說明圖</div>
+              <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>此圖片會同步顯示於顧客預約端的服務選擇頁。</div>
+            </div>
+            <label style={{ padding: "6px 12px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+              選擇圖片
+              <input type="file" accept="image/*" onChange={(event) => handleHairLengthFile(event.target.files?.[0])} style={{ display: "none" }} />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "180px 1fr auto" : "1fr", gap: 10, alignItems: "center" }}>
+            <img src={hairLengthDraft || "/hair-length.png"} alt="髮長說明圖預覽" style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E5D8", background: "#F8F7F3" }} />
+            <textarea
+              value={hairLengthDraft}
+              onChange={(event) => setHairLengthDraft(event.target.value)}
+              rows={isDesktop ? 3 : 2}
+              placeholder="可貼圖片網址，或直接選擇圖片"
+              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+            />
+            <button onClick={saveHairLengthImage} disabled={savingHairLength} style={{ padding: "9px 16px", background: savingHairLength ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: savingHairLength ? "default" : "pointer", whiteSpace: "nowrap" }}>
+              {savingHairLength ? "儲存中..." : "儲存圖片"}
+            </button>
           </div>
         </div>
 

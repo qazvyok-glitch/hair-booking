@@ -5,8 +5,10 @@ import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
 
 type PriceItem = { id: number; category: string; name: string; price_range: string; sort_order: number };
+type ShopInfo = { id: number; key: string; label: string; value: string; is_active: boolean };
 
 const publicCategoryOrderKey = "price_category_order";
+const hairLengthImageKey = "hair_length_image_url";
 
 function mergeCategoryOrder(savedOrder: string[], currentCategories: string[]) {
   return [...savedOrder.filter((category) => currentCategories.includes(category)), ...currentCategories.filter((category) => !savedOrder.includes(category))];
@@ -37,6 +39,9 @@ export default function AdminPrices() {
   const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
   const [categoryOrder, setCategoryOrder] = useState<string[]>([]);
   const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
+  const [hairLengthImage, setHairLengthImage] = useState<ShopInfo | null>(null);
+  const [hairLengthDraft, setHairLengthDraft] = useState("");
+  const [savingHairLength, setSavingHairLength] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -59,10 +64,15 @@ export default function AdminPrices() {
   }, [router]);
 
   async function fetchData() {
-    const [{ data }, { data: categorySetting }] = await Promise.all([
+    const [{ data }, { data: categorySetting }, { data: hairLengthSetting }] = await Promise.all([
       supabase.from("price_items").select("*").order("category").order("sort_order"),
       supabase.from("shop_info").select("id, value").eq("key", publicCategoryOrderKey).maybeSingle(),
+      supabase.from("shop_info").select("id, key, label, value, is_active").eq("key", hairLengthImageKey).maybeSingle(),
     ]);
+    if (hairLengthSetting) {
+      setHairLengthImage(hairLengthSetting);
+      setHairLengthDraft(hairLengthSetting.value || "");
+    }
     if (data) {
       const currentCategories = [...new Set(data.map((p) => p.category))].filter(Boolean);
       const nextCategoryOrder = mergeCategoryOrder(readCategoryOrder(categorySetting?.value), currentCategories);
@@ -70,6 +80,42 @@ export default function AdminPrices() {
       setItems(sortPriceItems(data, nextCategoryOrder));
       setLoading(false);
     }
+  }
+
+  function handleHairLengthFile(file?: File) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setHairLengthDraft(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function saveHairLengthImage() {
+    if (!hairLengthDraft.trim()) {
+      alert("請先選擇圖片或貼上圖片網址");
+      return;
+    }
+    setSavingHairLength(true);
+    if (hairLengthImage?.id) {
+      const { data, error } = await supabase
+        .from("shop_info")
+        .update({ label: "髮長說明圖", value: hairLengthDraft, is_active: true })
+        .eq("id", hairLengthImage.id)
+        .select("id, key, label, value, is_active")
+        .single();
+      if (error) alert("髮長說明圖儲存失敗，請再試一次");
+      if (data) setHairLengthImage(data);
+    } else {
+      const { data, error } = await supabase
+        .from("shop_info")
+        .insert({ key: hairLengthImageKey, label: "髮長說明圖", value: hairLengthDraft, sort_order: 13, is_active: true })
+        .select("id, key, label, value, is_active")
+        .single();
+      if (error) alert("髮長說明圖儲存失敗，請再試一次");
+      if (data) setHairLengthImage(data);
+    }
+    setSavingHairLength(false);
   }
 
   const categories = mergeCategoryOrder(categoryOrder, [...new Set(items.map(p => p.category))].filter(Boolean));
@@ -186,6 +232,32 @@ export default function AdminPrices() {
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
+        <div style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 14, padding: 14, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>髮長說明圖</div>
+              <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>此圖片會同步顯示於顧客預約端的服務選擇頁。</div>
+            </div>
+            <label style={{ padding: "6px 12px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+              選擇圖片
+              <input type="file" accept="image/*" onChange={(event) => handleHairLengthFile(event.target.files?.[0])} style={{ display: "none" }} />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "180px 1fr auto" : "1fr", gap: 10, alignItems: "center" }}>
+            <img src={hairLengthDraft || "/hair-length.png"} alt="髮長說明圖預覽" style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E5D8", background: "#F8F7F3" }} />
+            <textarea
+              value={hairLengthDraft}
+              onChange={(event) => setHairLengthDraft(event.target.value)}
+              rows={isDesktop ? 3 : 2}
+              placeholder="可貼圖片網址，或直接選擇圖片"
+              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }}
+            />
+            <button onClick={saveHairLengthImage} disabled={savingHairLength} style={{ padding: "9px 16px", background: savingHairLength ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: savingHairLength ? "default" : "pointer", whiteSpace: "nowrap" }}>
+              {savingHairLength ? "儲存中..." : "儲存圖片"}
+            </button>
+          </div>
+        </div>
+
         {/* 分類篩選 */}
         <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
           <button onClick={() => setFilterCategory("all")} style={{ padding: "5px 12px", borderRadius: 20, border: "none", background: filterCategory === "all" ? "#534AB7" : "#fff", color: filterCategory === "all" ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>全部</button>
