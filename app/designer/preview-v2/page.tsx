@@ -202,6 +202,8 @@ export default function DesignerPreviewV2Page() {
   const [bookingComplete, setBookingComplete] = useState(false);
   const [showSelfUseModal, setShowSelfUseModal] = useState(false);
   const [selfUseComplete, setSelfUseComplete] = useState(false);
+  const [showShopUseModal, setShowShopUseModal] = useState(false);
+  const [shopUseComplete, setShopUseComplete] = useState(false);
   const [showProductCheckoutModal, setShowProductCheckoutModal] = useState(false);
   const [productCheckoutComplete, setProductCheckoutComplete] = useState(false);
   const emptyTodayRows = initialTodayRows;
@@ -625,6 +627,35 @@ export default function DesignerPreviewV2Page() {
     setSelfUseComplete(true);
   }
 
+  async function saveShopUseMaterials(items: SelfUseMaterialItem[]) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，店用領料未送出。請重新整理後再試。");
+      return;
+    }
+    if (items.length === 0) {
+      alert("請先選擇店用材料。");
+      return;
+    }
+
+    for (const item of items) {
+      const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+      if (product) {
+        const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+        await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+        await supabase.from("stock_records").insert({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          quantity: -item.quantity,
+          type: "out",
+          note: `店用領料 - ${designerProfile.name}`,
+        });
+      }
+    }
+
+    await loadBackendData(backendSession);
+    setShopUseComplete(true);
+  }
+
   const activeScheduleItems = backendConnected ? backendScheduleItems : emptyScheduleItems;
   const activeLeaveItems = backendConnected ? backendLeaveItems : emptyLeaveItems;
   const activeTeamScheduleItems = backendConnected ? backendTeamScheduleItems : teamScheduleItems;
@@ -657,7 +688,7 @@ export default function DesignerPreviewV2Page() {
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenShopUse={() => { setShopUseComplete(false); setShowShopUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} />}
             </>
           )}
         </div>
@@ -666,6 +697,7 @@ export default function DesignerPreviewV2Page() {
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
       {showSelfUseModal && <SelfUseMaterialModal products={backendProducts} complete={selfUseComplete} isSynced={backendConnected} onComplete={saveSelfUseMaterials} onClose={() => { setShowSelfUseModal(false); setSelfUseComplete(false); }} />}
+      {showShopUseModal && <ShopUseMaterialModal products={backendProducts} complete={shopUseComplete} isSynced={backendConnected} onComplete={saveShopUseMaterials} onClose={() => { setShowShopUseModal(false); setShopUseComplete(false); }} />}
       {showProductCheckoutModal && <ProductCheckoutModal products={backendProducts} complete={productCheckoutComplete} isSynced={backendConnected} onComplete={completeProductCheckout} onClose={() => { setShowProductCheckoutModal(false); setProductCheckoutComplete(false); }} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
@@ -785,10 +817,17 @@ export default function DesignerPreviewV2Page() {
         .summary-title { font-weight: 900; color: #1478c8; margin-bottom: 4px; }
         .summary-title.purple { color: #6847d9; }
         .summary-sub { color: #36a9ff; font-size: 12px; font-weight: 750; }
-        .earnings-action-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px; }
+        .earnings-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 14px; position: relative; }
         .earnings-action-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 10px 8px; font-size: 13px; font-weight: 950; cursor: pointer; white-space: nowrap; }
         .earnings-action-btn.primary { background: #148bd8; color: #fff; box-shadow: 0 8px 16px rgba(20,139,216,.18); }
         .earnings-action-btn.muted { border-color: #dfe3ea; color: #9aa3af; cursor: default; }
+        .earnings-add-wrap { position: relative; }
+        .earnings-add-wrap > .earnings-action-btn { width: 100%; }
+        .earnings-add-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 12; width: min(260px, calc(100vw - 48px)); background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; box-shadow: 0 18px 36px rgba(15, 23, 42, .18); padding: 8px; display: grid; gap: 6px; }
+        .earnings-add-menu button { border: none; background: #fff; border-radius: 12px; padding: 10px 11px; display: grid; gap: 3px; text-align: left; color: #1f2937; cursor: pointer; font-family: inherit; }
+        .earnings-add-menu button:hover { background: #f1f8ff; }
+        .earnings-add-menu strong { font-size: 13px; font-weight: 950; }
+        .earnings-add-menu span { font-size: 11px; color: #8b95a3; font-weight: 800; line-height: 1.35; }
         .panel { padding: 16px; margin-bottom: 14px; }
         .income-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
         .income-detail-header .panel-label { color: #1478c8; font-size: 13px; letter-spacing: 0; }
@@ -940,6 +979,10 @@ export default function DesignerPreviewV2Page() {
         .product-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 10px; text-align: center; }
         .self-use-lines { margin-top: 10px; border-top: 1px solid #edf0f4; }
         .self-use-summary { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #ef244e; font-size: 14px; font-weight: 950; }
+        .shop-use-line { grid-template-columns: 1fr 64px 86px; }
+        .shop-use-stock-label { color: #17875d; font-size: 12px; font-weight: 950; text-align: right; white-space: nowrap; }
+        .shop-use-summary, .shop-use-summary strong { color: #17875d; }
+        .shop-use-preview { background: #0f3326; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
         .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
@@ -1451,10 +1494,11 @@ function Legend() {
   );
 }
 
-function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse, onOpenProductCheckout }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void; onOpenProductCheckout: () => void }) {
+function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse, onOpenShopUse, onOpenProductCheckout }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void; onOpenShopUse: () => void; onOpenProductCheckout: () => void }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const currentRange = ranges[activeRange];
   const totalPerformance = currentRange.service + currentRange.product;
   const incomeLabel = `${activeRange === "指定日期或區間" ? "查詢" : activeRange}實際收入`;
@@ -1482,8 +1526,25 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, 
       </div>
       <div className="earnings-action-row">
         <button className="earnings-action-btn primary" onClick={() => setShowIncomeDetails(true)}>查看明細</button>
-        <button className="earnings-action-btn" onClick={onOpenSelfUse}>自領材料</button>
-        <button className="earnings-action-btn" type="button" onClick={onOpenProductCheckout}>新增結帳</button>
+        <div className="earnings-add-wrap">
+          <button className="earnings-action-btn" type="button" onClick={() => setShowAddMenu(!showAddMenu)}>＋ 新增</button>
+          {showAddMenu && (
+            <div className="earnings-add-menu">
+              <button type="button" onClick={() => { setShowAddMenu(false); onOpenSelfUse(); }}>
+                <strong>自領材料</strong>
+                <span>扣設計師收入、同步扣庫存</span>
+              </button>
+              <button type="button" onClick={() => { setShowAddMenu(false); onOpenShopUse(); }}>
+                <strong>店用領料</strong>
+                <span>店家承擔，只同步扣庫存</span>
+              </button>
+              <button type="button" onClick={() => { setShowAddMenu(false); onOpenProductCheckout(); }}>
+                <strong>新增結帳</strong>
+                <span>純商品購買，列入商品銷售</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <section className="panel">
         <div className="income-detail-header">
@@ -1843,6 +1904,116 @@ function SelfUseMaterialModal({ products, complete, isSynced, onComplete, onClos
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>取消</button>
           <button className="primary-modal-btn" disabled={!isSynced || saving || items.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "確認自領" : "等待後台連線"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShopUseMaterialModal({ products, complete, isSynced, onComplete, onClose }: { products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (items: SelfUseMaterialItem[]) => void | Promise<void>; onClose: () => void }) {
+  const [items, setItems] = useState<SelfUseMaterialItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("全部");
+  const [saving, setSaving] = useState(false);
+  const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
+  const filteredProducts = products.filter((product) => {
+    const itemCategory = product.category || "未分類";
+    const keyword = search.trim().toLowerCase();
+    if (product.is_active === false) return false;
+    if (category !== "全部" && itemCategory !== category) return false;
+    if (keyword && !`${product.name} ${itemCategory}`.toLowerCase().includes(keyword)) return false;
+    return true;
+  });
+
+  function toggleProduct(product: BackendProduct) {
+    const selected = items.find((item) => item.product.id === product.id);
+    setItems(selected ? items.filter((item) => item.product.id !== product.id) : [...items, { product, quantity: 1 }]);
+  }
+
+  function updateQuantity(productId: number, quantity: number) {
+    setItems(items.map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item));
+  }
+
+  async function submit() {
+    setSaving(true);
+    await onComplete(items);
+    setSaving(false);
+  }
+
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">店用領料已同步</div>
+            <div className="modal-subtitle">已同步扣庫存並寫入後台庫存紀錄，不會扣設計師收入。</div>
+          </div>
+          <div className="amount-preview shop-use-preview"><span>本次店用領料</span><strong>只扣庫存</strong></div>
+          <button className="full-width-btn" onClick={onClose}>完成</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">店用領料</div>
+            <div className="modal-subtitle">店家承擔，不扣設計師收入；送出後只同步扣庫存。</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋店用材料或商品名稱..." />
+        <div className="product-category-tabs">
+          {categories.map((item) => (
+            <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="product-list">
+          {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+            const selected = items.find((item) => item.product.id === product.id);
+            const unitText = product.unit ? ` / ${product.unit}` : "";
+            return (
+              <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                  <span>
+                    <span className="product-name">{product.name}</span>
+                    <span className="product-meta">{product.category || "未分類"} · 庫存 {product.stock_quantity ?? 0}{unitText}</span>
+                  </span>
+                  <span className="product-check">{selected ? "✓" : ""}</span>
+                </button>
+              </div>
+            );
+          }) : (
+            <div className="product-empty">找不到符合的店用材料</div>
+          )}
+        </div>
+        {items.length > 0 && (
+          <div className="self-use-lines">
+            {items.map((item) => (
+              <div className="product-price-line shop-use-line" key={item.product.id}>
+                <div className="row-service">{item.product.name}</div>
+                <label className="product-quantity-field">
+                  <span className="product-quantity-label">數量</span>
+                  <input className="checkout-input" type="number" min={1} value={item.quantity} onChange={(event) => updateQuantity(item.product.id, Number(event.target.value) || 1)} />
+                </label>
+                <div className="shop-use-stock-label">只扣庫存</div>
+              </div>
+            ))}
+            <div className="self-use-summary shop-use-summary">
+              <span>收入影響</span>
+              <strong>不扣收入</strong>
+            </div>
+          </div>
+        )}
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving || items.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "確認店用領料" : "等待後台連線"}</button>
         </div>
       </div>
     </div>
