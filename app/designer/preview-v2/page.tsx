@@ -972,10 +972,11 @@ export default function DesignerPreviewV2Page() {
         .range-mode-tab { border: none; border-radius: 999px; background: transparent; color: #6b7280; padding: 9px 0; font-size: 13px; font-weight: 950; cursor: pointer; }
         .range-mode-tab.active { background: #148bd8; color: #fff; }
         .single-range-card { border: 1px solid #e1e7ef; background: #f8fbff; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
-        .checkout-line { display: grid; grid-template-columns: 1fr 92px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .checkout-line { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .checkout-line.removable { grid-template-columns: minmax(0, 1fr) 112px 32px; }
         .checkout-line:last-child { border-bottom: none; }
-        .checkout-input-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
-        .checkout-remove-btn { width: 34px; height: 34px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 18px; font-weight: 950; cursor: pointer; }
+        .checkout-service-label { color: #5f6673; font-size: 13px; font-weight: 850; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+        .checkout-remove-btn { width: 32px; height: 32px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 18px; font-weight: 950; cursor: pointer; }
         .checkout-remove-btn:hover { background: #ffe7eb; color: #ef244e; }
         .checkout-section-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #1478c8; font-size: 13px; font-weight: 950; padding: 10px 0 0; }
         .checkout-section-total strong { white-space: nowrap; }
@@ -1040,7 +1041,19 @@ export default function DesignerPreviewV2Page() {
         .amount-preview strong { font-size: 24px; }
         .complete-state { text-align: center; padding: 22px 8px 8px; }
         .complete-icon { width: 54px; height: 54px; border-radius: 50%; margin: 0 auto 14px; background: #e8f7ef; color: #208051; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 950; }
-        @media (max-width: 460px) { .preview-page { padding: 0; } .phone-shell { max-width: none; height: 100vh; border-radius: 0; border: none; } }
+        @media (max-width: 460px) {
+          .preview-page { padding: 0; }
+          .phone-shell { max-width: none; height: 100vh; border-radius: 0; border: none; }
+          .checkout-line.removable { grid-template-columns: minmax(0, 1fr) 104px 30px; gap: 8px; }
+          .checkout-service-label { font-size: 12px; line-height: 1.5; }
+          .checkout-remove-btn { width: 30px; height: 30px; }
+        }
+        @media (max-width: 380px) {
+          .checkout-line.removable { grid-template-columns: 1fr 30px; }
+          .checkout-line.removable .checkout-service-label { grid-column: 1 / -1; }
+          .checkout-line.removable .checkout-input { grid-column: 1; }
+          .checkout-line.removable .checkout-remove-btn { grid-column: 2; }
+        }
       `}</style>
     </main>
   );
@@ -2440,12 +2453,10 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
 
 function CheckoutNumber({ label, value, onChange, onRemove }: { label: string; value: number; onChange: (value: number) => void; onRemove?: () => void }) {
   return (
-    <div className="checkout-line">
-      <div className="row-service">{label}</div>
-      <div className="checkout-input-actions">
-        <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
-        {onRemove && <button className="checkout-remove-btn" onClick={onRemove} aria-label={`移除 ${label}`}>×</button>}
-      </div>
+    <div className={`checkout-line${onRemove ? " removable" : ""}`}>
+      <div className="checkout-service-label">{label}</div>
+      <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+      {onRemove && <button className="checkout-remove-btn" onClick={onRemove} aria-label={`移除 ${label}`}>×</button>}
     </div>
   );
 }
