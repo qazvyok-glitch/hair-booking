@@ -41,6 +41,8 @@ export default function AdminPrices() {
   const [draggingCategory, setDraggingCategory] = useState<string | null>(null);
   const [hairLengthImage, setHairLengthImage] = useState<ShopInfo | null>(null);
   const [hairLengthDraft, setHairLengthDraft] = useState("");
+  const [hairLengthPending, setHairLengthPending] = useState("");
+  const [showHairLengthConfirm, setShowHairLengthConfirm] = useState(false);
   const [savingHairLength, setSavingHairLength] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -86,34 +88,47 @@ export default function AdminPrices() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") setHairLengthDraft(reader.result);
+      if (typeof reader.result === "string") {
+        setHairLengthPending(reader.result);
+        setShowHairLengthConfirm(true);
+      }
     };
     reader.readAsDataURL(file);
   }
 
   async function saveHairLengthImage() {
-    if (!hairLengthDraft.trim()) {
-      alert("請先選擇圖片或貼上圖片網址");
+    if (!hairLengthPending.trim()) {
+      alert("請先選擇圖片");
       return;
     }
     setSavingHairLength(true);
     if (hairLengthImage?.id) {
       const { data, error } = await supabase
         .from("shop_info")
-        .update({ label: "髮長說明圖", value: hairLengthDraft, is_active: true })
+        .update({ label: "髮長說明圖", value: hairLengthPending, is_active: true })
         .eq("id", hairLengthImage.id)
         .select("id, key, label, value, is_active")
         .single();
       if (error) alert("髮長說明圖儲存失敗，請再試一次");
-      if (data) setHairLengthImage(data);
+      if (data) {
+        setHairLengthImage(data);
+        setHairLengthDraft(data.value || "");
+        setHairLengthPending("");
+        setShowHairLengthConfirm(false);
+      }
     } else {
       const { data, error } = await supabase
         .from("shop_info")
-        .insert({ key: hairLengthImageKey, label: "髮長說明圖", value: hairLengthDraft, sort_order: 13, is_active: true })
+        .insert({ key: hairLengthImageKey, label: "髮長說明圖", value: hairLengthPending, sort_order: 13, is_active: true })
         .select("id, key, label, value, is_active")
         .single();
       if (error) alert("髮長說明圖儲存失敗，請再試一次");
-      if (data) setHairLengthImage(data);
+      if (data) {
+        setHairLengthImage(data);
+        setHairLengthDraft(data.value || "");
+        setHairLengthPending("");
+        setShowHairLengthConfirm(false);
+      }
     }
     setSavingHairLength(false);
   }
@@ -239,22 +254,12 @@ export default function AdminPrices() {
               <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>此圖片會同步顯示於顧客預約端的服務選擇頁。</div>
             </div>
             <label style={{ padding: "6px 12px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
-              選擇圖片
-              <input type="file" accept="image/*" onChange={(event) => handleHairLengthFile(event.target.files?.[0])} style={{ display: "none" }} />
+              {hairLengthDraft ? "變更圖片" : "選擇圖片"}
+              <input type="file" accept="image/*" onChange={(event) => { handleHairLengthFile(event.target.files?.[0]); event.currentTarget.value = ""; }} style={{ display: "none" }} />
             </label>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "180px 1fr auto" : "1fr", gap: 10, alignItems: "center" }}>
+          <div style={{ maxWidth: 220 }}>
             <img src={hairLengthDraft || "/hair-length.png"} alt="髮長說明圖預覽" style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E5D8", background: "#F8F7F3" }} />
-            <textarea
-              value={hairLengthDraft}
-              onChange={(event) => setHairLengthDraft(event.target.value)}
-              rows={isDesktop ? 3 : 2}
-              placeholder="可貼圖片網址，或直接選擇圖片"
-              style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }}
-            />
-            <button onClick={saveHairLengthImage} disabled={savingHairLength} style={{ padding: "9px 16px", background: savingHairLength ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: savingHairLength ? "default" : "pointer", whiteSpace: "nowrap" }}>
-              {savingHairLength ? "儲存中..." : "儲存圖片"}
-            </button>
           </div>
         </div>
 
@@ -367,6 +372,21 @@ export default function AdminPrices() {
             </div>
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showHairLengthConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#2C2C2A" }}>確認髮長說明圖</div>
+              <button onClick={() => { setShowHairLengthConfirm(false); setHairLengthPending(""); }} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+            </div>
+            <img src={hairLengthPending} alt="新髮長說明圖預覽" style={{ width: "100%", borderRadius: 12, border: "1px solid #E8E5D8", background: "#F8F7F3", marginBottom: 14 }} />
+            <button onClick={saveHairLengthImage} disabled={savingHairLength} style={{ width: "100%", padding: "12px 0", background: savingHairLength ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: savingHairLength ? "default" : "pointer" }}>
+              {savingHairLength ? "儲存中..." : "儲存圖片"}
             </button>
           </div>
         </div>

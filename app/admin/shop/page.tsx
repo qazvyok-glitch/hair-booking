@@ -13,6 +13,7 @@ export default function AdminShop() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [saving, setSaving] = useState<number | null>(null);
   const [edited, setEdited] = useState<Record<number, string>>({});
+  const [hairLengthPending, setHairLengthPending] = useState<{ item: ShopInfo; image: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ key: "", label: "", value: "", sort_order: 0 });
   const [formSaving, setFormSaving] = useState(false);
@@ -61,10 +62,25 @@ export default function AdminShop() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        setEdited((prev) => ({ ...prev, [item.id]: reader.result as string }));
+        setHairLengthPending({ item, image: reader.result });
       }
     };
     reader.readAsDataURL(file);
+  }
+
+  async function saveHairLengthImage() {
+    if (!hairLengthPending) return;
+    setSaving(hairLengthPending.item.id);
+    const { item, image } = hairLengthPending;
+    await supabase.from("shop_info").update({ value: image, is_active: true }).eq("id", item.id);
+    setItems(items.map(i => i.id === item.id ? { ...i, value: image, is_active: true } : i));
+    setEdited((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
+    setHairLengthPending(null);
+    setSaving(null);
   }
 
   if (loading) return (
@@ -99,44 +115,32 @@ export default function AdminShop() {
             {item.key === "hair_length_image_url" && (
               <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "180px 1fr" : "1fr", gap: 12, marginBottom: 10 }}>
                 <img
-                  src={edited[item.id] ?? item.value}
+                  src={item.value || "/hair-length.png"}
                   alt="髮長說明圖預覽"
                   style={{ width: "100%", borderRadius: 10, border: "1px solid #E8E5D8", background: "#F8F6EF" }}
                 />
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontSize: 12, color: "#888780", lineHeight: 1.6 }}>
-                    可貼圖片網址，也可直接選擇圖片。選好後請按「儲存」，顧客預約端會同步更新。
-                  </div>
-                  <label style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", padding: "8px 14px", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                    選擇圖片
-                    <input type="file" accept="image/*" onChange={(e) => handleImageFile(item, e.target.files?.[0])} style={{ display: "none" }} />
-                  </label>
-                </div>
+                <label style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "fit-content", height: "fit-content", padding: "8px 14px", background: "#F1EFE8", color: "#2C2C2A", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  {item.value ? "變更圖片" : "選擇圖片"}
+                  <input type="file" accept="image/*" onChange={(e) => { handleImageFile(item, e.target.files?.[0]); e.currentTarget.value = ""; }} style={{ display: "none" }} />
+                </label>
               </div>
             )}
-            <div style={{ display: "flex", gap: 8 }}>
-              {item.key === "hair_length_image_url" ? (
-                <textarea
-                  value={edited[item.id] ?? item.value}
-                  onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
-                  rows={3}
-                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", resize: "vertical" }}
-                />
-              ) : (
+            {item.key !== "hair_length_image_url" && (
+              <div style={{ display: "flex", gap: 8 }}>
                 <input
                   value={edited[item.id] ?? item.value}
                   onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
                   style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}
                 />
-              )}
-              <button
-                onClick={() => handleSave(item)}
-                disabled={saving === item.id}
-                style={{ padding: "8px 14px", background: saving === item.id ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, cursor: saving === item.id ? "default" : "pointer", whiteSpace: "nowrap" }}
-              >
-                {saving === item.id ? "..." : "儲存"}
-              </button>
-            </div>
+                <button
+                  onClick={() => handleSave(item)}
+                  disabled={saving === item.id}
+                  style={{ padding: "8px 14px", background: saving === item.id ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, cursor: saving === item.id ? "default" : "pointer", whiteSpace: "nowrap" }}
+                >
+                  {saving === item.id ? "..." : "儲存"}
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -160,6 +164,21 @@ export default function AdminShop() {
             ))}
             <button onClick={handleAdd} disabled={formSaving} style={{ width: "100%", padding: "12px 0", background: formSaving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: formSaving ? "default" : "pointer" }}>
               {formSaving ? "新增中..." : "新增"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {hairLengthPending && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#2C2C2A" }}>確認髮長說明圖</div>
+              <button onClick={() => setHairLengthPending(null)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+            </div>
+            <img src={hairLengthPending.image} alt="新髮長說明圖預覽" style={{ width: "100%", borderRadius: 12, border: "1px solid #E8E5D8", background: "#F8F7F3", marginBottom: 14 }} />
+            <button onClick={saveHairLengthImage} disabled={saving === hairLengthPending.item.id} style={{ width: "100%", padding: "12px 0", background: saving === hairLengthPending.item.id ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: saving === hairLengthPending.item.id ? "default" : "pointer" }}>
+              {saving === hairLengthPending.item.id ? "儲存中..." : "儲存圖片"}
             </button>
           </div>
         </div>
