@@ -44,6 +44,29 @@ type ProductUsage = {
   used_at: string;
 };
 
+type StockRecord = {
+  id: number;
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  type: string;
+  note: string;
+  created_at: string;
+};
+
+type ShopDetailKey = "actualIncome" | "serviceRevenue" | "productRevenue" | "selfUse" | "shopUse" | "discount";
+
+type ReportDetailRow = {
+  id: string;
+  date: string;
+  designerName: string;
+  kind: string;
+  itemName: string;
+  quantity: string;
+  amount: string;
+  isNegative?: boolean;
+};
+
 // 舊系統中文名 → 新系統設計師 id 對應（透過 display_name 比對，不寫死）
 function findDesignerByDisplayName(designers: Designer[], displayName: string) {
   return designers.find(d => d.display_name === displayName);
@@ -75,6 +98,63 @@ function getServiceRevenue(transaction: Transaction) {
   return Math.max(0, Number(transaction.total_amount || 0) - getProductSaleTotal(transaction));
 }
 
+function formatReportDate(dateString?: string) {
+  if (!dateString) return "-";
+  return dateString.slice(0, 10).replace(/-/g, "/");
+}
+
+function formatMoney(amount: number, negative = false) {
+  const prefix = negative ? "-NT$" : "NT$";
+  return `${prefix}${Math.abs(amount).toLocaleString()}`;
+}
+
+function getProductSaleRowsFromTransaction(transaction: Transaction): ReportDetailRow[] {
+  const date = formatReportDate(transaction.created_at);
+  const rows: ReportDetailRow[] = [];
+  (transaction.service_items || []).forEach((item: any, index) => {
+    if (!item.name?.startsWith("[商品]")) return;
+    rows.push({
+      id: `tx-${transaction.id}-import-product-${index}`,
+      date,
+      designerName: "",
+      kind: "商品明細",
+      itemName: item.name.replace("[商品] ", ""),
+      quantity: "1",
+      amount: formatMoney(Number(item.amount || 0)),
+    });
+  });
+  (transaction.product_items || []).forEach((item: any, index) => {
+    const quantity = Number(item.quantity || 1);
+    const amount = Number(item.amount || 0) * quantity;
+    rows.push({
+      id: `tx-${transaction.id}-product-${index}`,
+      date,
+      designerName: "",
+      kind: "商品明細",
+      itemName: item.name || "商品銷售",
+      quantity: String(quantity),
+      amount: formatMoney(amount),
+    });
+  });
+  const productLine = (transaction.note || "").split("客人購買商品：")[1]?.split("\n")[0] || "";
+  if (productLine) {
+    productLine.split("、").forEach((item, index) => {
+      const match = item.match(/(.+?) x(\d+).*?小計NT\$?([\d,]+)/);
+      if (!match) return;
+      rows.push({
+        id: `tx-${transaction.id}-note-product-${index}`,
+        date,
+        designerName: "",
+        kind: "商品明細",
+        itemName: match[1].trim(),
+        quantity: match[2],
+        amount: formatMoney(Number(match[3].replace(/,/g, ""))),
+      });
+    });
+  }
+  return rows;
+}
+
 function getReportTotals(transactions: Transaction[], productUsages: ProductUsage[], designerId?: number) {
   const scopedTransactions = designerId ? transactions.filter((item) => item.designer_id === designerId) : transactions;
   const scopedProductUsages = designerId ? productUsages.filter((item) => item.designer_id === designerId) : productUsages;
@@ -98,6 +178,7 @@ export default function AdminReport() {
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [productUsages, setProductUsages] = useState<ProductUsage[]>([]);
+  const [stockRecords, setStockRecords] = useState<StockRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<any[]>([]);
   const [exportMode, setExportMode] = useState<"month" | "year" | "range">("month");
@@ -112,6 +193,7 @@ export default function AdminReport() {
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   });
   const [reportMode, setReportMode] = useState<"shop" | "designer">("shop");
+  const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
   const [expandedDesigner, setExpandedDesigner] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
@@ -415,14 +497,16 @@ export default function AdminReport() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: dData }, { data: pData }, { data: cData }] = await Promise.all([
+      const [{ data: dData }, { data: pData }, { data: cData }, { data: stockData }] = await Promise.all([
         supabase.from("designers").select("*").order("id"),
         supabase.from("product_usage").select("*").order("used_at", { ascending: false }),
         supabase.from("customers").select("id, phone, customer_no"),
+        supabase.from("stock_records").select("*").order("created_at", { ascending: false }),
       ]);
       if (dData) setDesigners(dData);
       if (pData) setProductUsages(pData);
       if (cData) setCustomers(cData);
+      if (stockData) setStockRecords(stockData);
 
       // 分頁載入所有 transactions
       let allTransactions: any[] = [];
@@ -498,7 +582,9 @@ export default function AdminReport() {
   const yearTotal = yearlyData.reduce((sum, [, v]) => sum + v, 0);
   const maxMonthly = Math.max(...yearlyData.map(([, v]) => v), 1);
   const monthlyProductUsages = productUsages.filter((usage) => usage.used_at?.slice(0, 7) === selectedMonth);
+  const monthlyShopUseRecords = stockRecords.filter((record) => record.created_at?.slice(0, 7) === selectedMonth && (record.note || "").startsWith("店用領料"));
   const shopTotals = getReportTotals(monthlyTransactions, monthlyProductUsages);
+  const shopUseQuantity = monthlyShopUseRecords.reduce((sum, record) => sum + Math.abs(Number(record.quantity || 0)), 0);
   const activeReportDesigner = designers.find((designer) => designer.id === (reportDesignerId || designers[0]?.id));
   const designerTotals = activeReportDesigner ? getReportTotals(monthlyTransactions, monthlyProductUsages, activeReportDesigner.id) : getReportTotals([], []);
   const designerRows = designers
@@ -507,6 +593,107 @@ export default function AdminReport() {
   const monthTotalRevenue = shopTotals.totalRevenue;
   const monthTotalCommission = designers.reduce((sum, d) => sum + calcDesignerReport(d).totalCommission, 0);
   const serviceColors = ["#534AB7","#7B6FD4","#1D9E75","#BA7517","#E24B4A","#0C447C","#085041","#A32D2D","#633806","#3C3489"];
+  const getDesignerNameById = (designerId: number) => {
+    const designer = designers.find((item) => item.id === designerId);
+    return designer ? getDesignerLabel(designer) : "-";
+  };
+  const serviceDetailRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) => {
+    const serviceItems = (transaction.service_items || []).filter((item: any) => !item.name?.startsWith("[商品]"));
+    if (serviceItems.length === 0 && getServiceRevenue(transaction) > 0) {
+      return [{
+        id: `tx-${transaction.id}-service-total`,
+        date: formatReportDate(transaction.created_at),
+        designerName: getDesignerNameById(transaction.designer_id),
+        kind: "服務明細",
+        itemName: transaction.customer_name ? `${transaction.customer_name}｜服務收入` : "服務收入",
+        quantity: "1",
+        amount: formatMoney(getServiceRevenue(transaction)),
+      }];
+    }
+    return serviceItems.map((item: any, index) => ({
+      id: `tx-${transaction.id}-service-${index}`,
+      date: formatReportDate(transaction.created_at),
+      designerName: getDesignerNameById(transaction.designer_id),
+      kind: "服務明細",
+      itemName: transaction.customer_name ? `${transaction.customer_name}｜${item.name}` : item.name,
+      quantity: "1",
+      amount: formatMoney(Number(item.amount || 0)),
+    }));
+  });
+  const productSaleRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) =>
+    getProductSaleRowsFromTransaction(transaction).map((row) => ({
+      ...row,
+      designerName: getDesignerNameById(transaction.designer_id),
+      itemName: transaction.customer_name ? `${transaction.customer_name}｜${row.itemName}` : row.itemName,
+    }))
+  );
+  const selfUseRows: ReportDetailRow[] = monthlyProductUsages.map((usage) => ({
+    id: `self-use-${usage.id}`,
+    date: formatReportDate(usage.used_at),
+    designerName: getDesignerNameById(usage.designer_id),
+    kind: "自領材料",
+    itemName: usage.product_name,
+    quantity: String(usage.quantity || 0),
+    amount: formatMoney(Number(usage.total_cost || 0), true),
+    isNegative: true,
+  }));
+  const shopUseRows: ReportDetailRow[] = monthlyShopUseRecords.map((record) => ({
+    id: `shop-use-${record.id}`,
+    date: formatReportDate(record.created_at),
+    designerName: (record.note || "").replace("店用領料 - ", "") || "-",
+    kind: "店用領料",
+    itemName: record.product_name,
+    quantity: String(Math.abs(Number(record.quantity || 0))),
+    amount: "只扣庫存",
+  }));
+  const discountRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) => {
+    const serviceDiscountRows = (transaction.service_items || [])
+      .filter((item: any) => Number(item.discount || 0) > 0)
+      .map((item: any, index) => ({
+        id: `tx-${transaction.id}-service-discount-${index}`,
+        date: formatReportDate(transaction.created_at),
+        designerName: getDesignerNameById(transaction.designer_id),
+        kind: "服務折扣",
+        itemName: transaction.customer_name ? `${transaction.customer_name}｜${item.name}` : item.name,
+        quantity: "1",
+        amount: formatMoney(Number(item.discount || 0), true),
+        isNegative: true,
+      }));
+    const productDiscount = [...((transaction.note || "").matchAll(/商品折扣NT\$?([\d,]+)/g))]
+      .reduce((sum, match) => sum + Number(match[1].replace(/,/g, "")), 0);
+    if (productDiscount <= 0) return serviceDiscountRows;
+    return [
+      ...serviceDiscountRows,
+      {
+        id: `tx-${transaction.id}-product-discount`,
+        date: formatReportDate(transaction.created_at),
+        designerName: getDesignerNameById(transaction.designer_id),
+        kind: "商品折扣",
+        itemName: transaction.customer_name ? `${transaction.customer_name}｜商品折扣` : "商品折扣",
+        quantity: "1",
+        amount: formatMoney(productDiscount, true),
+        isNegative: true,
+      },
+    ];
+  });
+  const actualIncomeRows = [...serviceDetailRows, ...productSaleRows].sort((a, b) => a.date.localeCompare(b.date));
+  const shopDetailRowsByKey: Record<ShopDetailKey, ReportDetailRow[]> = {
+    actualIncome: actualIncomeRows,
+    serviceRevenue: serviceDetailRows,
+    productRevenue: productSaleRows,
+    selfUse: selfUseRows,
+    shopUse: shopUseRows,
+    discount: discountRows,
+  };
+  const activeShopDetailRows = shopDetailRowsByKey[activeShopDetail];
+  const activeShopDetailTitle: Record<ShopDetailKey, string> = {
+    actualIncome: "實際收入明細",
+    serviceRevenue: "服務業績明細",
+    productRevenue: "商品銷售明細",
+    selfUse: "自領材料明細",
+    shopUse: "店用領料明細",
+    discount: "折扣金額明細",
+  };
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -616,17 +803,17 @@ export default function AdminReport() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
               {[
-                { label: "本月總業績", value: `NT$${shopTotals.totalRevenue.toLocaleString()}`, color: "#534AB7" },
-                { label: "實際收入", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
-                { label: "總客數", value: String(shopTotals.customerCount), color: "#0B66C3" },
-                { label: "商品銷售", value: `NT$${shopTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
-                { label: "自領材料", value: `-NT$${shopTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
-                { label: "折扣", value: `-NT$${shopTotals.discount.toLocaleString()}`, color: "#E24B4A" },
+                { key: "serviceRevenue" as ShopDetailKey, label: "服務業績", value: `NT$${shopTotals.serviceRevenue.toLocaleString()}`, color: "#534AB7" },
+                { key: "productRevenue" as ShopDetailKey, label: "商品銷售", value: `NT$${shopTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
+                { key: "selfUse" as ShopDetailKey, label: "自領材料", value: `-NT$${shopTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
+                { key: "shopUse" as ShopDetailKey, label: "店用領料", value: `${shopUseQuantity.toLocaleString()} 件`, color: "#8A5A10" },
+                { key: "discount" as ShopDetailKey, label: "折扣金額", value: `-NT$${shopTotals.discount.toLocaleString()}`, color: "#E24B4A" },
+                { key: "actualIncome" as ShopDetailKey, label: "實際收入", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
               ].map((card) => (
-                <div key={card.label} style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                <button key={card.label} onClick={() => setActiveShopDetail(card.key)} style={{ background: activeShopDetail === card.key ? "#F7F5FF" : "#fff", borderRadius: 12, border: activeShopDetail === card.key ? "1.5px solid #534AB7" : "0.5px solid #D3D1C7", padding: 14, textAlign: "left", cursor: "pointer" }}>
                   <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
                   <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -683,12 +870,47 @@ export default function AdminReport() {
               </div>
             </div>
 
-            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14, marginBottom: 12 }}>
-              <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700, marginBottom: 12 }}>明細入口</div>
-              <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 10 }}>
-                {["服務明細", "商品銷售明細", "自領商品明細", "折扣明細"].map((item) => (
-                  <button key={item} style={{ border: "1px solid #D3D1C7", background: "#FAFAF8", borderRadius: 12, padding: "16px 10px", textAlign: "left", color: "#2C2C2A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{item} ›</button>
-                ))}
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{activeShopDetailTitle[activeShopDetail]}</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>
+                    {activeShopDetail === "actualIncome" ? "服務與商品依日期整合排列" : "點上方統計框可切換不同明細"}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "#888780", fontWeight: 600 }}>共 {activeShopDetailRows.length} 筆</div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#F1EFE8" }}>
+                      {["日期", "設計師", "明細", "數量", "金額"].map((head) => (
+                        <th key={head} style={{ padding: "10px 14px", fontSize: 12, color: "#888780", fontWeight: 700, textAlign: "left" }}>{head}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeShopDetailRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ padding: "18px 14px", color: "#888780", fontSize: 13, textAlign: "center" }}>目前沒有明細</td>
+                      </tr>
+                    ) : activeShopDetailRows.map((row, index) => {
+                      const showDate = index === 0 || activeShopDetailRows[index - 1].date !== row.date;
+                      return (
+                        <tr key={row.id} style={{ borderTop: "0.5px solid #F1EFE8" }}>
+                          <td style={{ padding: "11px 14px", fontSize: 13, color: showDate ? "#2C2C2A" : "#B4AEA4", fontWeight: showDate ? 700 : 500 }}>{showDate ? row.date : ""}</td>
+                          <td style={{ padding: "11px 14px", fontSize: 13, color: "#5F5E5A", fontWeight: 600 }}>{row.designerName}</td>
+                          <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A", fontWeight: 600 }}>
+                            <span style={{ color: "#888780", marginRight: 8 }}>{row.kind}</span>
+                            {row.itemName}
+                          </td>
+                          <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A" }}>{row.quantity}</td>
+                          <td style={{ padding: "11px 14px", fontSize: 13, color: row.isNegative ? "#A32D2D" : activeShopDetail === "shopUse" ? "#8A5A10" : "#1976C9", fontWeight: 800 }}>{row.amount}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </>
