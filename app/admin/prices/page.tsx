@@ -13,6 +13,7 @@ function sortPriceItems(list: PriceItem[]) {
 export default function AdminPrices() {
   const router = useRouter();
   const [items, setItems] = useState<PriceItem[]>([]);
+  const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -79,37 +80,32 @@ export default function AdminPrices() {
     setItems(items.filter(p => p.id !== id));
   }
 
-  async function movePriceItem(item: PriceItem, direction: -1 | 1) {
-    const categoryItems = sortPriceItems(items.filter((price) => price.category === item.category));
-    const index = categoryItems.findIndex((price) => price.id === item.id);
-    const targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= categoryItems.length) return;
+  async function reorderPriceItem(target: PriceItem) {
+    if (!draggingPriceId || draggingPriceId === target.id) return;
+    const dragged = items.find((item) => item.id === draggingPriceId);
+    if (!dragged || dragged.category !== target.category) {
+      setDraggingPriceId(null);
+      return;
+    }
 
-    const target = categoryItems[targetIndex];
-    const currentOrder = item.sort_order || index + 1;
-    const targetOrder = target.sort_order || targetIndex + 1;
-    setItems(sortPriceItems(items.map((price) => {
-      if (price.id === item.id) return { ...price, sort_order: targetOrder };
-      if (price.id === target.id) return { ...price, sort_order: currentOrder };
-      return price;
-    })));
+    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category));
+    const fromIndex = categoryItems.findIndex((item) => item.id === dragged.id);
+    const toIndex = categoryItems.findIndex((item) => item.id === target.id);
+    if (fromIndex < 0 || toIndex < 0) return;
 
-    const [{ error: currentError }, { error: targetError }] = await Promise.all([
-      supabase.from("price_items").update({ sort_order: targetOrder }).eq("id", item.id),
-      supabase.from("price_items").update({ sort_order: currentOrder }).eq("id", target.id),
-    ]);
+    const reordered = [...categoryItems];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    const nextCategoryItems = reordered.map((item, index) => ({ ...item, sort_order: index + 1 }));
+    const nextItems = sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item));
+    setItems(nextItems);
+    setDraggingPriceId(null);
 
-    if (currentError || targetError) {
+    const results = await Promise.all(nextCategoryItems.map((item) => supabase.from("price_items").update({ sort_order: item.sort_order }).eq("id", item.id)));
+    if (results.some(({ error }) => error)) {
       alert("排序更新失敗，請再試一次");
       fetchData();
     }
-  }
-
-  function canMove(item: PriceItem, direction: -1 | 1) {
-    const categoryItems = sortPriceItems(items.filter((price) => price.category === item.category));
-    const index = categoryItems.findIndex((price) => price.id === item.id);
-    const targetIndex = index + direction;
-    return index >= 0 && targetIndex >= 0 && targetIndex < categoryItems.length;
   }
 
   if (loading) return (
@@ -139,27 +135,30 @@ export default function AdminPrices() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["排序", "分類", "項目名稱", "價格", "操作"].map(h => (
+                  {["分類", "項目名稱", "價格", "操作"].map(h => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((p) => (
-                  <tr key={p.id} style={{ borderBottom: "0.5px solid #F1EFE8" }}>
-                    <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button disabled={!canMove(p, -1)} onClick={() => movePriceItem(p, -1)} style={{ padding: "3px 8px", background: canMove(p, -1) ? "#F8F7F3" : "#F1EFE8", color: canMove(p, -1) ? "#5F5E5A" : "#B8B6AF", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: canMove(p, -1) ? "pointer" : "default" }}>上移</button>
-                        <button disabled={!canMove(p, 1)} onClick={() => movePriceItem(p, 1)} style={{ padding: "3px 8px", background: canMove(p, 1) ? "#F8F7F3" : "#F1EFE8", color: canMove(p, 1) ? "#5F5E5A" : "#B8B6AF", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: canMove(p, 1) ? "pointer" : "default" }}>下移</button>
-                      </div>
-                    </td>
+                  <tr key={p.id} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderPriceItem(p)} style={{ borderBottom: "0.5px solid #F1EFE8", background: draggingPriceId === p.id ? "#F8F7F3" : "#fff" }}>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{p.category}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{p.name}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 500 }}>{p.price_range}</td>
                     <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <button onClick={() => openEdit(p)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
                         <button onClick={() => handleDelete(p.id)} style={{ padding: "3px 8px", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>刪除</button>
+                        <button
+                          draggable
+                          onDragStart={() => setDraggingPriceId(p.id)}
+                          onDragEnd={() => setDraggingPriceId(null)}
+                          title="拖曳調整排序"
+                          style={{ width: 28, height: 28, background: "#F8F7F3", color: "#888780", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 15, lineHeight: 1, cursor: "grab" }}
+                        >
+                          ☰
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -172,17 +171,16 @@ export default function AdminPrices() {
             <div key={cat} style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 6, padding: "4px 10px", background: "#fff", borderRadius: 8, display: "inline-block" }}>{cat}</div>
               {items.filter(p => p.category === cat).map(p => (
-                <div key={p.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 6, border: "0.5px solid #D3D1C7" }}>
+                <div key={p.id} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderPriceItem(p)} style={{ background: draggingPriceId === p.id ? "#F8F7F3" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 6, border: "0.5px solid #D3D1C7" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{p.name}</div>
                       <div style={{ fontSize: 12, color: "#534AB7", marginTop: 2 }}>{p.price_range}</div>
                     </div>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <button disabled={!canMove(p, -1)} onClick={() => movePriceItem(p, -1)} style={{ padding: "3px 8px", background: canMove(p, -1) ? "#F8F7F3" : "#F1EFE8", color: canMove(p, -1) ? "#5F5E5A" : "#B8B6AF", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: canMove(p, -1) ? "pointer" : "default" }}>上移</button>
-                      <button disabled={!canMove(p, 1)} onClick={() => movePriceItem(p, 1)} style={{ padding: "3px 8px", background: canMove(p, 1) ? "#F8F7F3" : "#F1EFE8", color: canMove(p, 1) ? "#5F5E5A" : "#B8B6AF", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: canMove(p, 1) ? "pointer" : "default" }}>下移</button>
                       <button onClick={() => openEdit(p)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
                       <button onClick={() => handleDelete(p.id)} style={{ padding: "3px 8px", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>刪除</button>
+                      <button draggable onDragStart={() => setDraggingPriceId(p.id)} onDragEnd={() => setDraggingPriceId(null)} title="拖曳調整排序" style={{ width: 28, height: 24, background: "#F8F7F3", color: "#888780", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 15, lineHeight: 1, cursor: "grab" }}>☰</button>
                     </div>
                   </div>
                 </div>

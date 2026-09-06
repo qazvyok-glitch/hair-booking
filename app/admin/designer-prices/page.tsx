@@ -12,11 +12,16 @@ type DesignerPriceItem = PriceItem & {
   is_active: boolean;
 };
 
+function sortPriceItems<T extends PriceItem>(list: T[]) {
+  return [...list].sort((a, b) => a.category.localeCompare(b.category) || (a.sort_order || a.id) - (b.sort_order || b.id));
+}
+
 export default function AdminDesignerPrices() {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [baseItems, setBaseItems] = useState<PriceItem[]>([]);
   const [items, setItems] = useState<DesignerPriceItem[]>([]);
+  const [draggingPriceId, setDraggingPriceId] = useState<number | null>(null);
   const [selectedDesignerId, setSelectedDesignerId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -46,7 +51,7 @@ export default function AdminDesignerPrices() {
       ]);
       const loadedDesigners = designerData || [];
       setDesigners(loadedDesigners);
-      setBaseItems(priceData || []);
+      setBaseItems(sortPriceItems(priceData || []));
       setSelectedDesignerId(designerIdFromUrl || loadedDesigners[0]?.id || null);
       setLoading(false);
     }
@@ -66,7 +71,7 @@ export default function AdminDesignerPrices() {
       .eq("designer_id", designerId)
       .order("category")
       .order("sort_order");
-    setItems(data || []);
+    setItems(sortPriceItems(data || []));
   }
 
   const selectedDesigner = designers.find((d) => d.id === selectedDesignerId);
@@ -76,7 +81,9 @@ export default function AdminDesignerPrices() {
 
   function openNew() {
     setEditing(null);
-    setForm({ category: allCategories[0] || "", name: "", price_range: "", sort_order: 0, is_active: true });
+    const defaultCategory = allCategories[0] || "";
+    const nextSortOrder = items.filter((item) => item.category === defaultCategory).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
+    setForm({ category: defaultCategory, name: "", price_range: "", sort_order: nextSortOrder, is_active: true });
     setShowForm(true);
   }
 
@@ -120,12 +127,13 @@ export default function AdminDesignerPrices() {
       return;
     }
     setSaving(true);
+    const nextSortOrder = editing ? form.sort_order || 0 : items.filter((item) => item.category === form.category).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
     const payload = {
       designer_id: selectedDesignerId,
       category: form.category,
       name: form.name,
       price_range: form.price_range,
-      sort_order: form.sort_order || 0,
+      sort_order: nextSortOrder,
       is_active: form.is_active,
       updated_at: new Date().toISOString(),
     };
@@ -148,6 +156,36 @@ export default function AdminDesignerPrices() {
     if (!confirm("確定刪除這筆專屬價格？")) return;
     await supabase.from("designer_price_items").delete().eq("id", item.id);
     setItems(items.filter((p) => p.id !== item.id));
+  }
+
+  async function reorderPriceItem(target: DesignerPriceItem) {
+    if (!draggingPriceId || draggingPriceId === target.id) return;
+    const dragged = items.find((item) => item.id === draggingPriceId);
+    if (!dragged || dragged.category !== target.category) {
+      setDraggingPriceId(null);
+      return;
+    }
+
+    const categoryItems = sortPriceItems(items.filter((item) => item.category === target.category));
+    const fromIndex = categoryItems.findIndex((item) => item.id === dragged.id);
+    const toIndex = categoryItems.findIndex((item) => item.id === target.id);
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const reordered = [...categoryItems];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    const nextCategoryItems = reordered.map((item, index) => ({ ...item, sort_order: index + 1 }));
+    setItems(sortPriceItems(items.map((item) => nextCategoryItems.find((next) => next.id === item.id) || item)));
+    setDraggingPriceId(null);
+
+    const results = await Promise.all(nextCategoryItems.map((item) => (
+      supabase.from("designer_price_items").update({ sort_order: item.sort_order, updated_at: new Date().toISOString() }).eq("id", item.id)
+    )));
+
+    if (results.some(({ error }) => error)) {
+      alert("排序更新失敗，請再試一次");
+      if (selectedDesignerId) fetchDesignerPrices(selectedDesignerId);
+    }
   }
 
   if (loading) return (
@@ -205,16 +243,25 @@ export default function AdminDesignerPrices() {
               </thead>
               <tbody>
                 {filtered.map((item) => (
-                  <tr key={item.id} style={{ borderBottom: "0.5px solid #F1EFE8", opacity: item.is_active ? 1 : 0.55 }}>
+                  <tr key={item.id} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderPriceItem(item)} style={{ borderBottom: "0.5px solid #F1EFE8", opacity: item.is_active ? 1 : 0.55, background: draggingPriceId === item.id ? "#F8F7F3" : "#fff" }}>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: item.is_active ? "#085041" : "#A32D2D" }}>{item.is_active ? "顯示" : "隱藏"}</td>
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{item.category}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{item.name}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 500 }}>{item.price_range}</td>
                     <td style={{ padding: "10px 12px" }}>
-                      <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
                         <button onClick={() => toggleActive(item)} style={{ padding: "3px 8px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>{item.is_active ? "隱藏" : "顯示"}</button>
                         <button onClick={() => handleDelete(item)} style={{ padding: "3px 8px", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>刪除</button>
+                        <button
+                          draggable
+                          onDragStart={() => setDraggingPriceId(item.id)}
+                          onDragEnd={() => setDraggingPriceId(null)}
+                          title="拖曳調整排序"
+                          style={{ width: 28, height: 28, background: "#F8F7F3", color: "#888780", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 15, lineHeight: 1, cursor: "grab" }}
+                        >
+                          ☰
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -224,7 +271,7 @@ export default function AdminDesignerPrices() {
           </div>
         ) : (
           filtered.map((item) => (
-            <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 6, border: "0.5px solid #D3D1C7", opacity: item.is_active ? 1 : 0.55 }}>
+            <div key={item.id} onDragOver={(event) => event.preventDefault()} onDrop={() => reorderPriceItem(item)} style={{ background: draggingPriceId === item.id ? "#F8F7F3" : "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 6, border: "0.5px solid #D3D1C7", opacity: item.is_active ? 1 : 0.55 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: "#888780", marginBottom: 2 }}>{item.category} · {item.is_active ? "顯示" : "隱藏"}</div>
@@ -234,6 +281,7 @@ export default function AdminDesignerPrices() {
                 <div style={{ display: "flex", gap: 4, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
                   <button onClick={() => toggleActive(item)} style={{ padding: "3px 8px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>{item.is_active ? "隱藏" : "顯示"}</button>
+                  <button draggable onDragStart={() => setDraggingPriceId(item.id)} onDragEnd={() => setDraggingPriceId(null)} title="拖曳調整排序" style={{ width: 28, height: 24, background: "#F8F7F3", color: "#888780", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 15, lineHeight: 1, cursor: "grab" }}>☰</button>
                 </div>
               </div>
             </div>
