@@ -2340,7 +2340,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
         <div className="modal-header">
           <div>
             <div className="modal-title">結帳</div>
-            <div className="modal-subtitle">{row.name} · {row.service}</div>
+            <div className="modal-subtitle">{row.name}</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
