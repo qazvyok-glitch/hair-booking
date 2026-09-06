@@ -222,6 +222,7 @@ export default function DesignerPreviewV2Page() {
   const [backendProducts, setBackendProducts] = useState<BackendProduct[]>([]);
   const [backendCustomers, setBackendCustomers] = useState<CustomerRecord[]>(customerRecords);
   const [designerPriceItems, setDesignerPriceItems] = useState<BackendDesignerPriceItem[]>([]);
+  const [allDesignerPriceItems, setAllDesignerPriceItems] = useState<BackendDesignerPriceItem[]>([]);
   const [priceCategoryOrder, setPriceCategoryOrder] = useState<string[]>([]);
   const [backendScheduleItems, setBackendScheduleItems] = useState<CalendarRecords<ScheduleItem>>({});
   const [backendTeamScheduleItems, setBackendTeamScheduleItems] = useState<CalendarRecords<ScheduleItem>>({});
@@ -261,7 +262,7 @@ export default function DesignerPreviewV2Page() {
       .order("booking_time");
     const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: allPriceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
       supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
@@ -271,6 +272,7 @@ export default function DesignerPreviewV2Page() {
       supabase.from("customers").select("id, name, phone, customer_no, referrer").order("customer_no"),
       supabase.from("price_items").select("id, category, name, price_range, sort_order").order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
+      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("is_active", true).order("category").order("sort_order"),
       supabase.from("shop_info").select("key, value, is_active").in("key", ["price_category_order", designerCategoryOrderKey(session.id)]),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
@@ -293,6 +295,7 @@ export default function DesignerPreviewV2Page() {
     }));
     const publicPriceItems = (publicPriceData || []) as BackendPriceItem[];
     const designerSpecificPriceItems = (priceData || []) as BackendDesignerPriceItem[];
+    const allSpecificPriceItems = (allPriceData || []) as BackendDesignerPriceItem[];
     const categorySettings = (categorySettingData || []) as BackendShopInfo[];
     const nextPriceCategoryOrder = readCategoryOrder(
       categorySettings.find((item) => item.key === designerCategoryOrderKey(session.id) && item.is_active)?.value
@@ -320,6 +323,7 @@ export default function DesignerPreviewV2Page() {
     setBackendProductUsage(productUsage);
     setBackendProducts(products);
     setBackendCustomers(customers);
+    setAllDesignerPriceItems(allSpecificPriceItems);
     setPriceCategoryOrder(nextPriceCategoryOrder);
     setDesignerPriceItems(sortDesignerPriceItems(priceItems, nextPriceCategoryOrder));
     setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
@@ -390,7 +394,7 @@ export default function DesignerPreviewV2Page() {
         customer_phone: customerPhone,
         booking_date: bookingDraft.date,
         booking_time: bookingDraft.time,
-        note: bookingDraft.note,
+        note: buildSyncedBookingNote(bookingDraft.service, bookingDraft.note),
         status: "confirmed",
         service_ids: selectedService ? [selectedService.id] : [],
       });
@@ -670,8 +674,11 @@ export default function DesignerPreviewV2Page() {
   const activeDesignerOptions = backendDesigners.length > 0 ? backendDesigners.map(getDesignerLabel) : [designerProfile.name];
   const activeServiceOptions = backendServices.length > 0 ? backendServices.map((service) => service.name) : [];
   const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems, priceCategoryOrder);
+  const bookingServiceOptions = bookingDraft
+    ? buildBookingServiceOptions(bookingDraft.designer, backendDesigners, allDesignerPriceItems, activeServiceOptions, priceCategoryOrder)
+    : activeServiceOptions;
   const defaultBookingDate = selectedScheduleDate;
-  const defaultBookingService = activeServiceOptions[0] || "";
+  const defaultBookingService = checkoutServiceOptions[0]?.name || activeServiceOptions[0] || "";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
   const isManager = backendSession?.is_manager ?? false;
   const visiblePendingBookings = isManager && pendingScope === "team"
@@ -681,6 +688,11 @@ export default function DesignerPreviewV2Page() {
   const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage, customIncomeRange) : withCustomIncomeRange(earningsRanges, customIncomeRange);
   const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage, customIncomeRange) : null;
   const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
+
+  useEffect(() => {
+    if (!bookingDraft || bookingServiceOptions.length === 0 || bookingServiceOptions.includes(bookingDraft.service)) return;
+    setBookingDraft({ ...bookingDraft, service: bookingServiceOptions[0] });
+  }, [bookingDraft, bookingServiceOptions]);
 
   return (
     <main className="preview-page">
@@ -707,7 +719,7 @@ export default function DesignerPreviewV2Page() {
       {showShopUseModal && <ShopUseMaterialModal products={backendProducts} complete={shopUseComplete} isSynced={backendConnected} onComplete={saveShopUseMaterials} onClose={() => { setShowShopUseModal(false); setShopUseComplete(false); }} />}
       {showProductCheckoutModal && <ProductCheckoutModal products={backendProducts} complete={productCheckoutComplete} isSynced={backendConnected} onComplete={completeProductCheckout} onClose={() => { setShowProductCheckoutModal(false); setProductCheckoutComplete(false); }} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
-      {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
+      {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={bookingServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
       <style>{`
         .preview-page { min-height: 100vh; background: #eef0f3; display: flex; justify-content: center; padding: 20px; color: #1f2937; }
@@ -2852,6 +2864,20 @@ function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], cat
     }));
   }
   return [];
+}
+
+function buildBookingServiceOptions(designerLabel: string, designers: BackendDesigner[], priceItems: BackendDesignerPriceItem[], fallbackServices: string[], categoryOrder: string[]) {
+  const designer = findDesignerByLabel(designers, designerLabel);
+  const designerItems = designer
+    ? sortDesignerPriceItems(priceItems.filter((item) => item.designer_id === designer.id && item.is_active !== false), categoryOrder)
+    : [];
+  const designerServiceNames = designerItems.map((item) => item.name);
+  return designerServiceNames.length > 0 ? designerServiceNames : fallbackServices;
+}
+
+function buildSyncedBookingNote(serviceName: string, note: string) {
+  const cleanNote = note.replace(/預約服務項目：[^\n]*(\n)?/g, "").trim();
+  return [`預約服務項目：${serviceName}`, cleanNote].filter(Boolean).join("\n");
 }
 
 function distributeServiceDiscount(draft: CheckoutDraft): BackendServiceItem[] {
