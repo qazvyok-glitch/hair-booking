@@ -1019,7 +1019,7 @@ export default function DesignerPreviewV2Page() {
         .booking-service-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
         .booking-service-count { color: #8b95a3; font-size: 11px; font-weight: 800; }
         .booking-selected-services { display: grid; gap: 8px; }
-        .booking-selected-service { display: grid; grid-template-columns: 48px 1fr 28px; align-items: center; gap: 8px; border: 1px solid #dfe3ea; background: #fff; border-radius: 12px; padding: 10px; }
+        .booking-selected-service { display: grid; grid-template-columns: 34px 1fr 28px; align-items: center; gap: 8px; border: 1px solid #dfe3ea; background: #fff; border-radius: 12px; padding: 10px; }
         .booking-selected-service span { color: #1478c8; background: #eaf7ff; border-radius: 999px; padding: 4px 6px; font-size: 10px; font-weight: 950; text-align: center; }
         .booking-selected-service strong { color: #1f2937; font-size: 13px; font-weight: 900; line-height: 1.4; }
         .booking-selected-service button { width: 28px; height: 28px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 16px; font-weight: 950; cursor: pointer; }
@@ -2597,7 +2597,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
           <div className="booking-service-head">
             <div>
               <div className="booking-label">服務項目</div>
-              <div className="booking-service-count">已選 {selectedServiceNames.length} 項，結帳會自動帶入</div>
+              <div className="booking-service-count">已選 {selectedServiceNames.length} 項服務項目，結帳會自動帶入</div>
             </div>
             <button className="product-picker-toggle" onClick={() => setShowServicePicker(!showServicePicker)}>
               {showServicePicker ? "收起" : "＋新增服務"}
@@ -2606,7 +2606,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
           <div className="booking-selected-services">
             {selectedServiceNames.map((item, index) => (
               <div className="booking-selected-service" key={item}>
-                <span>{index === 0 ? "主服務" : "加做"}</span>
+                <span>{index + 1}</span>
                 <strong>{item}</strong>
                 <button onClick={() => removeBookingService(item)} aria-label={`移除 ${item}`}>×</button>
               </div>
