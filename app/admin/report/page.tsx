@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
@@ -29,6 +30,7 @@ type Transaction = {
   product_items: { id: number; name: string; amount: number; quantity: number }[];
   total_amount: number;
   payment_method: string;
+  note?: string;
   created_at: string;
 };
 
@@ -45,6 +47,50 @@ type ProductUsage = {
 // 舊系統中文名 → 新系統設計師 id 對應（透過 display_name 比對，不寫死）
 function findDesignerByDisplayName(designers: Designer[], displayName: string) {
   return designers.find(d => d.display_name === displayName);
+}
+
+function getProductSaleTotal(transaction: Transaction) {
+  const productItemsTotal = (transaction.product_items || []).reduce((sum, item: any) => sum + Number(item.amount || 0) * Number(item.quantity || 1), 0);
+  const importedProductTotal = (transaction.service_items || []).reduce((sum, item: any) => item.name?.startsWith("[商品]") ? sum + Number(item.amount || 0) : sum, 0);
+  const productSection = (transaction.note || "").split("客人購買商品：")[1];
+  const noteTotal = productSection
+    ? productSection.split("、").reduce((sum, item) => {
+      const amountMatch = item.match(/小計NT\$?([\d,]+)/);
+      return sum + (amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 0);
+    }, 0)
+    : 0;
+  return productItemsTotal + importedProductTotal + noteTotal;
+}
+
+function getTransactionDiscount(transaction: Transaction) {
+  const serviceDiscount = (transaction.service_items || []).reduce((sum, item: any) => sum + Number(item.discount || 0), 0);
+  const productSection = (transaction.note || "").split("客人購買商品：")[1] || "";
+  const productDiscount = [...productSection.matchAll(/折扣NT\$?([\d,]+)/g)].reduce((sum, match) => sum + Number(match[1].replace(/,/g, "")), 0);
+  return serviceDiscount + productDiscount;
+}
+
+function getServiceRevenue(transaction: Transaction) {
+  const explicitService = (transaction.service_items || []).reduce((sum, item: any) => item.name?.startsWith("[商品]") ? sum : sum + Number(item.amount || 0), 0);
+  if (explicitService > 0) return explicitService;
+  return Math.max(0, Number(transaction.total_amount || 0) - getProductSaleTotal(transaction));
+}
+
+function getReportTotals(transactions: Transaction[], productUsages: ProductUsage[], designerId?: number) {
+  const scopedTransactions = designerId ? transactions.filter((item) => item.designer_id === designerId) : transactions;
+  const scopedProductUsages = designerId ? productUsages.filter((item) => item.designer_id === designerId) : productUsages;
+  const serviceRevenue = scopedTransactions.reduce((sum, item) => sum + getServiceRevenue(item), 0);
+  const productRevenue = scopedTransactions.reduce((sum, item) => sum + getProductSaleTotal(item), 0);
+  const selfUse = scopedProductUsages.reduce((sum, item) => sum + Number(item.total_cost || 0), 0);
+  const discount = scopedTransactions.reduce((sum, item) => sum + getTransactionDiscount(item), 0);
+  return {
+    serviceRevenue,
+    productRevenue,
+    selfUse,
+    discount,
+    totalRevenue: serviceRevenue + productRevenue,
+    actualIncome: Math.max(0, serviceRevenue + productRevenue - selfUse - discount),
+    customerCount: scopedTransactions.length,
+  };
 }
 
 export default function AdminReport() {
@@ -65,6 +111,8 @@ export default function AdminReport() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   });
+  const [reportMode, setReportMode] = useState<"shop" | "designer">("shop");
+  const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
   const [expandedDesigner, setExpandedDesigner] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
   const [nameMode, setNameMode] = useState<"english" | "chinese" | "both">("both");
@@ -449,7 +497,14 @@ export default function AdminReport() {
 
   const yearTotal = yearlyData.reduce((sum, [, v]) => sum + v, 0);
   const maxMonthly = Math.max(...yearlyData.map(([, v]) => v), 1);
-  const monthTotalRevenue = monthlyTransactions.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+  const monthlyProductUsages = productUsages.filter((usage) => usage.used_at?.slice(0, 7) === selectedMonth);
+  const shopTotals = getReportTotals(monthlyTransactions, monthlyProductUsages);
+  const activeReportDesigner = designers.find((designer) => designer.id === (reportDesignerId || designers[0]?.id));
+  const designerTotals = activeReportDesigner ? getReportTotals(monthlyTransactions, monthlyProductUsages, activeReportDesigner.id) : getReportTotals([], []);
+  const designerRows = designers
+    .map((designer) => ({ designer, totals: getReportTotals(monthlyTransactions, monthlyProductUsages, designer.id) }))
+    .sort((a, b) => b.totals.actualIncome - a.totals.actualIncome);
+  const monthTotalRevenue = shopTotals.totalRevenue;
   const monthTotalCommission = designers.reduce((sum, d) => sum + calcDesignerReport(d).totalCommission, 0);
   const serviceColors = ["#534AB7","#7B6FD4","#1D9E75","#BA7517","#E24B4A","#0C447C","#085041","#A32D2D","#633806","#3C3489"];
 
@@ -535,6 +590,158 @@ export default function AdminReport() {
             </button>
           </div>
         )}
+
+        <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+            <button onClick={() => setReportMode("shop")} style={{ border: "none", padding: "14px 0", background: reportMode === "shop" ? "#534AB7" : "#fff", color: reportMode === "shop" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>店鋪總報表</button>
+            <button onClick={() => setReportMode("designer")} style={{ border: "none", padding: "14px 0", background: reportMode === "designer" ? "#534AB7" : "#fff", color: reportMode === "designer" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>設計師月報表</button>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end", padding: 14, borderTop: "0.5px solid #F1EFE8" }}>
+            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#888780", fontWeight: 600 }}>
+              選擇月份
+              <input type="month" value={selectedMonth} onChange={(event) => { setSelectedMonth(event.target.value); setSelectedYear(Number(event.target.value.slice(0, 4))); }} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+            </label>
+            {reportMode === "designer" && (
+              <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#888780", fontWeight: 600, minWidth: 180 }}>
+                選擇設計師
+                <select value={String(reportDesignerId || designers[0]?.id || "")} onChange={(event) => setReportDesignerId(Number(event.target.value))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", background: "#fff" }}>
+                  {designers.map((designer) => <option key={designer.id} value={designer.id}>{getDesignerLabel(designer)}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+        </div>
+
+        {reportMode === "shop" && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
+              {[
+                { label: "本月總業績", value: `NT$${shopTotals.totalRevenue.toLocaleString()}`, color: "#534AB7" },
+                { label: "實際收入", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
+                { label: "總客數", value: String(shopTotals.customerCount), color: "#0B66C3" },
+                { label: "商品銷售", value: `NT$${shopTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
+                { label: "自領材料", value: `-NT$${shopTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
+                { label: "折扣", value: `-NT$${shopTotals.discount.toLocaleString()}`, color: "#E24B4A" },
+              ].map((card) => (
+                <div key={card.label} style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
+                  <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1.1fr .9fr" : "1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>設計師業績排行</div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 680 }}>
+                    <thead>
+                      <tr style={{ background: "#F1EFE8" }}>
+                        {["排名", "設計師", "客數", "服務業績", "商品銷售", "自領材料", "實際收入"].map((head) => (
+                          <th key={head} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 700, textAlign: "left" }}>{head}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {designerRows.map(({ designer, totals }, index) => (
+                        <tr key={designer.id} style={{ borderTop: "0.5px solid #F1EFE8" }}>
+                          <td style={{ padding: "10px 12px", fontSize: 13 }}>{index + 1}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 700 }}>{getDesignerLabel(designer)}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13 }}>{totals.customerCount}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13 }}>NT${totals.serviceRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13 }}>NT${totals.productRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13, color: "#A32D2D" }}>-NT${totals.selfUse.toLocaleString()}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 800 }}>NT${totals.actualIncome.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700, marginBottom: 14 }}>收入組成</div>
+                {[
+                  { label: "服務業績", value: shopTotals.serviceRevenue, color: "#534AB7" },
+                  { label: "商品銷售", value: shopTotals.productRevenue, color: "#1D9E75" },
+                  { label: "自領材料", value: shopTotals.selfUse, color: "#A32D2D", negative: true },
+                  { label: "折扣", value: shopTotals.discount, color: "#BA7517", negative: true },
+                ].map((item) => {
+                  const maxValue = Math.max(shopTotals.serviceRevenue, shopTotals.productRevenue, shopTotals.selfUse, shopTotals.discount, 1);
+                  return (
+                    <div key={item.label} style={{ marginBottom: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 6, fontSize: 12, color: "#5F5E5A", fontWeight: 600 }}>
+                        <span>{item.label}</span>
+                        <span style={{ color: item.color }}>{item.negative ? "-" : ""}NT${item.value.toLocaleString()}</span>
+                      </div>
+                      <div style={{ height: 8, background: "#F1EFE8", borderRadius: 99, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.max(4, (item.value / maxValue) * 100)}%`, background: item.color, borderRadius: 99 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700, marginBottom: 12 }}>明細入口</div>
+              <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 10 }}>
+                {["服務明細", "商品銷售明細", "自領商品明細", "折扣明細"].map((item) => (
+                  <button key={item} style={{ border: "1px solid #D3D1C7", background: "#FAFAF8", borderRadius: 12, padding: "16px 10px", textAlign: "left", color: "#2C2C2A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{item} ›</button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {reportMode === "designer" && activeReportDesigner && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(7, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
+              {[
+                { label: `${getDesignerLabel(activeReportDesigner)} 本月總業績`, value: `NT$${designerTotals.totalRevenue.toLocaleString()}`, color: "#534AB7" },
+                { label: "實際收入", value: `NT$${designerTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
+                { label: "總客數", value: String(designerTotals.customerCount), color: "#0B66C3" },
+                { label: "商品銷售", value: `NT$${designerTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
+                { label: "自領材料", value: `-NT$${designerTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
+                { label: "折扣", value: `-NT$${designerTotals.discount.toLocaleString()}`, color: "#E24B4A" },
+                { label: "完成預約", value: String(monthlyTransactions.filter((item) => item.designer_id === activeReportDesigner.id).length), color: "#0B66C3" },
+              ].map((card) => (
+                <div key={card.label} style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                  <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
+                  <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{getDesignerLabel(activeReportDesigner)} 月報摘要</div>
+                {[
+                  ["服務業績", designerTotals.serviceRevenue, false],
+                  ["商品銷售", designerTotals.productRevenue, false],
+                  ["自領材料", designerTotals.selfUse, true],
+                  ["折扣", designerTotals.discount, true],
+                  ["實際收入", designerTotals.actualIncome, false],
+                ].map(([label, value, negative]) => (
+                  <div key={String(label)} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderTop: "0.5px solid #F1EFE8", fontSize: 13, color: label === "實際收入" ? "#534AB7" : "#2C2C2A", fontWeight: label === "實際收入" ? 800 : 500 }}>
+                    <span>{label}</span>
+                    <span>{negative ? "-" : ""}NT${Number(value).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700, marginBottom: 12 }}>明細入口</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {["服務明細", "商品銷售明細", "自領商品明細", "折扣明細"].map((item) => (
+                    <button key={item} style={{ border: "1px solid #D3D1C7", background: "#FAFAF8", borderRadius: 12, padding: "18px 10px", textAlign: "left", color: "#2C2C2A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{item} ›</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {reportMode === "shop" && (
+        <>
 
         {/* 年度選擇 */}
         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -672,7 +879,6 @@ export default function AdminReport() {
                 const entries = Object.entries(stats).sort((a, b) => b[1] - a[1]);
                 const total = entries.reduce((sum, [, v]) => sum + v, 0);
                 if (entries.length === 0) return <div style={{ textAlign: "center", padding: 20, color: "#888780" }}>本月無服務紀錄</div>;
-                let cumulative = 0;
                 return (
                   <div>
                     <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
@@ -849,6 +1055,8 @@ export default function AdminReport() {
             </div>
           );
         })}
+        </>
+        )}
       </div>
 
       <AdminBottomNav current="report" />
