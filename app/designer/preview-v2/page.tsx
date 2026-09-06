@@ -141,6 +141,7 @@ type BackendCustomer = { id: string; name?: string | null; phone?: string | null
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
+type ProductCheckoutDraft = { customerName: string; customerPhone: string; productItems: CheckoutProductItem[]; paymentMethod: string; note: string };
 type SelfUseMaterialItem = { product: BackendProduct; quantity: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { date?: string; name: string; item: string; amount: string };
@@ -200,6 +201,8 @@ export default function DesignerPreviewV2Page() {
   const [bookingComplete, setBookingComplete] = useState(false);
   const [showSelfUseModal, setShowSelfUseModal] = useState(false);
   const [selfUseComplete, setSelfUseComplete] = useState(false);
+  const [showProductCheckoutModal, setShowProductCheckoutModal] = useState(false);
+  const [productCheckoutComplete, setProductCheckoutComplete] = useState(false);
   const emptyTodayRows = initialTodayRows;
   const emptyScheduleItems = initialScheduleItems;
   const emptyLeaveItems = initialLeaveItems;
@@ -503,6 +506,74 @@ export default function DesignerPreviewV2Page() {
     setCheckoutComplete(true);
   }
 
+  async function completeProductCheckout(draft: ProductCheckoutDraft, total: number) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，商品結帳未送出。請重新整理後再試。");
+      return;
+    }
+    if (draft.productItems.length === 0) {
+      alert("請先選擇商品。");
+      return;
+    }
+
+    const customerName = draft.customerName.trim() || "現場客人";
+    const customerPhone = draft.customerPhone.trim();
+    if (customerPhone) {
+      const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", customerPhone).maybeSingle();
+      if (existingCustomer?.id) {
+        await supabase.from("customers").update({ name: customerName }).eq("id", existingCustomer.id);
+      } else {
+        await supabase.from("customers").insert({
+          id: crypto.randomUUID(),
+          name: customerName,
+          phone: customerPhone,
+        });
+      }
+    }
+
+    const productRows = draft.productItems.map((item) => {
+      const finalTotal = Math.max(0, item.linePrice - item.discount);
+      const discountText = item.discount > 0 ? `，折扣NT$${item.discount.toLocaleString()}` : "";
+      return `${item.product.name} x${item.quantity}，金額NT$${item.linePrice.toLocaleString()}${discountText}，小計NT$${finalTotal.toLocaleString()}`;
+    });
+    const noteRows = [
+      draft.note,
+      "純商品結帳",
+      `客人購買商品：${productRows.join("、")}`,
+    ].filter(Boolean);
+    const { error } = await supabase.from("transactions").insert({
+      booking_id: null,
+      designer_id: backendSession.id,
+      customer_name: customerName,
+      service_items: [],
+      total_amount: total,
+      note: noteRows.join("\n"),
+      payment_method: draft.paymentMethod,
+    });
+    if (error) {
+      alert("商品結帳同步失敗，請稍後再試。");
+      return;
+    }
+
+    for (const item of draft.productItems) {
+      const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+      if (product) {
+        const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+        await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+        await supabase.from("stock_records").insert({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          quantity: -item.quantity,
+          type: "out",
+          note: `純商品結帳 - ${customerName}`,
+        });
+      }
+    }
+
+    await loadBackendData(backendSession);
+    setProductCheckoutComplete(true);
+  }
+
   async function saveSelfUseMaterials(items: SelfUseMaterialItem[]) {
     if (!backendConnected || !backendSession) {
       alert("後台尚未連線，自領材料未送出。請重新整理後再試。");
@@ -581,7 +652,7 @@ export default function DesignerPreviewV2Page() {
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} />}
             </>
           )}
         </div>
@@ -590,6 +661,7 @@ export default function DesignerPreviewV2Page() {
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
       {showSelfUseModal && <SelfUseMaterialModal products={backendProducts} complete={selfUseComplete} isSynced={backendConnected} onComplete={saveSelfUseMaterials} onClose={() => { setShowSelfUseModal(false); setSelfUseComplete(false); }} />}
+      {showProductCheckoutModal && <ProductCheckoutModal products={backendProducts} complete={productCheckoutComplete} isSynced={backendConnected} onComplete={completeProductCheckout} onClose={() => { setShowProductCheckoutModal(false); setProductCheckoutComplete(false); }} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
@@ -1374,7 +1446,7 @@ function Legend() {
   );
 }
 
-function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void }) {
+function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse, onOpenProductCheckout }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void; onOpenProductCheckout: () => void }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
@@ -1406,7 +1478,7 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, 
       <div className="earnings-action-row">
         <button className="earnings-action-btn primary" onClick={() => setShowIncomeDetails(true)}>查看明細</button>
         <button className="earnings-action-btn" onClick={onOpenSelfUse}>自領材料</button>
-        <button className="earnings-action-btn muted" type="button">其他功能</button>
+        <button className="earnings-action-btn" type="button" onClick={onOpenProductCheckout}>新增結帳</button>
       </div>
       <section className="panel">
         <div className="income-detail-header">
@@ -1432,6 +1504,176 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, 
       )}
       {showIncomeDetails && <IncomeDetailsModal range={activeRange} ranges={ranges} detailGroups={detailGroups} onClose={() => setShowIncomeDetails(false)} />}
     </>
+  );
+}
+
+function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClose }: { products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (draft: ProductCheckoutDraft, total: number) => void | Promise<void>; onClose: () => void }) {
+  const [draft, setDraft] = useState<ProductCheckoutDraft>({
+    customerName: "",
+    customerPhone: "",
+    productItems: [],
+    paymentMethod: "現金",
+    note: "",
+  });
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("全部");
+  const [saving, setSaving] = useState(false);
+  const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
+  const filteredProducts = products.filter((product) => {
+    const itemCategory = product.category || "未分類";
+    const keyword = search.trim().toLowerCase();
+    if (product.is_active === false) return false;
+    if (category !== "全部" && itemCategory !== category) return false;
+    if (keyword && !`${product.name} ${itemCategory}`.toLowerCase().includes(keyword)) return false;
+    return true;
+  });
+  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
+
+  function toggleProduct(product: BackendProduct) {
+    const exists = draft.productItems.find((item) => item.product.id === product.id);
+    setDraft({
+      ...draft,
+      productItems: exists
+        ? draft.productItems.filter((item) => item.product.id !== product.id)
+        : [...draft.productItems, { product, quantity: 1, linePrice: product.unit_price, discount: 0 }],
+    });
+  }
+
+  function updateProductQuantity(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        const quantity = Math.max(1, value);
+        const linePrice = item.product.unit_price * quantity;
+        return { ...item, quantity, linePrice, discount: Math.min(item.discount, linePrice) };
+      }),
+    });
+  }
+
+  function updateProductPrice(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        const linePrice = Math.max(0, value);
+        return { ...item, linePrice, discount: Math.min(item.discount, linePrice) };
+      }),
+    });
+  }
+
+  function updateProductDiscount(productId: number, value: number) {
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        return { ...item, discount: Math.min(Math.max(0, value), item.linePrice) };
+      }),
+    });
+  }
+
+  async function submit() {
+    setSaving(true);
+    await onComplete(draft, productSubtotal);
+    setSaving(false);
+  }
+
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">商品結帳已同步</div>
+            <div className="modal-subtitle">已寫入後台交易、同步扣庫存，並列入收入商品銷售。</div>
+          </div>
+          <div className="amount-preview"><span>商品實收小計</span><strong>NT${productSubtotal.toLocaleString()}</strong></div>
+          <button className="full-width-btn" onClick={onClose}>完成</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">新增結帳</div>
+            <div className="modal-subtitle">適用於客人不做服務、單純購買商品。</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <section className="panel">
+          <div className="panel-label">顧客資料</div>
+          <div className="detail-grid">
+            <input className="checkout-input" value={draft.customerName} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} placeholder="顧客姓名（可不填）" />
+            <input className="checkout-input" value={draft.customerPhone} onChange={(event) => setDraft({ ...draft, customerPhone: event.target.value })} placeholder="電話（可不填）" />
+          </div>
+        </section>
+        <section className="panel">
+          <div className="checkout-section-head">
+            <div className="panel-label">客人購買商品</div>
+          </div>
+          <div className="product-picker-hint">商品品項由後台同步，可打字搜尋，也可用分類快速找。</div>
+          <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋商品名稱或分類..." />
+          <div className="product-category-tabs">
+            {categories.map((item) => (
+              <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
+                {item}
+              </button>
+            ))}
+          </div>
+          <div className="product-list">
+            {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+              const selected = draft.productItems.find((item) => item.product.id === product.id);
+              const unitText = product.unit ? ` / ${product.unit}` : "";
+              return (
+                <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                  <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                    <span>
+                      <span className="product-name">{product.name}</span>
+                      <span className="product-meta">{product.category || "未分類"} · NT${product.unit_price.toLocaleString()}{unitText}</span>
+                    </span>
+                    <span className="product-check">{selected ? "✓" : ""}</span>
+                  </button>
+                </div>
+              );
+            }) : (
+              <div className="product-empty">找不到符合的商品</div>
+            )}
+          </div>
+          {draft.productItems.length > 0 && (
+            <div className="product-checkout-lines">
+              {draft.productItems.map((item) => (
+                <div key={item.product.id}>
+                  <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
+                  <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
+                </div>
+              ))}
+              <div className="selected-product-summary">
+                <div className="selected-product-row">
+                  <span>商品實收小計</span>
+                  <strong>+NT${productSubtotal.toLocaleString()}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+        <section className="panel">
+          <div className="panel-label">付款與備註</div>
+          <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
+            {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
+          </select>
+          <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="商品交易備註、折扣原因..." />
+        </section>
+        <div className="amount-preview"><span>客人應收總額</span><strong>NT${productSubtotal.toLocaleString()}</strong></div>
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving || draft.productItems.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "完成商品結帳" : "等待後台連線"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
