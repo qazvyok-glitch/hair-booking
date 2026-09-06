@@ -139,7 +139,10 @@ export default function AdminBookings() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [offDays, setOffDays] = useState<OffDay[]>([]);
   const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window === "undefined") return "calendar";
+    return new URLSearchParams(window.location.search).get("view") === "list" ? "list" : "calendar";
+  });
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString("en-CA"));
 
@@ -268,7 +271,7 @@ export default function AdminBookings() {
             {(["calendar", "list"] as ViewMode[]).map((mode) => (
               <button
                 key={mode}
-                onClick={() => setViewMode(mode)}
+                onClick={() => { setViewMode(mode); router.replace(`/admin/bookings?view=${mode}`); }}
                 style={{
                   border: "none",
                   borderRadius: 8,

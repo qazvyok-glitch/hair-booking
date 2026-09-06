@@ -191,7 +191,10 @@ export default function AdminReport() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   });
-  const [reportMode, setReportMode] = useState<"shop" | "designer">("shop");
+  const [reportMode, setReportMode] = useState<"shop" | "designer">(() => {
+    if (typeof window === "undefined") return "shop";
+    return new URLSearchParams(window.location.search).get("mode") === "designer" ? "designer" : "shop";
+  });
   const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
@@ -772,8 +775,8 @@ export default function AdminReport() {
 
         <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-            <button onClick={() => setReportMode("shop")} style={{ border: "none", padding: "14px 0", background: reportMode === "shop" ? "#534AB7" : "#fff", color: reportMode === "shop" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>店鋪總報表</button>
-            <button onClick={() => setReportMode("designer")} style={{ border: "none", padding: "14px 0", background: reportMode === "designer" ? "#534AB7" : "#fff", color: reportMode === "designer" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>設計師月報表</button>
+            <button onClick={() => { setReportMode("shop"); router.replace("/admin/report?mode=shop"); }} style={{ border: "none", padding: "14px 0", background: reportMode === "shop" ? "#534AB7" : "#fff", color: reportMode === "shop" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>店鋪總報表</button>
+            <button onClick={() => { setReportMode("designer"); router.replace("/admin/report?mode=designer"); }} style={{ border: "none", padding: "14px 0", background: reportMode === "designer" ? "#534AB7" : "#fff", color: reportMode === "designer" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>設計師月報表</button>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end", padding: 14, borderTop: "0.5px solid #F1EFE8" }}>
             <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#888780", fontWeight: 600 }}>
