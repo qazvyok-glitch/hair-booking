@@ -141,6 +141,7 @@ type BackendCustomer = { id: string; name?: string | null; phone?: string | null
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
+type SelfUseMaterialItem = { product: BackendProduct; quantity: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { name: string; item: string; amount: string };
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
@@ -197,6 +198,8 @@ export default function DesignerPreviewV2Page() {
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [bookingDraft, setBookingDraft] = useState<BookingDraft | null>(null);
   const [bookingComplete, setBookingComplete] = useState(false);
+  const [showSelfUseModal, setShowSelfUseModal] = useState(false);
+  const [selfUseComplete, setSelfUseComplete] = useState(false);
   const emptyTodayRows = initialTodayRows;
   const emptyScheduleItems = initialScheduleItems;
   const emptyLeaveItems = initialLeaveItems;
@@ -498,6 +501,52 @@ export default function DesignerPreviewV2Page() {
     setCheckoutComplete(true);
   }
 
+  async function saveSelfUseMaterials(items: SelfUseMaterialItem[]) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，自領材料未送出。請重新整理後再試。");
+      return;
+    }
+    if (items.length === 0) {
+      alert("請先選擇自領材料。");
+      return;
+    }
+
+    const usageDate = new Date().toISOString().split("T")[0];
+    const { error } = await supabase.from("product_usage").insert(
+      items.map((item) => ({
+        designer_id: backendSession.id,
+        product_id: item.product.id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        unit_price: item.product.unit_price,
+        total_cost: item.product.unit_price * item.quantity,
+        used_at: usageDate,
+      }))
+    );
+    if (error) {
+      alert("自領材料同步失敗，請稍後再試。");
+      return;
+    }
+
+    for (const item of items) {
+      const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+      if (product) {
+        const newStock = Math.max(0, (product.stock_quantity || 0) - item.quantity);
+        await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+        await supabase.from("stock_records").insert({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          quantity: -item.quantity,
+          type: "out",
+          note: `設計師自領 - ${designerProfile.name}`,
+        });
+      }
+    }
+
+    await loadBackendData(backendSession);
+    setSelfUseComplete(true);
+  }
+
   const activeScheduleItems = backendConnected ? backendScheduleItems : emptyScheduleItems;
   const activeLeaveItems = backendConnected ? backendLeaveItems : emptyLeaveItems;
   const activeTeamScheduleItems = backendConnected ? backendTeamScheduleItems : teamScheduleItems;
@@ -530,7 +579,7 @@ export default function DesignerPreviewV2Page() {
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} />}
             </>
           )}
         </div>
@@ -538,6 +587,7 @@ export default function DesignerPreviewV2Page() {
       </section>
       {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
+      {showSelfUseModal && <SelfUseMaterialModal products={backendProducts} complete={selfUseComplete} isSynced={backendConnected} onComplete={saveSelfUseMaterials} onClose={() => { setShowSelfUseModal(false); setSelfUseComplete(false); }} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={activeServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
@@ -654,6 +704,10 @@ export default function DesignerPreviewV2Page() {
         .summary-title { font-weight: 900; color: #1478c8; margin-bottom: 4px; }
         .summary-title.purple { color: #6847d9; }
         .summary-sub { color: #36a9ff; font-size: 12px; font-weight: 750; }
+        .earnings-action-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px; }
+        .earnings-action-btn { border: 1px solid #148bd8; background: #fff; color: #1478c8; border-radius: 999px; padding: 10px 8px; font-size: 13px; font-weight: 950; cursor: pointer; white-space: nowrap; }
+        .earnings-action-btn.primary { background: #148bd8; color: #fff; box-shadow: 0 8px 16px rgba(20,139,216,.18); }
+        .earnings-action-btn.muted { border-color: #dfe3ea; color: #9aa3af; cursor: default; }
         .panel { padding: 16px; margin-bottom: 14px; }
         .income-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
         .income-detail-header .panel-label { color: #1478c8; font-size: 13px; letter-spacing: 0; }
@@ -803,6 +857,8 @@ export default function DesignerPreviewV2Page() {
         .selected-product-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #4b5563; font-size: 12px; font-weight: 850; }
         .selected-product-row strong { color: #1478c8; font-weight: 950; white-space: nowrap; }
         .product-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 10px; text-align: center; }
+        .self-use-lines { margin-top: 10px; border-top: 1px solid #edf0f4; }
+        .self-use-summary { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #ef244e; font-size: 14px; font-weight: 950; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
         .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
@@ -1339,7 +1395,7 @@ function Legend() {
   );
 }
 
-function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void }) {
+function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
@@ -1368,10 +1424,14 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange }
         <div className="summary-card"><div className="summary-amount">NT$ {totalPerformance.toLocaleString()}</div><div className="summary-title">總業績</div><div className="summary-sub">服務業績 NT${currentRange.service.toLocaleString()} · 商品銷售 NT${currentRange.product.toLocaleString()}</div></div>
         <div className="summary-card"><div className="summary-amount purple">NT$ {currentRange.salary.toLocaleString()}</div><div className="summary-title purple">{incomeLabel}</div><div className="summary-sub">扣除自領商品與折扣</div></div>
       </div>
+      <div className="earnings-action-row">
+        <button className="earnings-action-btn primary" onClick={() => setShowIncomeDetails(true)}>查看明細</button>
+        <button className="earnings-action-btn" onClick={onOpenSelfUse}>自領材料</button>
+        <button className="earnings-action-btn muted" type="button">其他功能</button>
+      </div>
       <section className="panel">
         <div className="income-detail-header">
           <div className="panel-label">{currentRange.label}｜總客數：{currentRange.count}</div>
-          <button className="detail-link-btn" onClick={() => setShowIncomeDetails(true)}>查看明細</button>
         </div>
         <div className="breakdown-row"><span>服務業績</span><span>NT${currentRange.service.toLocaleString()}</span></div>
         <div className="breakdown-row"><span>商品銷售</span><span>NT${currentRange.product.toLocaleString()}</span></div>
@@ -1428,6 +1488,117 @@ function IncomeDetailsModal({ range, ranges, detailGroups, onClose }: { range: E
               )) : <div className="income-detail-row"><strong>-</strong><span>目前沒有明細</span><em>-</em></div>}
             </section>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelfUseMaterialModal({ products, complete, isSynced, onComplete, onClose }: { products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (items: SelfUseMaterialItem[]) => void | Promise<void>; onClose: () => void }) {
+  const [items, setItems] = useState<SelfUseMaterialItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("全部");
+  const [saving, setSaving] = useState(false);
+  const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
+  const filteredProducts = products.filter((product) => {
+    const itemCategory = product.category || "未分類";
+    const keyword = search.trim().toLowerCase();
+    if (product.is_active === false) return false;
+    if (category !== "全部" && itemCategory !== category) return false;
+    if (keyword && !`${product.name} ${itemCategory}`.toLowerCase().includes(keyword)) return false;
+    return true;
+  });
+  const total = items.reduce((sum, item) => sum + item.product.unit_price * item.quantity, 0);
+
+  function toggleProduct(product: BackendProduct) {
+    const selected = items.find((item) => item.product.id === product.id);
+    setItems(selected ? items.filter((item) => item.product.id !== product.id) : [...items, { product, quantity: 1 }]);
+  }
+
+  function updateQuantity(productId: number, quantity: number) {
+    setItems(items.map((item) => item.product.id === productId ? { ...item, quantity: Math.max(1, quantity) } : item));
+  }
+
+  async function submit() {
+    setSaving(true);
+    await onComplete(items);
+    setSaving(false);
+  }
+
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">自領材料已同步</div>
+            <div className="modal-subtitle">已寫入後台資料庫、同步扣庫存，並列入收入減項。</div>
+          </div>
+          <div className="amount-preview"><span>本次自領扣款</span><strong>-NT${total.toLocaleString()}</strong></div>
+          <button className="full-width-btn" onClick={onClose}>完成</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">自領材料</div>
+            <div className="modal-subtitle">從後台商品庫存選取，送出後同步扣庫存並列入收入減項。</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋材料或商品名稱..." />
+        <div className="product-category-tabs">
+          {categories.map((item) => (
+            <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="product-list">
+          {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+            const selected = items.find((item) => item.product.id === product.id);
+            const unitText = product.unit ? ` / ${product.unit}` : "";
+            return (
+              <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                  <span>
+                    <span className="product-name">{product.name}</span>
+                    <span className="product-meta">{product.category || "未分類"} · NT${product.unit_price.toLocaleString()}{unitText}</span>
+                  </span>
+                  <span className="product-check">{selected ? "✓" : ""}</span>
+                </button>
+              </div>
+            );
+          }) : (
+            <div className="product-empty">找不到符合的材料</div>
+          )}
+        </div>
+        {items.length > 0 && (
+          <div className="self-use-lines">
+            {items.map((item) => (
+              <div className="product-price-line" key={item.product.id}>
+                <div className="row-service">{item.product.name}</div>
+                <label className="product-quantity-field">
+                  <span className="product-quantity-label">數量</span>
+                  <input className="checkout-input" type="number" min={1} value={item.quantity} onChange={(event) => updateQuantity(item.product.id, Number(event.target.value) || 1)} />
+                </label>
+                <input className="checkout-input" type="number" value={item.product.unit_price * item.quantity} readOnly />
+              </div>
+            ))}
+            <div className="self-use-summary">
+              <span>自領材料扣款</span>
+              <strong>-NT${total.toLocaleString()}</strong>
+            </div>
+          </div>
+        )}
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving || items.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "確認自領" : "等待後台連線"}</button>
         </div>
       </div>
     </div>
