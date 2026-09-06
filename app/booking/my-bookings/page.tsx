@@ -21,6 +21,17 @@ type Booking = {
 
 type Service = { id: number; name: string };
 type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
+type ProductPurchase = {
+  id: number;
+  customer_name: string;
+  customer_phone: string;
+  total_amount: number;
+  payment_method?: string | null;
+  note?: string | null;
+  created_at: string;
+  designers?: { id?: number; name?: string; display_name?: string; nickname?: string } | null;
+};
+type ProductPurchaseItem = { name: string; amount: number };
 
 const serviceNameEn: Record<string, string> = {
   "精油髮浴洗": "Essential Oil Hair Bath",
@@ -95,6 +106,25 @@ function getServiceNamesFromNote(note?: string | null) {
   return matched?.[1]?.trim() || "";
 }
 
+function extractProductItems(note?: string | null): ProductPurchaseItem[] {
+  const productSection = (note || "").split("客人購買商品：")[1];
+  if (!productSection) return [];
+  return productSection
+    .split("、")
+    .map((item) => {
+      const amountMatch = item.match(/小計NT\$?([\d,]+)/);
+      const amount = amountMatch ? Number(amountMatch[1].replace(/,/g, "")) : 0;
+      const name = item.replace(/，?小計NT\$?[\d,]+[\s\S]*/, "").trim();
+      return { name: name || "商品", amount };
+    })
+    .filter((item) => item.amount > 0);
+}
+
+function getProductDiscount(note?: string | null) {
+  const matches = [...(note || "").matchAll(/商品折扣NT\$?([\d,]+)|折扣NT\$?([\d,]+)/g)];
+  return matches.reduce((sum, match) => sum + Number((match[1] || match[2] || "0").replace(/,/g, "")), 0);
+}
+
 export default function MyBookingsPage() {
   const router = useRouter();
   const { contactValue } = useBookingStore();
@@ -105,6 +135,7 @@ export default function MyBookingsPage() {
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [productPurchases, setProductPurchases] = useState<ProductPurchase[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [draftNotes, setDraftNotes] = useState<Record<number, string>>({});
   const [draftFiles, setDraftFiles] = useState<Record<number, File | null>>({});
@@ -129,8 +160,8 @@ export default function MyBookingsPage() {
       .join(isEnglish ? ", " : "、") || "—";
   }
 
-  function designerName(booking: Booking) {
-    const designer = booking.designers;
+  function designerName(record: { designers?: { id?: number; name?: string; display_name?: string; nickname?: string } | null }) {
+    const designer = record.designers;
     if (!designer) return "Stylist";
     if (hasEnglishName(designer.name)) return designer.name || "Stylist";
     if (designer.display_name && DESIGNER_EN_NAMES[designer.display_name]) return DESIGNER_EN_NAMES[designer.display_name];
@@ -147,7 +178,7 @@ export default function MyBookingsPage() {
 
     setLoading(true);
     setSearched(true);
-    const [{ data: bookingData }, { data: serviceData }] = await Promise.all([
+    const [{ data: bookingData }, { data: serviceData }, { data: transactionData }] = await Promise.all([
       supabase
         .from("bookings")
         .select("*, designers(id, name, display_name, nickname)")
@@ -155,10 +186,17 @@ export default function MyBookingsPage() {
         .order("booking_date", { ascending: false })
         .order("booking_time", { ascending: false }),
       supabase.from("services").select("id, name"),
+      supabase
+        .from("transactions")
+        .select("*")
+        .eq("customer_phone", phone)
+        .order("created_at", { ascending: false }),
     ]);
 
     const nextBookings = (bookingData || []) as Booking[];
+    const nextProductPurchases = ((transactionData || []) as ProductPurchase[]).filter((transaction) => extractProductItems(transaction.note).length > 0);
     setBookings(nextBookings);
+    setProductPurchases(nextProductPurchases);
     setServices((serviceData || []) as Service[]);
     setDraftNotes(Object.fromEntries(nextBookings.map((booking) => [booking.id, booking.note || ""])));
     setDraftFiles({});
@@ -262,10 +300,10 @@ export default function MyBookingsPage() {
       </button>
 
       <div style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>
-        {isEnglish ? "My Bookings" : "查看我的預約"}
+        {isEnglish ? "My Bookings & Purchases" : "查看我的預約與購買"}
       </div>
       <div style={{ fontSize: 12, color: "#9a9188", lineHeight: 1.7, marginBottom: 18 }}>
-        {isEnglish ? "Enter your phone number to view your booking requests." : "請輸入預約時使用的電話號碼，查看預約紀錄。"}
+        {isEnglish ? "Enter your phone number to view bookings and product purchases." : "請輸入預約或購買時使用的電話號碼，查看預約與商品購買紀錄。"}
       </div>
 
       <div style={{ background: "#f2e8e6", border: "0.5px solid #d9b8b0", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 12, color: "#7a1f1f", lineHeight: 1.7 }}>
@@ -295,9 +333,9 @@ export default function MyBookingsPage() {
         {loading ? (isEnglish ? "Searching..." : "查詢中...") : (isEnglish ? "Search Bookings" : "查詢預約")}
       </button>
 
-      {searched && !loading && bookings.length === 0 && (
+      {searched && !loading && bookings.length === 0 && productPurchases.length === 0 && (
         <div style={{ textAlign: "center", padding: "28px 0", color: "#9a9188", fontSize: 13 }}>
-          {isEnglish ? "No bookings found for this phone number." : "查無此電話號碼的預約紀錄。"}
+          {isEnglish ? "No bookings or purchases found for this phone number." : "查無此電話號碼的預約或購買紀錄。"}
         </div>
       )}
 
@@ -389,6 +427,56 @@ export default function MyBookingsPage() {
           );
         })}
       </div>
+
+      {productPurchases.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>
+            {isEnglish ? "Product Purchases" : "商品購買紀錄"}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {productPurchases.map((purchase) => {
+              const items = extractProductItems(purchase.note);
+              const discount = getProductDiscount(purchase.note);
+              return (
+                <div key={purchase.id} style={{ background: "#fdfaf7", border: "0.5px solid #e5dbd0", borderRadius: 14, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a" }}>{purchase.customer_name || (isEnglish ? "Guest" : "訪客")}</div>
+                      <div style={{ fontSize: 12, color: "#9a9188", marginTop: 2 }}>{purchase.customer_phone}</div>
+                    </div>
+                    <span style={{ background: "#E1F5EE", color: "#085041", height: "fit-content", borderRadius: 999, padding: "4px 10px", fontSize: 11, fontWeight: 700 }}>
+                      {isEnglish ? "Purchased" : "已購買"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 7, fontSize: 12, color: "#5f5a55", lineHeight: 1.5 }}>
+                    <div>{isEnglish ? "Stylist" : "設計師"}：<b style={{ color: "#1a1a1a" }}>{designerName(purchase)}</b></div>
+                    <div>{isEnglish ? "Purchase Time" : "購買時間"}：<b style={{ color: "#1a1a1a" }}>{purchase.created_at.slice(0, 16).replace("T", " ")}</b></div>
+                    <div>{isEnglish ? "Payment" : "付款方式"}：{purchase.payment_method || (isEnglish ? "Not specified" : "未標註")}</div>
+                  </div>
+                  <div style={{ marginTop: 12, borderTop: "1px solid #eadfd4", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                    {items.map((item) => (
+                      <div key={`${purchase.id}-${item.name}`} style={{ display: "flex", justifyContent: "space-between", gap: 10, color: "#5f5a55", fontSize: 12, fontWeight: 700 }}>
+                        <span>{item.name}</span>
+                        <strong style={{ color: "#1a1a1a" }}>NT${item.amount.toLocaleString()}</strong>
+                      </div>
+                    ))}
+                    {discount > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: "#A32D2D", fontSize: 12, fontWeight: 700 }}>
+                        <span>{isEnglish ? "Discount" : "商品折扣"}</span>
+                        <strong>-NT${discount.toLocaleString()}</strong>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: "#7a1f1f", fontSize: 14, fontWeight: 800, borderTop: "1px solid #eadfd4", paddingTop: 9 }}>
+                      <span>{isEnglish ? "Total Paid" : "實付金額"}</span>
+                      <strong>NT${Number(purchase.total_amount || 0).toLocaleString()}</strong>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

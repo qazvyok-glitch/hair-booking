@@ -123,6 +123,7 @@ type BackendTransaction = {
   booking_id?: number | null;
   designer_id: number;
   customer_name: string;
+  customer_phone?: string | null;
   service_items?: BackendServiceItem[];
   total_amount: number;
   note?: string;
@@ -141,7 +142,7 @@ type BackendCustomer = { id: string; name?: string | null; phone?: string | null
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
-type ProductCheckoutDraft = { customerName: string; customerPhone: string; productItems: CheckoutProductItem[]; paymentMethod: string; note: string };
+type ProductCheckoutDraft = { customerName: string; customerPhone: string; productItems: CheckoutProductItem[]; productDiscount: number; paymentMethod: string; note: string };
 type SelfUseMaterialItem = { product: BackendProduct; quantity: number };
 type EarningsData = { period: string; service: number; product: number; selfUse: number; discount: number; salary: number; count: number; label: string };
 type IncomeDetailRow = { date?: string; name: string; item: string; amount: string };
@@ -515,6 +516,10 @@ export default function DesignerPreviewV2Page() {
       alert("請先選擇商品。");
       return;
     }
+    if (!draft.customerName.trim() || !draft.customerPhone.trim()) {
+      alert("請填寫顧客姓名與電話，顧客端才查得到購買紀錄。");
+      return;
+    }
 
     const customerName = draft.customerName.trim() || "現場客人";
     const customerPhone = draft.customerPhone.trim();
@@ -532,19 +537,19 @@ export default function DesignerPreviewV2Page() {
     }
 
     const productRows = draft.productItems.map((item) => {
-      const finalTotal = Math.max(0, item.linePrice - item.discount);
-      const discountText = item.discount > 0 ? `，折扣NT$${item.discount.toLocaleString()}` : "";
-      return `${item.product.name} x${item.quantity}，金額NT$${item.linePrice.toLocaleString()}${discountText}，小計NT$${finalTotal.toLocaleString()}`;
+      return `${item.product.name} x${item.quantity}，金額NT$${item.linePrice.toLocaleString()}，小計NT$${item.linePrice.toLocaleString()}`;
     });
     const noteRows = [
       draft.note,
       "純商品結帳",
       `客人購買商品：${productRows.join("、")}`,
+      draft.productDiscount > 0 ? `商品折扣NT$${draft.productDiscount.toLocaleString()}` : "",
     ].filter(Boolean);
     const { error } = await supabase.from("transactions").insert({
       booking_id: null,
       designer_id: backendSession.id,
       customer_name: customerName,
+      customer_phone: customerPhone,
       service_items: [],
       total_amount: total,
       note: noteRows.join("\n"),
@@ -1512,6 +1517,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
     customerName: "",
     customerPhone: "",
     productItems: [],
+    productDiscount: 0,
     paymentMethod: "現金",
     note: "",
   });
@@ -1527,15 +1533,19 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
     if (keyword && !`${product.name} ${itemCategory}`.toLowerCase().includes(keyword)) return false;
     return true;
   });
-  const productSubtotal = draft.productItems.reduce((sum, item) => sum + Math.max(0, item.linePrice - item.discount), 0);
+  const productGross = draft.productItems.reduce((sum, item) => sum + item.linePrice, 0);
+  const productSubtotal = Math.max(0, productGross - draft.productDiscount);
 
   function toggleProduct(product: BackendProduct) {
     const exists = draft.productItems.find((item) => item.product.id === product.id);
+    const productItems = exists
+      ? draft.productItems.filter((item) => item.product.id !== product.id)
+      : [...draft.productItems, { product, quantity: 1, linePrice: product.unit_price, discount: 0 }];
+    const nextGross = productItems.reduce((sum, item) => sum + item.linePrice, 0);
     setDraft({
       ...draft,
-      productItems: exists
-        ? draft.productItems.filter((item) => item.product.id !== product.id)
-        : [...draft.productItems, { product, quantity: 1, linePrice: product.unit_price, discount: 0 }],
+      productItems,
+      productDiscount: Math.min(draft.productDiscount, nextGross),
     });
   }
 
@@ -1546,8 +1556,9 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
         if (item.product.id !== productId) return item;
         const quantity = Math.max(1, value);
         const linePrice = item.product.unit_price * quantity;
-        return { ...item, quantity, linePrice, discount: Math.min(item.discount, linePrice) };
+        return { ...item, quantity, linePrice };
       }),
+      productDiscount: Math.min(draft.productDiscount, draft.productItems.reduce((sum, item) => sum + (item.product.id === productId ? item.product.unit_price * Math.max(1, value) : item.linePrice), 0)),
     });
   }
 
@@ -1557,18 +1568,16 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
         const linePrice = Math.max(0, value);
-        return { ...item, linePrice, discount: Math.min(item.discount, linePrice) };
+        return { ...item, linePrice };
       }),
+      productDiscount: Math.min(draft.productDiscount, draft.productItems.reduce((sum, item) => sum + (item.product.id === productId ? Math.max(0, value) : item.linePrice), 0)),
     });
   }
 
-  function updateProductDiscount(productId: number, value: number) {
+  function updateProductDiscount(value: number) {
     setDraft({
       ...draft,
-      productItems: draft.productItems.map((item) => {
-        if (item.product.id !== productId) return item;
-        return { ...item, discount: Math.min(Math.max(0, value), item.linePrice) };
-      }),
+      productDiscount: Math.min(Math.max(0, value), productGross),
     });
   }
 
@@ -1607,8 +1616,8 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
         <section className="panel">
           <div className="panel-label">顧客資料</div>
           <div className="detail-grid">
-            <input className="checkout-input" value={draft.customerName} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} placeholder="顧客姓名（可不填）" />
-            <input className="checkout-input" value={draft.customerPhone} onChange={(event) => setDraft({ ...draft, customerPhone: event.target.value })} placeholder="電話（可不填）" />
+            <input className="checkout-input" value={draft.customerName} onChange={(event) => setDraft({ ...draft, customerName: event.target.value })} placeholder="顧客姓名（必填）" />
+            <input className="checkout-input" value={draft.customerPhone} onChange={(event) => setDraft({ ...draft, customerPhone: event.target.value })} placeholder="電話（必填，供顧客端查詢）" />
           </div>
         </section>
         <section className="panel">
@@ -1648,10 +1657,14 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
               {draft.productItems.map((item) => (
                 <div key={item.product.id}>
                   <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
-                  <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
                 </div>
               ))}
+              <CheckoutNumber label="商品折扣" value={draft.productDiscount} onChange={updateProductDiscount} />
               <div className="selected-product-summary">
+                <div className="selected-product-row">
+                  <span>商品原價小計</span>
+                  <strong>NT${productGross.toLocaleString()}</strong>
+                </div>
                 <div className="selected-product-row">
                   <span>商品實收小計</span>
                   <strong>+NT${productSubtotal.toLocaleString()}</strong>
@@ -1670,7 +1683,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
         <div className="amount-preview"><span>客人應收總額</span><strong>NT${productSubtotal.toLocaleString()}</strong></div>
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>取消</button>
-          <button className="primary-modal-btn" disabled={!isSynced || saving || draft.productItems.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "完成商品結帳" : "等待後台連線"}</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving || draft.productItems.length === 0 || !draft.customerName.trim() || !draft.customerPhone.trim()} onClick={submit}>{isSynced ? saving ? "同步中..." : "完成商品結帳" : "等待後台連線"}</button>
         </div>
       </div>
     </div>
