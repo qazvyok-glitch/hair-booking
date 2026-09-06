@@ -36,6 +36,8 @@ type ShopInfo = {
 };
 
 const fallbackHairLengthImage = "/hair-length.png";
+const hairLengthImageKey = "hair_length_image_url";
+const priceCategoryOrderKey = "price_category_order";
 
 const categoryNameEn: Record<string, string> = {
   shampoo: "Shampoo & Styling",
@@ -140,6 +142,38 @@ function getLengthPriceOptions(priceRange: string) {
   return parts.map((price, index) => ({ label: labels[index], price }));
 }
 
+function readCategoryOrder(value?: string | null) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function categoryText(category: Pick<ServiceCategory, "name" | "label"> | string) {
+  const text = typeof category === "string" ? category : `${category.label} ${category.name}`;
+  return text.replace(/[^\p{Script=Han}A-Za-z]/gu, "").toLowerCase();
+}
+
+function categoryOrderIndex(category: Pick<ServiceCategory, "name" | "label"> | string, order: string[]) {
+  const target = categoryText(category);
+  const index = order.findIndex((item) => {
+    const ordered = categoryText(item);
+    return ordered.includes(target) || target.includes(ordered) || ordered.slice(0, 2) === target.slice(0, 2);
+  });
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function sortServiceCategories(list: ServiceCategory[], order: string[]) {
+  return [...list].sort((a, b) => categoryOrderIndex(a, order) - categoryOrderIndex(b, order) || a.id - b.id);
+}
+
+function sortPriceItems(list: PriceItem[], order: string[]) {
+  return [...list].sort((a, b) => categoryOrderIndex(a.category, order) - categoryOrderIndex(b.category, order) || a.id - b.id);
+}
+
 export default function Step2() {
   const router = useRouter();
   const { designer, serviceIds, toggleService } = useBookingStore();
@@ -159,10 +193,12 @@ export default function Step2() {
       supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("price_items").select("*").order("sort_order"),
       supabase.from("designer_price_items").select("*").eq("designer_id", designer.id).eq("is_active", true).order("sort_order"),
-      supabase.from("shop_info").select("key, value, is_active").eq("key", "hair_length_image_url").maybeSingle(),
-    ]).then(([{ data: cats }, { data: svcs }, { data: prices }, { data: designerPrices }, { data: hairLengthImage }]) => {
+      supabase.from("shop_info").select("key, value, is_active").in("key", [hairLengthImageKey, priceCategoryOrderKey]),
+    ]).then(([{ data: cats }, { data: svcs }, { data: prices }, { data: designerPrices }, { data: settings }]) => {
+      const shopSettings = (settings || []) as ShopInfo[];
+      const categoryOrder = readCategoryOrder(shopSettings.find((item) => item.key === priceCategoryOrderKey && item.is_active)?.value);
       if (cats && svcs) {
-        setCategories(cats.map((c: ServiceCategory) => {
+        const serviceCategories = cats.map((c: ServiceCategory) => {
           const allItems = svcs.filter((s: Service) => s.category_id === c.id);
           // 合併 S/M/L/XL 變體，只顯示基本名稱
           const seen = new Set<string>();
@@ -175,11 +211,12 @@ export default function Step2() {
             return acc;
           }, []);
           return { ...c, items: dedupedItems };
-        }));
+        });
+        setCategories(sortServiceCategories(serviceCategories, categoryOrder));
       }
-      if (designerPrices && designerPrices.length > 0) setPriceData(designerPrices);
-      else if (prices) setPriceData(prices);
-      const activeHairLengthImage = hairLengthImage as ShopInfo | null;
+      if (designerPrices && designerPrices.length > 0) setPriceData(sortPriceItems(designerPrices, categoryOrder));
+      else if (prices) setPriceData(sortPriceItems(prices, categoryOrder));
+      const activeHairLengthImage = shopSettings.find((item) => item.key === hairLengthImageKey);
       setHairLengthImageUrl(activeHairLengthImage?.is_active && activeHairLengthImage.value ? activeHairLengthImage.value : fallbackHairLengthImage);
       setLoading(false);
     });
