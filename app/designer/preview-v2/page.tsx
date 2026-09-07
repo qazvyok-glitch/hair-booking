@@ -11,6 +11,7 @@ type EarningsRange = "今日" | "本月" | "指定日期或區間";
 type PendingRow = {
   key: string;
   id?: number;
+  rawDate: string;
   date: string;
   time: string;
   name: string;
@@ -18,6 +19,7 @@ type PendingRow = {
   service: string;
   detail: string;
   designer?: string;
+  durationMinutes?: number;
 };
 type Appointment = {
   id?: number;
@@ -105,7 +107,7 @@ type BackendDesignerPriceItem = {
   is_active?: boolean;
 };
 type BackendPriceItem = { id: number; category: string; name: string; price_range: string; duration?: string | null; sort_order?: number | null };
-type BackendService = { id: number; name: string; category_id?: number };
+type BackendService = { id: number; name: string; category_id?: number; duration?: string | null };
 type BackendBooking = {
   id: number;
   designer_id: number;
@@ -113,6 +115,7 @@ type BackendBooking = {
   customer_phone?: string;
   booking_date: string;
   booking_time: string;
+  duration_minutes?: number | null;
   service_ids?: number[];
   note?: string;
   status: string;
@@ -266,7 +269,7 @@ export default function DesignerPreviewV2Page() {
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
     const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: allPriceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
       supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
-      supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
+      supabase.from("services").select("id, name, category_id, duration").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
       transactionQuery.eq("designer_id", session.id),
       productUsageQuery.eq("designer_id", session.id),
@@ -354,7 +357,11 @@ export default function DesignerPreviewV2Page() {
     }
     setPendingDecisions((prev) => ({ ...prev, [row.key]: decision }));
     const status = decision === "accepted" ? "confirmed" : decision === "declined" ? "cancelled" : "pending";
-    const { error } = await supabase.from("bookings").update({ status }).eq("id", row.id);
+    const nextDuration = Math.max(15, Number(row.durationMinutes) || 60);
+    const payload = decision === "accepted"
+      ? { status, booking_date: row.rawDate, booking_time: row.time, duration_minutes: nextDuration }
+      : { status };
+    const { error } = await supabase.from("bookings").update(payload).eq("id", row.id);
     if (error) {
       alert("預約狀態同步失敗，請稍後再試。");
       return;
@@ -407,6 +414,7 @@ export default function DesignerPreviewV2Page() {
         note: buildSyncedBookingNote(bookingServiceNames, bookingDraft.note),
         status: "confirmed",
         service_ids: selectedServiceIds,
+        duration_minutes: getBookingDraftDurationMinutes(bookingDraft, bookingServiceOptions),
       });
       if (error) {
         alert("新增預約失敗，請稍後再試。");
@@ -959,6 +967,9 @@ export default function DesignerPreviewV2Page() {
         .detail-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 12px; }
         .detail-label { color: #8b95a3; font-size: 11px; font-weight: 900; margin-bottom: 5px; }
         .detail-value { color: #1f2937; font-size: 14px; font-weight: 850; line-height: 1.45; }
+        .pending-adjust-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid #dceaf8; border-radius: 14px; background: #f7fbff; }
+        .pending-adjust-panel > div:nth-child(3), .pending-adjust-hint { grid-column: 1 / -1; }
+        .pending-adjust-hint { color: #7b8492; font-size: 11px; line-height: 1.5; font-weight: 800; }
         .modal-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
         .primary-modal-btn, .secondary-modal-btn { border-radius: 12px; padding: 12px 0; font-size: 14px; font-weight: 900; cursor: pointer; }
         .primary-modal-btn { border: none; background: #1478c8; color: #fff; }
@@ -2174,13 +2185,26 @@ function AppointmentModal({ row, onClose }: { row: Appointment; onClose: () => v
 }
 
 function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: PendingRow; decision: PendingDecision; onDecide: (row: PendingRow, decision: PendingDecision) => void | Promise<void>; onClose: () => void }) {
+  const [draft, setDraft] = useState({
+    date: row.rawDate,
+    time: row.time,
+    durationMinutes: row.durationMinutes || 60,
+  });
+  const nextRow = {
+    ...row,
+    rawDate: draft.date,
+    date: formatScheduleDateLabel(draft.date),
+    time: draft.time,
+    durationMinutes: Math.max(15, Number(draft.durationMinutes) || 60),
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <div className="modal-title">預約確認</div>
-            <div className="modal-subtitle">{row.date} {row.time} · {row.name}</div>
+            <div className="modal-subtitle">{nextRow.date} {nextRow.time} · {row.name}</div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
@@ -2191,10 +2215,27 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
           <DetailCard label="顧客備註" value={row.detail} />
           <DetailCard label="翻譯中文" value={row.detail.includes("Please") ? "請讓顏色呈現自然棕色。" : "不需翻譯"} />
         </div>
+        {decision === "pending" && (
+          <section className="pending-adjust-panel">
+            <div>
+              <div className="booking-label">確認日期</div>
+              <input className="checkout-input" type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
+            </div>
+            <div>
+              <div className="booking-label">開始時間</div>
+              <input className="checkout-input" type="time" value={draft.time} onChange={(event) => setDraft({ ...draft, time: event.target.value })} />
+            </div>
+            <div>
+              <div className="booking-label">預估時長（分鐘）</div>
+              <input className="checkout-input" type="number" min={15} step={15} value={draft.durationMinutes} onChange={(event) => setDraft({ ...draft, durationMinutes: Number(event.target.value) || 60 })} />
+            </div>
+            <div className="pending-adjust-hint">設計師可依現場經驗先調整時長；確認後會同步影響顧客端可預約空檔。</div>
+          </section>
+        )}
         {decision === "pending" ? (
           <div className="modal-action-row">
             <button className="secondary-modal-btn" onClick={async () => { await onDecide(row, "declined"); onClose(); }}>婉拒預約</button>
-            <button className="primary-modal-btn" onClick={async () => { await onDecide(row, "accepted"); onClose(); }}>接受預約</button>
+            <button className="primary-modal-btn" onClick={async () => { await onDecide(nextRow, "accepted"); onClose(); }}>確認並更新</button>
           </div>
         ) : (
           <div className={`decision-note ${decision}`}>{decision === "accepted" ? "此預約已接受" : "此預約已婉拒"}</div>
@@ -2834,6 +2875,7 @@ function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendS
       return {
         key: String(booking.id),
         id: booking.id,
+        rawDate: booking.booking_date,
         date: formatScheduleDateLabel(booking.booking_date),
         time: booking.booking_time,
         name: booking.customer_name || "訪客",
@@ -2841,9 +2883,10 @@ function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendS
         service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
         detail: booking.note || "未填備註",
         designer: showDesigner ? designerName : undefined,
+        durationMinutes: booking.duration_minutes || getServiceIdsDurationMinutes(booking.service_ids || [], services),
       };
     })
-    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    .sort((a, b) => `${a.rawDate} ${a.time}`.localeCompare(`${b.rawDate} ${b.time}`));
 }
 
 function buildEarningsRanges(transactions: BackendTransaction[], productUsage: BackendProductUsage[], customRange: IncomeDateRange): Record<EarningsRange, EarningsData> {
@@ -3016,6 +3059,30 @@ function formatIncomeDateLabel(date: string) {
 function formatProfileDate(date: string) {
   if (!date) return "尚未設定";
   return date.replace(/-/g, "/");
+}
+
+function parseDurationMinutes(duration?: string | null) {
+  if (!duration) return 0;
+  const text = duration.replace(/\s+/g, "");
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)(?:小時|hr|hour)/i);
+  const minuteMatch = text.match(/(\d+)(?:分鐘|分|min)/i);
+  const plainNumber = text.match(/^(\d+)$/);
+  const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+  const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+  if (hours || minutes) return Math.round(hours + minutes);
+  return plainNumber ? Number(plainNumber[1]) : 0;
+}
+
+function getServiceIdsDurationMinutes(serviceIds: number[], services: BackendService[]) {
+  const durationMap = new Map(services.map((service) => [service.id, parseDurationMinutes(service.duration)]));
+  const total = serviceIds.reduce((sum, id) => sum + (durationMap.get(id) || 0), 0);
+  return total > 0 ? total : 60;
+}
+
+function getBookingDraftDurationMinutes(draft: BookingDraft, serviceOptions: CheckoutServiceOption[]) {
+  const optionMap = new Map(serviceOptions.map((service) => [service.name, parseDurationMinutes(service.duration)]));
+  const total = getBookingServiceNames(draft).reduce((sum, name) => sum + (optionMap.get(name) || 0), 0);
+  return total > 0 ? total : 60;
 }
 
 function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], categoryOrder: string[]): CheckoutServiceOption[] {

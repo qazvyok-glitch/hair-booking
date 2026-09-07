@@ -11,6 +11,7 @@ type Booking = {
   customer_phone: string;
   booking_date: string;
   booking_time: string;
+  duration_minutes?: number | null;
   service_ids: number[];
   note: string;
   status: string;
@@ -18,7 +19,7 @@ type Booking = {
   designers?: { name?: string; display_name?: string; nickname?: string };
 };
 
-type Service = { id: number; name: string; category_id: number };
+type Service = { id: number; name: string; category_id: number; duration?: string | null };
 type ServiceCategory = { id: number; label: string; color: string; text_color: string };
 type Designer = { id: number; name: string; display_name?: string; nickname?: string; status?: string; is_active?: boolean };
 type DesignerSession = { id: number; name: string; nickname: string; is_manager?: boolean };
@@ -63,7 +64,7 @@ export default function DesignerDashboard() {
       const [{ data: bookingData }, { data: transactionData }, { data: serviceData }, { data: catData }, { data: designerData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
         d.is_manager ? bookingQuery : bookingQuery.eq("designer_id", d.id),
         d.is_manager ? transactionQuery : transactionQuery.eq("designer_id", d.id),
-        supabase.from("services").select("id, name, category_id").eq("is_active", true).order("sort_order"),
+        supabase.from("services").select("id, name, category_id, duration").eq("is_active", true).order("sort_order"),
         supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
         supabase.from("designers").select("id, name, display_name, nickname, status, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("designer_off_days").select("*"),
@@ -92,6 +93,35 @@ export default function DesignerDashboard() {
   function getServiceNames(ids: number[]) {
     if (!ids || ids.length === 0) return "—";
     return ids.map((id) => services.find((s) => s.id === id)?.name || "").filter(Boolean).join("、");
+  }
+
+  function timeToMinutes(value: string) {
+    const [hour, minute] = value.split(":").map(Number);
+    return (hour || 0) * 60 + (minute || 0);
+  }
+
+  function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
+    return startA < endB && startB < endA;
+  }
+
+  function parseDurationMinutes(duration?: string | null) {
+    if (!duration) return 0;
+    const text = duration.replace(/\s+/g, "");
+    const hourMatch = text.match(/(\d+(?:\.\d+)?)(?:小時|hr|hour)/i);
+    const minuteMatch = text.match(/(\d+)(?:分鐘|分|min)/i);
+    const plainNumber = text.match(/^(\d+)$/);
+    const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+    const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+    if (hours || minutes) return Math.round(hours + minutes);
+    return plainNumber ? Number(plainNumber[1]) : 0;
+  }
+
+  function getServicesDurationMinutes(serviceIds: number[]) {
+    const total = serviceIds.reduce((sum, id) => {
+      const service = services.find((item) => item.id === id);
+      return sum + parseDurationMinutes(service?.duration);
+    }, 0);
+    return total > 0 ? total : 60;
   }
 
   const today = new Date().toLocaleDateString("en-CA");
@@ -157,12 +187,14 @@ export default function DesignerDashboard() {
     if (isDesignerOffDay) return "此設計師當天已設定休假，無法建立預約。";
     const isDesignerOffSlot = offSlots.some((s) => s.designer_id === bookingTargetDesignerId && s.slot_date === newBooking.booking_date && s.slot_time === newBooking.booking_time);
     if (isDesignerOffSlot) return "此時段已被設為不可預約，請改選其他時間。";
-    const hasExistingBooking = bookings.some((b) =>
-      b.designer_id === bookingTargetDesignerId &&
-      b.booking_date === newBooking.booking_date &&
-      b.booking_time === newBooking.booking_time &&
-      b.status !== "cancelled"
-    );
+    const bookingStart = timeToMinutes(newBooking.booking_time);
+    const bookingEnd = bookingStart + getServicesDurationMinutes(newBookingServices);
+    const hasExistingBooking = bookings.some((b) => {
+      if (b.designer_id !== bookingTargetDesignerId || b.booking_date !== newBooking.booking_date || ["cancelled", "completed"].includes(b.status)) return false;
+      const existingStart = timeToMinutes(b.booking_time);
+      const existingEnd = existingStart + (b.duration_minutes || getServicesDurationMinutes(b.service_ids || []));
+      return rangesOverlap(bookingStart, bookingEnd, existingStart, existingEnd);
+    });
     if (hasExistingBooking) return "此設計師同時段已有預約，請改選其他時間。";
     return null;
   }
@@ -237,6 +269,7 @@ export default function DesignerDashboard() {
       note: newBooking.note,
       status: "confirmed",
       service_ids: newBookingServices,
+      duration_minutes: getServicesDurationMinutes(newBookingServices),
     }).select().single();
     if (data) setBookings([...bookings, data]);
     setAddingSaving(false);

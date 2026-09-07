@@ -55,6 +55,23 @@ function buildBookingNote(selectedServiceNames: string[], customerNote: string) 
   return [serviceLine, customerNote.trim()].filter(Boolean).join("\n\n");
 }
 
+function parseDurationMinutes(duration?: string) {
+  if (!duration) return 0;
+  const text = duration.replace(/\s+/g, "");
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)(?:小時|hr|hour)/i);
+  const minuteMatch = text.match(/(\d+)(?:分鐘|分|min)/i);
+  const plainNumber = text.match(/^(\d+)$/);
+  const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+  const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+  if (hours || minutes) return Math.round(hours + minutes);
+  return plainNumber ? Number(plainNumber[1]) : 0;
+}
+
+function getSelectedDurationMinutes(services: { duration?: string }[]) {
+  const total = services.reduce((sum, service) => sum + parseDurationMinutes(service.duration), 0);
+  return total > 0 ? total : 60;
+}
+
 export default function Step4() {
   const router = useRouter();
   const { designer, serviceIds, selectedServices, date, time, contactValue, customerName, reset } = useBookingStore();
@@ -182,6 +199,7 @@ export default function Step4() {
       customer_phone: contact,
       note: buildBookingNote(displayServices.map((service) => service.name), note),
       status: "pending",
+      duration_minutes: getSelectedDurationMinutes(selectedServices),
       reference_image_url: referenceImageUrl,
       user_id: session?.user?.id || null,
     });

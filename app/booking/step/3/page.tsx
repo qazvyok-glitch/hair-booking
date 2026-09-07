@@ -7,7 +7,7 @@ import { useLanguageStore } from "../../../../store/languageStore";
 
 type OffDay = { designer_id: number; off_date: string };
 type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
-type Booking = { designer_id: number | null; booking_date: string; booking_time: string; service_ids?: number[] | null; status?: string | null; note?: string | null };
+type Booking = { designer_id: number | null; booking_date: string; booking_time: string; duration_minutes?: number | null; service_ids?: number[] | null; status?: string | null; note?: string | null };
 type DurationItem = { id: number; name?: string | null; duration?: string | null };
 
 const weekDays = {
@@ -43,6 +43,7 @@ function getSelectedDurationMinutes(selectedServices: { duration?: string }[]) {
 }
 
 function getBookingDurationMinutes(booking: Booking, durationItems: DurationItem[]) {
+  if (booking.duration_minutes && booking.duration_minutes > 0) return booking.duration_minutes;
   const durationMap = new Map(durationItems.map((item) => [item.id, parseDurationMinutes(item.duration)]));
   const total = (booking.service_ids || []).reduce((sum, id) => sum + (durationMap.get(id) || 0), 0);
   return total > 0 ? total : 60;
@@ -79,7 +80,7 @@ export default function Step3() {
     Promise.all([
       supabase.from("designer_off_days").select("*"),
       supabase.from("designer_off_slots").select("*"),
-      supabase.from("bookings").select("designer_id, booking_date, booking_time, service_ids, status, note").eq("designer_id", designer.id),
+      supabase.from("bookings").select("designer_id, booking_date, booking_time, duration_minutes, service_ids, status, note").eq("designer_id", designer.id),
       supabase.from("services").select("id, name, duration"),
       supabase.from("price_items").select("id, name, duration"),
       supabase.from("designer_price_items").select("id, name, duration").eq("designer_id", designer.id).eq("is_active", true),
