@@ -685,7 +685,7 @@ export default function DesignerPreviewV2Page() {
   const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems, priceCategoryOrder);
   const bookingServiceOptions = bookingDraft
     ? buildBookingServiceOptions(bookingDraft.designer, backendDesigners, allDesignerPriceItems, activeServiceOptions, priceCategoryOrder)
-    : activeServiceOptions;
+    : activeServiceOptions.map((name) => ({ key: `service-${name}`, name, category: "服務項目", priceLabel: "", amount: 0 }));
   const defaultBookingDate = selectedScheduleDate;
   const defaultBookingService = checkoutServiceOptions[0]?.name || activeServiceOptions[0] || "";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
@@ -699,8 +699,9 @@ export default function DesignerPreviewV2Page() {
   const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
 
   useEffect(() => {
-    if (!bookingDraft || bookingServiceOptions.length === 0 || bookingServiceOptions.includes(bookingDraft.service)) return;
-    setBookingDraft({ ...bookingDraft, service: bookingServiceOptions[0], extraServices: bookingDraft.extraServices.filter((service) => bookingServiceOptions.includes(service)) });
+    const serviceNames = bookingServiceOptions.map((service) => service.name);
+    if (!bookingDraft || serviceNames.length === 0 || serviceNames.includes(bookingDraft.service)) return;
+    setBookingDraft({ ...bookingDraft, service: serviceNames[0], extraServices: bookingDraft.extraServices.filter((service) => serviceNames.includes(service)) });
   }, [bookingDraft, bookingServiceOptions]);
 
   return (
@@ -1026,6 +1027,8 @@ export default function DesignerPreviewV2Page() {
         .booking-selected-service button { width: 28px; height: 28px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 16px; font-weight: 950; cursor: pointer; }
         .booking-service-picker { display: grid; gap: 8px; max-height: 230px; overflow-y: auto; margin-top: 10px; padding: 2px 2px 2px 0; }
         .booking-service-option { width: 100%; border: 1px solid #dfe3ea; background: #f8fbff; color: #1f2937; border-radius: 12px; padding: 10px 11px; text-align: left; font-size: 13px; font-weight: 900; line-height: 1.4; cursor: pointer; }
+        .booking-service-option span, .booking-service-option small { display: block; }
+        .booking-service-option small { margin-top: 3px; color: #1478c8; font-size: 11px; font-weight: 950; }
         .booking-service-option:hover { border-color: #148bd8; background: #eaf7ff; color: #1478c8; }
         .customer-search-panel { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 16px; padding: 12px; margin-bottom: 14px; }
         .customer-result-list { display: grid; gap: 8px; margin-top: 9px; }
@@ -2207,7 +2210,8 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
     note: "",
   });
   const [showServicePicker, setShowServicePicker] = useState(false);
-  const [selectedServiceKey, setSelectedServiceKey] = useState(serviceOptions[0]?.key || "");
+  const serviceCategories = getServiceOptionCategories(serviceOptions);
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState(serviceCategories[0] || "");
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [productCategory, setProductCategory] = useState("全部");
@@ -2224,9 +2228,17 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
   const serviceSubtotal = Math.max(0, serviceGross - draft.serviceDiscount);
   const total = serviceSubtotal + productSubtotal;
   const canCompleteCheckout = isSynced && serviceGross > 0;
+  const availableCheckoutServices = serviceOptions.filter((service) => service.category === selectedServiceCategory);
 
-  function addServiceItem() {
-    const selectedService = serviceOptions.find((service) => service.key === selectedServiceKey) || serviceOptions[0];
+  useEffect(() => {
+    if (serviceCategories.length === 0) {
+      setSelectedServiceCategory("");
+      return;
+    }
+    if (!serviceCategories.includes(selectedServiceCategory)) setSelectedServiceCategory(serviceCategories[0]);
+  }, [serviceCategories, selectedServiceCategory]);
+
+  function addServiceItem(selectedService: CheckoutServiceOption | undefined) {
     if (!selectedService) {
       alert("後台尚未設定可加入的服務價目。");
       return;
@@ -2353,13 +2365,21 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
           </div>
           {showServicePicker && (
             <div className="service-picker-box">
-              <div className="service-picker-row">
-                <select className="checkout-select" value={selectedServiceKey} onChange={(event) => setSelectedServiceKey(event.target.value)}>
-                  {serviceOptions.map((service) => <option key={service.key} value={service.key}>{service.name}｜{service.priceLabel}</option>)}
-                  {serviceOptions.length === 0 && <option>後台尚未設定服務價目</option>}
-                </select>
-                <button className="service-add-btn" onClick={addServiceItem}>加入</button>
+              <div className="product-category-tabs">
+                {serviceCategories.map((category) => (
+                  <button className={`product-category-chip${selectedServiceCategory === category ? " active" : ""}`} key={category} onClick={() => setSelectedServiceCategory(category)}>
+                    {category}
+                  </button>
+                ))}
               </div>
+              {availableCheckoutServices.length > 0 ? availableCheckoutServices.map((service) => (
+                <button className="booking-service-option" key={service.key} onClick={() => addServiceItem(service)}>
+                  <span>＋ {service.name}</span>
+                  {service.priceLabel && <small>{service.priceLabel}</small>}
+                </button>
+              )) : (
+                <div className="product-empty">此類別沒有可加入的服務項目</div>
+              )}
             </div>
           )}
           {draft.primaryServiceName ? (
@@ -2474,12 +2494,14 @@ function CheckoutProductNumber({ label, quantity, price, onQuantityChange, onPri
   );
 }
 
-function AddBookingModal({ draft, complete, designerOptions, serviceOptions, customerRecords, isSynced, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; designerOptions: string[]; serviceOptions: string[]; customerRecords: CustomerRecord[]; isSynced: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
+function AddBookingModal({ draft, complete, designerOptions, serviceOptions, customerRecords, isSynced, onChange, onComplete, onClose }: { draft: BookingDraft; complete: boolean; designerOptions: string[]; serviceOptions: CheckoutServiceOption[]; customerRecords: CustomerRecord[]; isSynced: boolean; onChange: (draft: BookingDraft) => void; onComplete: () => void; onClose: () => void }) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showServicePicker, setShowServicePicker] = useState(false);
   const selectedServiceNames = getBookingServiceNames(draft);
-  const availableServiceOptions = serviceOptions.filter((item) => !selectedServiceNames.includes(item));
+  const serviceCategories = getServiceOptionCategories(serviceOptions);
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState(serviceCategories[0] || "");
+  const availableServiceOptions = serviceOptions.filter((item) => item.category === selectedServiceCategory && !selectedServiceNames.includes(item.name));
   const searchText = customerSearch.trim().toLowerCase();
   const matchedCustomers = searchText
     ? customerRecords.filter((customer) => `${customer.name} ${customer.phone}`.toLowerCase().includes(searchText)).slice(0, 3)
@@ -2513,11 +2535,19 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
   function removeBookingService(serviceName: string) {
     const nextServices = selectedServiceNames.filter((item) => item !== serviceName);
     if (nextServices.length === 0) {
-      onChange({ ...draft, service: serviceOptions[0] || "", extraServices: [] });
+      onChange({ ...draft, service: serviceOptions[0]?.name || "", extraServices: [] });
       return;
     }
     onChange({ ...draft, service: nextServices[0], extraServices: nextServices.slice(1) });
   }
+
+  useEffect(() => {
+    if (serviceCategories.length === 0) {
+      setSelectedServiceCategory("");
+      return;
+    }
+    if (!serviceCategories.includes(selectedServiceCategory)) setSelectedServiceCategory(serviceCategories[0]);
+  }, [serviceCategories, selectedServiceCategory]);
 
   if (complete) {
     return (
@@ -2625,12 +2655,20 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
           </div>
           {showServicePicker && (
             <div className="booking-service-picker">
+              <div className="product-category-tabs">
+                {serviceCategories.map((category) => (
+                  <button className={`product-category-chip${selectedServiceCategory === category ? " active" : ""}`} key={category} onClick={() => setSelectedServiceCategory(category)}>
+                    {category}
+                  </button>
+                ))}
+              </div>
               {availableServiceOptions.length > 0 ? availableServiceOptions.map((item) => (
-                <button className="booking-service-option" key={item} onClick={() => addBookingService(item)}>
-                  ＋ {item}
+                <button className="booking-service-option" key={item.key} onClick={() => addBookingService(item.name)}>
+                  <span>＋ {item.name}</span>
+                  {item.priceLabel && <small>{item.priceLabel}</small>}
                 </button>
               )) : (
-                <div className="customer-empty">目前沒有可新增的服務項目</div>
+                <div className="customer-empty">此類別沒有可新增的服務項目</div>
               )}
             </div>
           )}
@@ -2982,13 +3020,21 @@ function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], cat
   return [];
 }
 
-function buildBookingServiceOptions(designerLabel: string, designers: BackendDesigner[], priceItems: BackendDesignerPriceItem[], fallbackServices: string[], categoryOrder: string[]) {
+function buildBookingServiceOptions(designerLabel: string, designers: BackendDesigner[], priceItems: BackendDesignerPriceItem[], fallbackServices: string[], categoryOrder: string[]): CheckoutServiceOption[] {
   const designer = findDesignerByLabel(designers, designerLabel);
   const designerItems = designer
     ? sortDesignerPriceItems(priceItems.filter((item) => item.designer_id === designer.id && item.is_active !== false), categoryOrder)
     : [];
-  const designerServiceNames = designerItems.map((item) => item.name);
-  return designerServiceNames.length > 0 ? designerServiceNames : fallbackServices;
+  if (designerItems.length > 0) {
+    return designerItems.map((item) => ({
+      key: `booking-price-${item.id}`,
+      name: item.name,
+      category: item.category || "服務項目",
+      priceLabel: formatPriceRange(item.price_range),
+      amount: getPriceRangeAmount(item.price_range),
+    }));
+  }
+  return fallbackServices.map((name) => ({ key: `booking-service-${name}`, name, category: "服務項目", priceLabel: "", amount: 0 }));
 }
 
 function getBookingServiceNames(draft: BookingDraft) {
@@ -3032,6 +3078,10 @@ function findCheckoutServiceOption(serviceName: string, options: CheckoutService
 
 function splitBookingServiceNames(serviceName: string) {
   return serviceName.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function getServiceOptionCategories(options: CheckoutServiceOption[]) {
+  return Array.from(new Set(options.map((option) => option.category || "服務項目").filter(Boolean)));
 }
 
 function getPriceRangeAmount(priceRange: string) {
