@@ -100,10 +100,11 @@ type BackendDesignerPriceItem = {
   category: string;
   name: string;
   price_range: string;
+  duration?: string | null;
   sort_order?: number | null;
   is_active?: boolean;
 };
-type BackendPriceItem = { id: number; category: string; name: string; price_range: string; sort_order?: number | null };
+type BackendPriceItem = { id: number; category: string; name: string; price_range: string; duration?: string | null; sort_order?: number | null };
 type BackendService = { id: number; name: string; category_id?: number };
 type BackendBooking = {
   id: number;
@@ -142,7 +143,7 @@ type BackendProductUsage = {
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
 type BackendCustomer = { id: string; name?: string | null; phone?: string | null; customer_no?: string | null; referrer?: string | null };
-type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; amount: number };
+type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; duration?: string | null; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
 type ProductCheckoutDraft = { customerName: string; customerPhone: string; customerReferrer: string; productItems: CheckoutProductItem[]; productDiscount: number; paymentMethod: string; note: string };
@@ -271,9 +272,9 @@ export default function DesignerPreviewV2Page() {
       productUsageQuery.eq("designer_id", session.id),
       supabase.from("products").select("id, name, unit, unit_price, category, stock_quantity, is_active, sort_order").eq("is_active", true).order("category").order("sort_order"),
       supabase.from("customers").select("id, name, phone, customer_no, referrer").order("customer_no"),
-      supabase.from("price_items").select("id, category, name, price_range, sort_order").order("category").order("sort_order"),
-      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
-      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, sort_order, is_active").eq("is_active", true).order("category").order("sort_order"),
+      supabase.from("price_items").select("id, category, name, price_range, duration, sort_order").order("category").order("sort_order"),
+      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, duration, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
+      supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, duration, sort_order, is_active").eq("is_active", true).order("category").order("sort_order"),
       supabase.from("shop_info").select("key, value, is_active").in("key", ["price_category_order", designerCategoryOrderKey(session.id)]),
       session.is_manager ? supabase.from("designer_off_days").select("*") : supabase.from("designer_off_days").select("*").eq("designer_id", session.id),
       session.is_manager ? supabase.from("designer_off_slots").select("*") : supabase.from("designer_off_slots").select("*").eq("designer_id", session.id),
@@ -685,7 +686,7 @@ export default function DesignerPreviewV2Page() {
   const checkoutServiceOptions = buildCheckoutServiceOptions(designerPriceItems, priceCategoryOrder);
   const bookingServiceOptions = bookingDraft
     ? buildBookingServiceOptions(bookingDraft.designer, backendDesigners, allDesignerPriceItems, activeServiceOptions, priceCategoryOrder)
-    : activeServiceOptions.map((name) => ({ key: `service-${name}`, name, category: "服務項目", priceLabel: "", amount: 0 }));
+    : activeServiceOptions.map((name) => ({ key: `service-${name}`, name, category: "服務項目", priceLabel: "", duration: "", amount: 0 }));
   const defaultBookingDate = selectedScheduleDate;
   const defaultBookingService = checkoutServiceOptions[0]?.name || activeServiceOptions[0] || "";
   const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
@@ -2386,7 +2387,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
               {availableCheckoutServices.length > 0 ? availableCheckoutServices.map((service) => (
                 <button className="booking-service-option" key={service.key} onClick={() => addServiceItem(service)}>
                   <span>＋ {service.name}</span>
-                  {service.priceLabel && <small>{service.priceLabel}</small>}
+                  {(service.priceLabel || service.duration) && <small>{[service.priceLabel, service.duration].filter(Boolean).join(" · ")}</small>}
                 </button>
               )) : (
                 <div className="product-empty">此類別沒有可加入的服務項目</div>
@@ -2676,7 +2677,7 @@ function AddBookingModal({ draft, complete, designerOptions, serviceOptions, cus
               {availableServiceOptions.length > 0 ? availableServiceOptions.map((item) => (
                 <button className="booking-service-option" key={item.key} onClick={() => addBookingService(item.name)}>
                   <span>＋ {item.name}</span>
-                  {item.priceLabel && <small>{item.priceLabel}</small>}
+                  {(item.priceLabel || item.duration) && <small>{[item.priceLabel, item.duration].filter(Boolean).join(" · ")}</small>}
                 </button>
               )) : (
                 <div className="customer-empty">此類別沒有可新增的服務項目</div>
@@ -3025,6 +3026,7 @@ function buildCheckoutServiceOptions(priceItems: BackendDesignerPriceItem[], cat
       name: item.name,
       category: item.category || "其他服務",
       priceLabel: formatPriceRange(item.price_range),
+      duration: item.duration || "",
       amount: getPriceRangeAmount(item.price_range),
     }));
   }
@@ -3042,10 +3044,11 @@ function buildBookingServiceOptions(designerLabel: string, designers: BackendDes
       name: item.name,
       category: item.category || "服務項目",
       priceLabel: formatPriceRange(item.price_range),
+      duration: item.duration || "",
       amount: getPriceRangeAmount(item.price_range),
     }));
   }
-  return fallbackServices.map((name) => ({ key: `booking-service-${name}`, name, category: "服務項目", priceLabel: "", amount: 0 }));
+  return fallbackServices.map((name) => ({ key: `booking-service-${name}`, name, category: "服務項目", priceLabel: "", duration: "", amount: 0 }));
 }
 
 function getBookingServiceNames(draft: BookingDraft) {

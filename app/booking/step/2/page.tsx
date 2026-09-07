@@ -29,6 +29,7 @@ type PriceItem = {
   category: string;
   name: string;
   price_range: string;
+  duration?: string | null;
   sort_order?: number | null;
 };
 
@@ -190,7 +191,7 @@ function buildCategoriesFromPriceItems(list: PriceItem[], order: string[]) {
       {
         id: item.id,
         name: item.name,
-        duration: "",
+        duration: item.duration || "",
         note: "",
         category_id: 0,
         category,
@@ -406,7 +407,7 @@ export default function Step2() {
                   return (
                     <div
                       key={item.id}
-                      onClick={() => toggleService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange })}
+                      onClick={() => toggleService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange, duration: item.duration || "" })}
                       style={{
                         padding: "11px 14px",
                         background: picked ? "#f2e8e6" : "#fdfaf7",
@@ -417,9 +418,11 @@ export default function Step2() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 14, fontWeight: picked ? 600 : 500, color: "#1a1a1a", lineHeight: 1.45 }}>{displayServiceName(item.name, language)}</div>
-                          <div style={{ fontSize: 11, color: "#9a9188", marginTop: 3, lineHeight: 1.45 }}>
-                            {displayDuration(item.duration, language)}{item.note ? "・" + displayNote(item.note, language) : ""}
-                          </div>
+                          {item.note ? (
+                            <div style={{ fontSize: 11, color: "#9a9188", marginTop: 3, lineHeight: 1.45 }}>
+                              {displayNote(item.note, language)}
+                            </div>
+                          ) : null}
                         </div>
                         <div style={{
                           width: 22,

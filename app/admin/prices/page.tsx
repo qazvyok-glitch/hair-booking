@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
 
-type PriceItem = { id: number; category: string; name: string; price_range: string; sort_order: number };
+type PriceItem = { id: number; category: string; name: string; price_range: string; duration?: string | null; sort_order: number };
 type ShopInfo = { id: number; key: string; label: string; value: string; is_active: boolean };
 
 const publicCategoryOrderKey = "price_category_order";
@@ -49,7 +49,7 @@ export default function AdminPrices() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<PriceItem | null>(null);
   const [filterCategory, setFilterCategory] = useState("all");
-  const [form, setForm] = useState({ category: "", name: "", price_range: "", sort_order: 0 });
+  const [form, setForm] = useState({ category: "", name: "", price_range: "", duration: "", sort_order: 0 });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -140,13 +140,13 @@ export default function AdminPrices() {
     setEditing(null);
     const defaultCategory = categories[0] || "";
     const nextSortOrder = items.filter((item) => item.category === defaultCategory).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
-    setForm({ category: defaultCategory, name: "", price_range: "", sort_order: nextSortOrder });
+    setForm({ category: defaultCategory, name: "", price_range: "", duration: "", sort_order: nextSortOrder });
     setShowForm(true);
   }
 
   function openEdit(p: PriceItem) {
     setEditing(p);
-    setForm({ category: p.category, name: p.name, price_range: p.price_range, sort_order: p.sort_order || 0 });
+    setForm({ category: p.category, name: p.name, price_range: p.price_range, duration: p.duration || "", sort_order: p.sort_order || 0 });
     setShowForm(true);
   }
 
@@ -291,7 +291,7 @@ export default function AdminPrices() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["分類", "項目名稱", "價格", "操作"].map(h => (
+                  {["分類", "項目名稱", "價格", "時長", "操作"].map(h => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
@@ -302,6 +302,7 @@ export default function AdminPrices() {
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{p.category}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{p.name}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 500 }}>{p.price_range}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A" }}>{p.duration || "未設定"}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <button onClick={() => openEdit(p)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -332,6 +333,7 @@ export default function AdminPrices() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{p.name}</div>
                       <div style={{ fontSize: 12, color: "#534AB7", marginTop: 2 }}>{p.price_range}</div>
+                      <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>時長：{p.duration || "未設定"}</div>
                     </div>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
                       <button onClick={() => openEdit(p)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -372,6 +374,10 @@ export default function AdminPrices() {
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>價格說明 *</div>
               <input value={form.price_range} onChange={(e) => setForm({ ...form, price_range: e.target.value })} placeholder="$2,200 / $2,500 / $3,000" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>預設時長</div>
+              <input value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} placeholder="例如：60 分鐘、90 分鐘" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}

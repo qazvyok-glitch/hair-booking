@@ -17,6 +17,7 @@ export type SelectedService = {
   name: string;
   category: string;
   priceRange: string;
+  duration?: string;
 };
 
 type BookingState = {

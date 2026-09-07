@@ -5,7 +5,7 @@ import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
 
 type Designer = { id: number; name: string; display_name?: string; nickname?: string };
-type PriceItem = { id: number; category: string; name: string; price_range: string; sort_order: number };
+type PriceItem = { id: number; category: string; name: string; price_range: string; duration?: string | null; sort_order: number };
 type ShopInfo = { id: number; key: string; label: string; value: string; is_active: boolean };
 type DesignerPriceItem = PriceItem & {
   designer_id: number;
@@ -62,7 +62,7 @@ export default function AdminDesignerPrices() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<DesignerPriceItem | null>(null);
   const [filterCategory, setFilterCategory] = useState("all");
-  const [form, setForm] = useState({ category: "", name: "", price_range: "", sort_order: 0, is_active: true });
+  const [form, setForm] = useState({ category: "", name: "", price_range: "", duration: "", sort_order: 0, is_active: true });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -179,7 +179,7 @@ export default function AdminDesignerPrices() {
     setEditing(null);
     const defaultCategory = allCategories[0] || "";
     const nextSortOrder = items.filter((item) => item.category === defaultCategory).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
-    setForm({ category: defaultCategory, name: "", price_range: "", sort_order: nextSortOrder, is_active: true });
+    setForm({ category: defaultCategory, name: "", price_range: "", duration: "", sort_order: nextSortOrder, is_active: true });
     setShowForm(true);
   }
 
@@ -189,6 +189,7 @@ export default function AdminDesignerPrices() {
       category: item.category,
       name: item.name,
       price_range: item.price_range,
+      duration: item.duration || "",
       sort_order: item.sort_order || 0,
       is_active: item.is_active,
     });
@@ -208,6 +209,7 @@ export default function AdminDesignerPrices() {
           category: item.category,
           name: item.name,
           price_range: item.price_range,
+          duration: item.duration || null,
           sort_order: item.sort_order || 0,
           is_active: true,
         }))
@@ -229,6 +231,7 @@ export default function AdminDesignerPrices() {
       category: form.category,
       name: form.name,
       price_range: form.price_range,
+      duration: form.duration || null,
       sort_order: nextSortOrder,
       is_active: form.is_active,
       updated_at: new Date().toISOString(),
@@ -393,7 +396,7 @@ export default function AdminDesignerPrices() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ background: "#F1EFE8" }}>
-                  {["狀態", "分類", "項目名稱", "價格", "操作"].map((h) => (
+                  {["狀態", "分類", "項目名稱", "價格", "時長", "操作"].map((h) => (
                     <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
                   ))}
                 </tr>
@@ -405,6 +408,7 @@ export default function AdminDesignerPrices() {
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{item.category}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{item.name}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 500 }}>{item.price_range}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A" }}>{item.duration || "未設定"}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -434,6 +438,7 @@ export default function AdminDesignerPrices() {
                   <div style={{ fontSize: 11, color: "#888780", marginBottom: 2 }}>{item.category} · {item.is_active ? "顯示" : "隱藏"}</div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: "#534AB7", marginTop: 2 }}>{item.price_range}</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>時長：{item.duration || "未設定"}</div>
                 </div>
                 <div style={{ display: "flex", gap: 4, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -471,6 +476,10 @@ export default function AdminDesignerPrices() {
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>價格說明 *</div>
               <input value={form.price_range} onChange={(e) => setForm({ ...form, price_range: e.target.value })} placeholder="$2,200 / $2,500 / $3,000" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>預設時長</div>
+              <input value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} placeholder="例如：60 分鐘、90 分鐘" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 13, color: "#5F5E5A" }}>
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
