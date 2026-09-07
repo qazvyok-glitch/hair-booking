@@ -25,6 +25,7 @@ export default function AdminInventory() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [recordFilter, setRecordFilter] = useState<"all" | "in" | "adjust" | "shop_use" | "out">("all");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState("");
   const [showBarcodeEdit, setShowBarcodeEdit] = useState<number | null>(null);
@@ -63,6 +64,54 @@ export default function AdminInventory() {
     if (search && !p.name.includes(search) && !(p.barcode||"").includes(search)) return false;
     return true;
   });
+  const recordRows = records.filter((record) => {
+    const kind = getRecordKind(record);
+    if (recordFilter === "all") return true;
+    if (recordFilter === "shop_use") return kind === "shop_use";
+    if (recordFilter === "out") return kind === "out";
+    return record.type === recordFilter && kind !== "shop_use";
+  });
+  const recordSummary = {
+    in: records.filter((record) => record.type === "in").reduce((sum, record) => sum + Math.abs(record.quantity || 0), 0),
+    shopUse: records.filter((record) => getRecordKind(record) === "shop_use").reduce((sum, record) => sum + Math.abs(record.quantity || 0), 0),
+    adjustGain: records.filter((record) => record.type === "adjust" && record.quantity > 0).reduce((sum, record) => sum + record.quantity, 0),
+    adjustLoss: records.filter((record) => record.type === "adjust" && record.quantity < 0).reduce((sum, record) => sum + Math.abs(record.quantity), 0),
+  };
+
+  function getRecordKind(record: StockRecord) {
+    if ((record.note || "").startsWith("店用領料")) return "shop_use";
+    if (record.type === "in") return "in";
+    if (record.type === "adjust") return "adjust";
+    return "out";
+  }
+
+  function getRecordLabel(record: StockRecord) {
+    const kind = getRecordKind(record);
+    if (kind === "in") return "進貨";
+    if (kind === "shop_use") return "店用領料";
+    if (kind === "adjust") return record.quantity > 0 ? "盤點盈" : record.quantity < 0 ? "盤點虧" : "盤點無差異";
+    return "自領 / 出庫";
+  }
+
+  function getRecordTone(record: StockRecord) {
+    const kind = getRecordKind(record);
+    if (kind === "in") return { background: "#E1F5EE", color: "#085041", mark: "↑" };
+    if (kind === "shop_use") return { background: "#E8F2FF", color: "#0B66C3", mark: "↓" };
+    if (kind === "adjust") return record.quantity >= 0
+      ? { background: "#FAEEDA", color: "#BA7517", mark: "⟳" }
+      : { background: "#FCEBEB", color: "#A32D2D", mark: "⟳" };
+    return { background: "#FCEBEB", color: "#A32D2D", mark: "↓" };
+  }
+
+  function getRecordDesigner(record: StockRecord) {
+    if (!(record.note || "").startsWith("店用領料")) return "—";
+    return (record.note || "").replace("店用領料 - ", "").split("｜")[0] || "—";
+  }
+
+  function getRecordNote(record: StockRecord) {
+    if (!(record.note || "").startsWith("店用領料")) return record.note || "—";
+    return (record.note || "").split("｜").slice(1).join("｜") || "—";
+  }
 
   function openAdjust(p: Product, type: "in" | "shop_use" | "adjust") {
     setSelectedProduct(p);
@@ -276,22 +325,81 @@ export default function AdminInventory() {
 
         {tab === "records" && (
           <>
-            <div style={{ fontSize: 12, color: "#888780", marginBottom: 8 }}>最近 100 筆進出記錄</div>
-            {records.map(r => (
-              <div key={r.id} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 6, border: "0.5px solid #D3D1C7", display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: r.type === "in" ? "#E1F5EE" : r.type === "out" ? "#FCEBEB" : "#FAEEDA", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <span style={{ fontSize: 14 }}>{r.type === "in" ? "↑" : r.type === "out" ? "↓" : "⟳"}</span>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
+              {[
+                { label: "進貨數量", value: `+${recordSummary.in}`, color: "#085041" },
+                { label: "盤點盈", value: `+${recordSummary.adjustGain}`, color: "#BA7517" },
+                { label: "盤點虧", value: `-${recordSummary.adjustLoss}`, color: "#A32D2D" },
+                { label: "店用領料", value: `-${recordSummary.shopUse}`, color: "#0B66C3" },
+              ].map((item) => (
+                <div key={item.label} style={{ background: "#fff", border: "0.5px solid #D3D1C7", borderRadius: 12, padding: "10px 12px" }}>
+                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 5 }}>{item.label}</div>
+                  <div style={{ fontSize: 17, color: item.color, fontWeight: 800 }}>{item.value}</div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{r.product_name}</div>
-                  <div style={{ fontSize: 11, color: "#888780" }}>{r.created_at?.slice(0,10).replace(/-/g,"/")} ・ {r.type === "in" ? "進貨" : (r.note || "").startsWith("店用領料") ? "店用領料" : r.type === "out" ? "自領" : "盤點"}</div>
-                  {r.note && <div style={{ fontSize: 11, color: "#888780" }}>{r.note}</div>}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: r.type === "in" ? "#085041" : r.type === "out" ? "#A32D2D" : "#BA7517" }}>
-                  {r.type === "in" ? "+" : ""}{r.quantity}
-                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 4 }}>
+              {[
+                { key: "all", label: "全部" },
+                { key: "in", label: "進貨" },
+                { key: "adjust", label: "盤點" },
+                { key: "shop_use", label: "店用領料" },
+                { key: "out", label: "其他出庫" },
+              ].map((item) => (
+                <button key={item.key} onClick={() => setRecordFilter(item.key as typeof recordFilter)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", background: recordFilter === item.key ? "#534AB7" : "#fff", color: recordFilter === item.key ? "#fff" : "#5F5E5A", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>{item.label}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: "#888780", marginBottom: 8 }}>庫存異動明細｜最近 100 筆</div>
+            {isDesktop ? (
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#F1EFE8" }}>
+                      {["日期", "類型", "商品", "數量變動", "盤點結果", "設計師", "備註"].map(h => (
+                        <th key={h} style={{ padding: "10px 12px", fontSize: 12, color: "#888780", fontWeight: 600, textAlign: "left", borderBottom: "0.5px solid #D3D1C7" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recordRows.map((r) => {
+                      const tone = getRecordTone(r);
+                      return (
+                        <tr key={r.id} style={{ borderBottom: "0.5px solid #F1EFE8" }}>
+                          <td style={{ padding: "10px 12px", fontSize: 12, color: "#2C2C2A", whiteSpace: "nowrap" }}>{r.created_at?.slice(0,10).replace(/-/g,"/")}</td>
+                          <td style={{ padding: "10px 12px" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 999, background: tone.background, color: tone.color, fontSize: 11, fontWeight: 800 }}>{tone.mark} {getRecordLabel(r)}</span></td>
+                          <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{r.product_name}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13, color: tone.color, fontWeight: 800 }}>{r.quantity > 0 ? "+" : ""}{r.quantity}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 12, color: r.type === "adjust" ? tone.color : "#888780", fontWeight: r.type === "adjust" ? 800 : 500 }}>{r.type === "adjust" ? (r.quantity > 0 ? `盈 ${r.quantity}` : r.quantity < 0 ? `虧 ${Math.abs(r.quantity)}` : "無差異") : "—"}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A" }}>{getRecordDesigner(r)}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{getRecordNote(r)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            ) : (
+              recordRows.map(r => {
+                const tone = getRecordTone(r);
+                return (
+                  <div key={r.id} style={{ background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 6, border: "0.5px solid #D3D1C7", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: tone.background, color: tone.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: 14 }}>{tone.mark}</span>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>{r.product_name}</div>
+                      <div style={{ fontSize: 11, color: "#888780" }}>{r.created_at?.slice(0,10).replace(/-/g,"/")} ・ {getRecordLabel(r)}</div>
+                      {getRecordDesigner(r) !== "—" && <div style={{ fontSize: 11, color: "#0B66C3" }}>設計師：{getRecordDesigner(r)}</div>}
+                      {getRecordNote(r) !== "—" && <div style={{ fontSize: 11, color: "#888780" }}>{getRecordNote(r)}</div>}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: tone.color }}>
+                      {r.quantity > 0 ? "+" : ""}{r.quantity}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {recordRows.length === 0 && <div style={{ background: "#fff", borderRadius: 12, padding: "18px", textAlign: "center", color: "#888780", fontSize: 13 }}>目前沒有符合條件的庫存異動紀錄</div>}
           </>
         )}
       </div>
