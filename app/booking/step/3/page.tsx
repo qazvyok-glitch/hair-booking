@@ -7,6 +7,8 @@ import { useLanguageStore } from "../../../../store/languageStore";
 
 type OffDay = { designer_id: number; off_date: string };
 type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
+type Booking = { designer_id: number | null; booking_date: string; booking_time: string; service_ids?: number[] | null; status?: string | null; note?: string | null };
+type DurationItem = { id: number; name?: string | null; duration?: string | null };
 
 const weekDays = {
   zh: ["日", "一", "二", "三", "四", "五", "六"],
@@ -14,15 +16,61 @@ const weekDays = {
 };
 function pad(n: number) { return n < 10 ? "0" + n : "" + n; }
 
+function timeToMinutes(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
+}
+
+function rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
+  return startA < endB && startB < endA;
+}
+
+function parseDurationMinutes(duration?: string | null) {
+  if (!duration) return 0;
+  const text = duration.replace(/\s+/g, "");
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)(?:小時|hr|hour)/i);
+  const minuteMatch = text.match(/(\d+)(?:分鐘|分|min)/i);
+  const plainNumber = text.match(/^(\d+)$/);
+  const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+  const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+  if (hours || minutes) return Math.round(hours + minutes);
+  return plainNumber ? Number(plainNumber[1]) : 0;
+}
+
+function getSelectedDurationMinutes(selectedServices: { duration?: string }[]) {
+  const total = selectedServices.reduce((sum, service) => sum + parseDurationMinutes(service.duration), 0);
+  return total > 0 ? total : 60;
+}
+
+function getBookingDurationMinutes(booking: Booking, durationItems: DurationItem[]) {
+  const durationMap = new Map(durationItems.map((item) => [item.id, parseDurationMinutes(item.duration)]));
+  const total = (booking.service_ids || []).reduce((sum, id) => sum + (durationMap.get(id) || 0), 0);
+  return total > 0 ? total : 60;
+}
+
+function getSlotMinutes(workHours: string[]) {
+  const sorted = [...workHours].sort();
+  const gaps = sorted
+    .map((time, index) => index < sorted.length - 1 ? timeToMinutes(sorted[index + 1]) - timeToMinutes(time) : 0)
+    .filter((gap) => gap > 0);
+  return gaps.length > 0 ? Math.min(...gaps) : 60;
+}
+
+function isBlockingBookingStatus(status?: string | null) {
+  return !["cancelled", "declined", "completed"].includes(status || "");
+}
+
 export default function Step3() {
   const router = useRouter();
-  const { designer, date, time, setDate, setTime } = useBookingStore();
+  const { designer, date, time, selectedServices, setDate, setTime } = useBookingStore();
   const { language } = useLanguageStore();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [offDays, setOffDays] = useState<OffDay[]>([]);
   const [offSlots, setOffSlots] = useState<OffSlot[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [durationItems, setDurationItems] = useState<DurationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const isEnglish = language === "en";
 
@@ -31,9 +79,15 @@ export default function Step3() {
     Promise.all([
       supabase.from("designer_off_days").select("*"),
       supabase.from("designer_off_slots").select("*"),
-    ]).then(([{ data: days }, { data: slots }]) => {
+      supabase.from("bookings").select("designer_id, booking_date, booking_time, service_ids, status, note").eq("designer_id", designer.id),
+      supabase.from("services").select("id, name, duration"),
+      supabase.from("price_items").select("id, name, duration"),
+      supabase.from("designer_price_items").select("id, name, duration").eq("designer_id", designer.id).eq("is_active", true),
+    ]).then(([{ data: days }, { data: slots }, { data: bookingData }, { data: serviceData }, { data: priceData }, { data: designerPriceData }]) => {
       if (days) setOffDays(days);
       if (slots) setOffSlots(slots);
+      if (bookingData) setBookings(bookingData);
+      setDurationItems([...(serviceData || []), ...(priceData || []), ...(designerPriceData || [])]);
       setLoading(false);
     });
   }, [designer, router]);
@@ -45,6 +99,25 @@ export default function Step3() {
   function isOffSlot(dateStr: string, t: string) {
     if (!designer) return false;
     return offSlots.some((s) => s.designer_id === designer.id && s.slot_date === dateStr && s.slot_time === t);
+  }
+
+  function isTimeUnavailable(dateStr: string, t: string) {
+    if (!designer) return true;
+    const start = timeToMinutes(t);
+    const end = start + getSelectedDurationMinutes(selectedServices);
+    const sortedHours = [...(designer.work_hours || [])].sort();
+    const latestEnd = sortedHours.length > 0 ? timeToMinutes(sortedHours[sortedHours.length - 1]) + getSlotMinutes(sortedHours) : 0;
+    const exceedsWorkHours = latestEnd > 0 && end > latestEnd;
+    const unavailableSlots = offSlots.filter((s) => s.designer_id === designer.id && s.slot_date === dateStr);
+    const hasOffSlotOverlap = unavailableSlots.some((slot) => rangesOverlap(start, end, timeToMinutes(slot.slot_time), timeToMinutes(slot.slot_time) + getSlotMinutes(designer.work_hours)));
+    const hasBookingOverlap = bookings
+      .filter((booking) => booking.designer_id === designer.id && booking.booking_date === dateStr && isBlockingBookingStatus(booking.status))
+      .some((booking) => {
+        const bookingStart = timeToMinutes(booking.booking_time);
+        const bookingEnd = bookingStart + getBookingDurationMinutes(booking, durationItems);
+        return rangesOverlap(start, end, bookingStart, bookingEnd);
+      });
+    return exceedsWorkHours || hasOffSlotOverlap || hasBookingOverlap;
   }
 
   const firstDay = new Date(year, month - 1, 1).getDay();
@@ -146,7 +219,7 @@ export default function Step3() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
             {(designer?.work_hours || []).map((t) => {
-              const off = isOffSlot(date, t);
+              const off = isOffSlot(date, t) || isTimeUnavailable(date, t);
               const picked = time === t;
               return (
                 <div
