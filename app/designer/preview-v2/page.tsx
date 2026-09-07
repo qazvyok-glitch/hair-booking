@@ -805,12 +805,17 @@ export default function DesignerPreviewV2Page() {
         .circle-nav { width: 32px; height: 32px; border: none; border-radius: 50%; background: #eef1f5; color: #4b5563; font-weight: 900; }
         .weekday-grid, .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
         .weekday-grid { color: #7b8492; font-size: 12px; font-weight: 850; text-align: center; margin-bottom: 8px; }
-        .day-cell { min-height: 66px; border: 1px solid #edf0f4; background: #fff; padding: 7px 5px; font-size: 13px; font-weight: 850; color: #374151; position: relative; }
+        .day-cell { min-height: 66px; border: 1px solid #edf0f4; background: #fff; padding: 7px 5px; font-size: 13px; font-weight: 850; color: #374151; position: relative; overflow: hidden; }
         .day-cell.selected { background: #eaf7ff; outline: 1.5px solid #74c8ff; z-index: 1; }
         .day-cell.can-add { cursor: pointer; }
         .date-badge { display: inline-flex; width: 25px; height: 25px; border-radius: 50%; align-items: center; justify-content: center; }
         .selected .date-badge { background: #208bd8; color: #fff; }
         .schedule-bar { display: block; margin-top: 5px; border-radius: 5px; padding: 3px 4px; font-size: 10px; line-height: 1.15; color: #374151; }
+        .schedule-summary { display: grid; gap: 3px; margin-top: 4px; }
+        .schedule-summary-pill { display: block; max-width: 100%; border-radius: 999px; padding: 2px 5px; font-size: 10px; line-height: 1.25; font-weight: 950; color: #126dc2; background: #dff1ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .schedule-summary-pill.leave { color: #b45309; background: #ffe6d5; }
+        .schedule-summary-pill.team { color: #208051; background: #e1f6dc; }
+        .schedule-summary-more { display: block; margin-top: 2px; color: #8b95a3; font-size: 10px; font-weight: 900; white-space: nowrap; }
         .cut { background: #dff1ff; } .color { background: #d7f8ef; } .perm { background: #ffe2ef; } .treatment { background: #fff0cf; }
         .schedule-bar.day-off { background: #ffe6d5; color: #b45309; font-weight: 950; }
         .schedule-bar.blocked { background: #dff1ff; color: #126dc2; font-weight: 950; }
@@ -1443,10 +1448,16 @@ function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, 
           if (!date) return <div className="day-cell empty" key={`empty-${index}`} />;
           const fullDate = `${year}-${String(month).padStart(2, "0")}-${String(date).padStart(2, "0")}`;
           const items = getCalendarItems(fullDate, scheduleItems, leaveItems);
+          const summary = getMonthCellSummary(items, showDesigner);
           return (
             <div className={`day-cell can-add ${date === selectedDay ? "selected" : ""}`} key={date} onClick={() => onSelectDate(fullDate)}>
               <span className="date-badge">{date}</span>
-              {items.map((item) => <span className={`schedule-bar ${item.tone}`} key={item.text}>{item.text}</span>)}
+              {summary.items.length > 0 ? (
+                <div className="schedule-summary">
+                  {summary.items.map((item) => <span className={`schedule-summary-pill ${item.tone}`} key={item.text}>{item.text}</span>)}
+                  {summary.moreCount > 0 ? <span className="schedule-summary-more">+{summary.moreCount} 更多</span> : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -3216,6 +3227,36 @@ function getCalendarItems(date: string, scheduleItems: CalendarRecords<ScheduleI
   }));
 
   return [...leaveRows, ...bookingRows];
+}
+
+function getMonthCellSummary(items: CalendarItem[], showDesigner: boolean) {
+  const bookingItems = items.filter((item) => item.category !== "leave");
+  const leaveItems = items.filter((item) => item.category === "leave");
+  const summaryItems: { text: string; tone: "booking" | "leave" | "team" }[] = [];
+
+  if (showDesigner) {
+    const designerCounts = new Map<string, number>();
+    bookingItems.forEach((item) => {
+      const designer = item.designer || "未指定";
+      designerCounts.set(designer, (designerCounts.get(designer) || 0) + 1);
+    });
+    Array.from(designerCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
+      .slice(0, 2)
+      .forEach(([designer, count]) => summaryItems.push({ text: `${designer} ${count}`, tone: "team" }));
+  } else if (bookingItems.length > 0) {
+    summaryItems.push({ text: `${bookingItems.length} 則預約`, tone: "booking" });
+  }
+
+  if (leaveItems.length > 0) {
+    summaryItems.push({ text: `${leaveItems.length} 筆排休`, tone: "leave" });
+  }
+
+  const totalSummaryCount = showDesigner ? new Set(bookingItems.map((item) => item.designer || "未指定")).size + (leaveItems.length > 0 ? 1 : 0) : summaryItems.length;
+  return {
+    items: summaryItems.slice(0, 3),
+    moreCount: Math.max(0, totalSummaryCount - 3),
+  };
 }
 
 function mergeCalendarRecords<T>(primary: CalendarRecords<T>, secondary: CalendarRecords<T>): CalendarRecords<T> {
