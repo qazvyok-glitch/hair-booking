@@ -213,6 +213,10 @@ export default function DesignerPreviewV2Page() {
   const [shopUseComplete, setShopUseComplete] = useState(false);
   const [showProductCheckoutModal, setShowProductCheckoutModal] = useState(false);
   const [productCheckoutComplete, setProductCheckoutComplete] = useState(false);
+  const [showStockInModal, setShowStockInModal] = useState(false);
+  const [stockInComplete, setStockInComplete] = useState(false);
+  const [showInventoryAdjustModal, setShowInventoryAdjustModal] = useState(false);
+  const [inventoryAdjustComplete, setInventoryAdjustComplete] = useState(false);
   const emptyTodayRows = initialTodayRows;
   const emptyScheduleItems = initialScheduleItems;
   const emptyLeaveItems = initialLeaveItems;
@@ -685,6 +689,73 @@ export default function DesignerPreviewV2Page() {
     setShopUseComplete(true);
   }
 
+  async function saveStockInMaterials(items: SelfUseMaterialItem[]) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，進貨入庫未送出。請重新整理後再試。");
+      return;
+    }
+    if (!backendSession.is_manager) {
+      alert("此功能僅限店長權限使用。");
+      return;
+    }
+    if (items.length === 0) {
+      alert("請先選擇進貨商品。");
+      return;
+    }
+
+    for (const item of items) {
+      const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+      if (product) {
+        const newStock = (product.stock_quantity || 0) + item.quantity;
+        await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+        await supabase.from("stock_records").insert({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          quantity: item.quantity,
+          type: "in",
+          note: `設計師端進貨 - ${designerProfile.name}`,
+        });
+      }
+    }
+
+    await loadBackendData(backendSession);
+    setStockInComplete(true);
+  }
+
+  async function saveInventoryAdjustMaterials(items: SelfUseMaterialItem[]) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，盤點調整未送出。請重新整理後再試。");
+      return;
+    }
+    if (!backendSession.is_manager) {
+      alert("此功能僅限店長權限使用。");
+      return;
+    }
+    if (items.length === 0) {
+      alert("請先選擇盤點商品。");
+      return;
+    }
+
+    for (const item of items) {
+      const { data: product } = await supabase.from("products").select("stock_quantity").eq("id", item.product.id).single();
+      if (product) {
+        const currentStock = product.stock_quantity || 0;
+        const newStock = Math.max(0, item.quantity);
+        await supabase.from("products").update({ stock_quantity: newStock }).eq("id", item.product.id);
+        await supabase.from("stock_records").insert({
+          product_id: item.product.id,
+          product_name: item.product.name,
+          quantity: newStock - currentStock,
+          type: "adjust",
+          note: `設計師端盤點 - ${designerProfile.name}`,
+        });
+      }
+    }
+
+    await loadBackendData(backendSession);
+    setInventoryAdjustComplete(true);
+  }
+
   const activeScheduleItems = backendConnected ? backendScheduleItems : emptyScheduleItems;
   const activeLeaveItems = backendConnected ? backendLeaveItems : emptyLeaveItems;
   const activeTeamScheduleItems = backendConnected ? backendTeamScheduleItems : teamScheduleItems;
@@ -726,7 +797,7 @@ export default function DesignerPreviewV2Page() {
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
               {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
-              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenShopUse={() => { setShopUseComplete(false); setShowShopUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} />}
+              {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} isManager={isManager} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenShopUse={() => { setShopUseComplete(false); setShowShopUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} onOpenStockIn={() => { setStockInComplete(false); setShowStockInModal(true); }} onOpenInventoryAdjust={() => { setInventoryAdjustComplete(false); setShowInventoryAdjustModal(true); }} />}
             </>
           )}
         </div>
@@ -737,6 +808,8 @@ export default function DesignerPreviewV2Page() {
       {showSelfUseModal && <SelfUseMaterialModal products={backendProducts} complete={selfUseComplete} isSynced={backendConnected} onComplete={saveSelfUseMaterials} onClose={() => { setShowSelfUseModal(false); setSelfUseComplete(false); }} />}
       {showShopUseModal && <ShopUseMaterialModal products={backendProducts} complete={shopUseComplete} isSynced={backendConnected} onComplete={saveShopUseMaterials} onClose={() => { setShowShopUseModal(false); setShopUseComplete(false); }} />}
       {showProductCheckoutModal && <ProductCheckoutModal products={backendProducts} complete={productCheckoutComplete} isSynced={backendConnected} onComplete={completeProductCheckout} onClose={() => { setShowProductCheckoutModal(false); setProductCheckoutComplete(false); }} />}
+      {showStockInModal && <StockMovementModal mode="in" products={backendProducts} complete={stockInComplete} isSynced={backendConnected} onComplete={saveStockInMaterials} onClose={() => { setShowStockInModal(false); setStockInComplete(false); }} />}
+      {showInventoryAdjustModal && <StockMovementModal mode="adjust" products={backendProducts} complete={inventoryAdjustComplete} isSynced={backendConnected} onComplete={saveInventoryAdjustMaterials} onClose={() => { setShowInventoryAdjustModal(false); setInventoryAdjustComplete(false); }} />}
       {checkoutAppointment && <CheckoutModal row={checkoutAppointment} serviceOptions={checkoutServiceOptions} products={backendProducts} complete={checkoutComplete} isSynced={backendConnected} onComplete={completeCheckout} onClose={() => { setCheckoutAppointment(null); setCheckoutComplete(false); }} />}
       {bookingDraft && <AddBookingModal draft={bookingDraft} complete={bookingComplete} designerOptions={activeDesignerOptions} serviceOptions={bookingServiceOptions} customerRecords={backendCustomers} isSynced={backendConnected} onChange={setBookingDraft} onComplete={completeSyncedBooking} onClose={() => { setBookingDraft(null); setBookingComplete(false); }} />}
 
@@ -1032,6 +1105,7 @@ export default function DesignerPreviewV2Page() {
         .shop-use-line { grid-template-columns: 1fr 64px 86px; }
         .shop-use-stock-label { color: #17875d; font-size: 12px; font-weight: 950; text-align: right; white-space: nowrap; }
         .shop-use-summary, .shop-use-summary strong { color: #17875d; }
+        .stock-adjust-diff { display: block; color: #8b95a3; font-size: 10px; font-weight: 850; margin-top: 3px; }
         .shop-use-preview { background: #0f3326; }
         .booking-field { margin-bottom: 12px; }
         .booking-label { color: #6b7280; font-size: 12px; font-weight: 900; margin-bottom: 6px; }
@@ -1574,7 +1648,7 @@ function Legend() {
   );
 }
 
-function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, onOpenSelfUse, onOpenShopUse, onOpenProductCheckout }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void; onOpenShopUse: () => void; onOpenProductCheckout: () => void }) {
+function EarningsView({ ranges, detailGroups, customRange, isManager, onCustomRangeChange, onOpenSelfUse, onOpenShopUse, onOpenProductCheckout, onOpenStockIn, onOpenInventoryAdjust }: { ranges: Record<EarningsRange, EarningsData>; detailGroups?: IncomeDetailGroupsByRange | null; customRange: IncomeDateRange; isManager: boolean; onCustomRangeChange: (range: IncomeDateRange) => void; onOpenSelfUse: () => void; onOpenShopUse: () => void; onOpenProductCheckout: () => void; onOpenStockIn: () => void; onOpenInventoryAdjust: () => void }) {
   const [activeRange, setActiveRange] = useState<EarningsRange>("本月");
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
@@ -1622,6 +1696,18 @@ function EarningsView({ ranges, detailGroups, customRange, onCustomRangeChange, 
                 <strong>新增結帳</strong>
                 <span>純商品購買，列入商品銷售</span>
               </button>
+              {isManager && (
+                <>
+                  <button type="button" onClick={() => { setShowAddMenu(false); onOpenStockIn(); }}>
+                    <strong>進貨入庫</strong>
+                    <span>店長使用，增加後台庫存</span>
+                  </button>
+                  <button type="button" onClick={() => { setShowAddMenu(false); onOpenInventoryAdjust(); }}>
+                    <strong>盤點調整</strong>
+                    <span>店長使用，記錄盤點盈虧</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -2096,6 +2182,123 @@ function ShopUseMaterialModal({ products, complete, isSynced, onComplete, onClos
         <div className="modal-action-row">
           <button className="secondary-modal-btn" onClick={onClose}>取消</button>
           <button className="primary-modal-btn" disabled={!isSynced || saving || items.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : "確認店用領料" : "等待後台連線"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StockMovementModal({ mode, products, complete, isSynced, onComplete, onClose }: { mode: "in" | "adjust"; products: BackendProduct[]; complete: boolean; isSynced: boolean; onComplete: (items: SelfUseMaterialItem[]) => void | Promise<void>; onClose: () => void }) {
+  const [items, setItems] = useState<SelfUseMaterialItem[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("全部");
+  const [saving, setSaving] = useState(false);
+  const isStockIn = mode === "in";
+  const title = isStockIn ? "進貨入庫" : "盤點調整";
+  const subtitle = isStockIn ? "店長權限，送出後會同步增加後台庫存與進貨紀錄。" : "店長權限，輸入實際庫存後會同步記錄盤點盈虧。";
+  const completeTitle = isStockIn ? "進貨已同步" : "盤點已同步";
+  const completeSubtitle = isStockIn ? "已增加庫存並寫入後台進出記錄。" : "已更新庫存並寫入後台盤點盈虧記錄。";
+  const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
+  const filteredProducts = products.filter((product) => {
+    const itemCategory = product.category || "未分類";
+    const keyword = search.trim().toLowerCase();
+    if (product.is_active === false) return false;
+    if (category !== "全部" && itemCategory !== category) return false;
+    if (keyword && !`${product.name} ${itemCategory}`.toLowerCase().includes(keyword)) return false;
+    return true;
+  });
+
+  function toggleProduct(product: BackendProduct) {
+    const selected = items.find((item) => item.product.id === product.id);
+    setItems(selected ? items.filter((item) => item.product.id !== product.id) : [...items, { product, quantity: isStockIn ? 1 : product.stock_quantity || 0 }]);
+  }
+
+  function updateQuantity(productId: number, quantity: number) {
+    setItems(items.map((item) => item.product.id === productId ? { ...item, quantity: Math.max(0, quantity) } : item));
+  }
+
+  async function submit() {
+    setSaving(true);
+    await onComplete(items.filter((item) => isStockIn ? item.quantity > 0 : true));
+    setSaving(false);
+  }
+
+  if (complete) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+          <div className="complete-state">
+            <div className="complete-icon">✓</div>
+            <div className="modal-title">{completeTitle}</div>
+            <div className="modal-subtitle">{completeSubtitle}</div>
+          </div>
+          <button className="full-width-btn" onClick={onClose}>完成</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">{title}</div>
+            <div className="modal-subtitle">{subtitle}</div>
+          </div>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <input className="checkout-input product-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜尋商品名稱或分類..." />
+        <div className="product-category-tabs">
+          {categories.map((item) => (
+            <button className={`product-category-chip${category === item ? " active" : ""}`} key={item} onClick={() => setCategory(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <div className="product-list">
+          {filteredProducts.length > 0 ? filteredProducts.map((product) => {
+            const selected = items.find((item) => item.product.id === product.id);
+            const unitText = product.unit ? ` / ${product.unit}` : "";
+            return (
+              <div className={`product-item${selected ? " selected" : ""}`} key={product.id}>
+                <button className="product-pick-row" onClick={() => toggleProduct(product)}>
+                  <span>
+                    <span className="product-name">{product.name}</span>
+                    <span className="product-meta">{product.category || "未分類"} · 目前庫存 {product.stock_quantity ?? 0}{unitText}</span>
+                  </span>
+                  <span className="product-check">{selected ? "✓" : ""}</span>
+                </button>
+              </div>
+            );
+          }) : (
+            <div className="product-empty">找不到符合的商品</div>
+          )}
+        </div>
+        {items.length > 0 && (
+          <div className="self-use-lines">
+            {items.map((item) => {
+              const currentStock = item.product.stock_quantity || 0;
+              const diff = item.quantity - currentStock;
+              return (
+                <div className="product-price-line shop-use-line" key={item.product.id}>
+                  <div className="row-service">
+                    {item.product.name}
+                    {!isStockIn && <small className="stock-adjust-diff">目前 {currentStock}，{diff > 0 ? `盈 +${diff}` : diff < 0 ? `虧 ${diff}` : "無差異"}</small>}
+                  </div>
+                  <label className="product-quantity-field">
+                    <span className="product-quantity-label">{isStockIn ? "進貨" : "實際"}</span>
+                    <input className="checkout-input" type="number" min={0} value={item.quantity} onChange={(event) => updateQuantity(item.product.id, Number(event.target.value) || 0)} />
+                  </label>
+                  <div className="shop-use-stock-label">{isStockIn ? "增加庫存" : "盤點"}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="modal-action-row">
+          <button className="secondary-modal-btn" onClick={onClose}>取消</button>
+          <button className="primary-modal-btn" disabled={!isSynced || saving || items.length === 0} onClick={submit}>{isSynced ? saving ? "同步中..." : `確認${title}` : "等待後台連線"}</button>
         </div>
       </div>
     </div>
