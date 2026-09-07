@@ -55,6 +55,7 @@ type StockRecord = {
 };
 
 type ShopDetailKey = "actualIncome" | "serviceRevenue" | "productRevenue" | "selfUse" | "shopUse" | "discount";
+type DesignerDetailKey = Exclude<ShopDetailKey, "shopUse">;
 
 type ReportDetailRow = {
   id: string;
@@ -196,6 +197,7 @@ export default function AdminReport() {
     return new URLSearchParams(window.location.search).get("mode") === "designer" ? "designer" : "shop";
   });
   const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
+  const [activeDesignerDetail, setActiveDesignerDetail] = useState<DesignerDetailKey>("actualIncome");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
   const [nameMode, setNameMode] = useState<"english" | "chinese" | "both">("both");
@@ -689,6 +691,24 @@ export default function AdminReport() {
     shopUse: "店用領料明細",
     discount: "折扣金額明細",
   };
+  const filterRowsByActiveDesigner = (rows: ReportDetailRow[]) => activeReportDesigner
+    ? rows.filter((row) => row.designerName === getDesignerLabel(activeReportDesigner))
+    : [];
+  const designerDetailRowsByKey: Record<DesignerDetailKey, ReportDetailRow[]> = {
+    actualIncome: filterRowsByActiveDesigner(actualIncomeRows),
+    serviceRevenue: filterRowsByActiveDesigner(serviceDetailRows),
+    productRevenue: filterRowsByActiveDesigner(productSaleRows),
+    selfUse: filterRowsByActiveDesigner(selfUseRows),
+    discount: filterRowsByActiveDesigner(discountRows),
+  };
+  const activeDesignerDetailRows = designerDetailRowsByKey[activeDesignerDetail];
+  const activeDesignerDetailTitle: Record<DesignerDetailKey, string> = {
+    actualIncome: "設計師實際收入明細",
+    serviceRevenue: "設計師服務明細",
+    productRevenue: "設計師商品銷售明細",
+    selfUse: "設計師自領材料明細",
+    discount: "設計師折扣明細",
+  };
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -860,23 +880,22 @@ export default function AdminReport() {
 
         {reportMode === "designer" && activeReportDesigner && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(7, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
               {[
-                { label: `${getDesignerLabel(activeReportDesigner)} 本月總業績`, value: `NT$${designerTotals.totalRevenue.toLocaleString()}`, color: "#534AB7" },
-                { label: "實際收入", value: `NT$${designerTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
-                { label: "總客數", value: String(designerTotals.customerCount), color: "#0B66C3" },
-                { label: "商品銷售", value: `NT$${designerTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
-                { label: "自領材料", value: `-NT$${designerTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
-                { label: "折扣", value: `-NT$${designerTotals.discount.toLocaleString()}`, color: "#E24B4A" },
-                { label: "完成預約", value: String(monthlyTransactions.filter((item) => item.designer_id === activeReportDesigner.id).length), color: "#0B66C3" },
+                { key: "actualIncome" as DesignerDetailKey, label: "實際收入", value: `NT$${designerTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
+                { key: "serviceRevenue" as DesignerDetailKey, label: "服務業績", value: `NT$${designerTotals.serviceRevenue.toLocaleString()}`, color: "#534AB7" },
+                { key: "productRevenue" as DesignerDetailKey, label: "商品銷售", value: `NT$${designerTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
+                { key: "selfUse" as DesignerDetailKey, label: "自領材料", value: `-NT$${designerTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
+                { key: "discount" as DesignerDetailKey, label: "折扣", value: `-NT$${designerTotals.discount.toLocaleString()}`, color: "#E24B4A" },
+                { key: "actualIncome" as DesignerDetailKey, label: "總客數", value: String(designerTotals.customerCount), color: "#0B66C3" },
               ].map((card) => (
-                <div key={card.label} style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #D3D1C7", padding: 14 }}>
+                <button key={card.label} onClick={() => setActiveDesignerDetail(card.key)} style={{ background: activeDesignerDetail === card.key ? "#F7F5FF" : "#fff", borderRadius: 12, border: activeDesignerDetail === card.key ? "1.5px solid #534AB7" : "0.5px solid #D3D1C7", padding: 14, textAlign: "left", cursor: "pointer" }}>
                   <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
                   <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
-                </div>
+                </button>
               ))}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "420px 1fr" : "1fr", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
                 <div style={{ padding: "12px 14px", fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{getDesignerLabel(activeReportDesigner)} 月報摘要</div>
                 {[
@@ -892,12 +911,44 @@ export default function AdminReport() {
                   </div>
                 ))}
               </div>
-              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", padding: 14 }}>
-                <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700, marginBottom: 12 }}>明細入口</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {["服務明細", "商品銷售明細", "自領商品明細", "折扣明細"].map((item) => (
-                    <button key={item} style={{ border: "1px solid #D3D1C7", background: "#FAFAF8", borderRadius: 12, padding: "18px 10px", textAlign: "left", color: "#2C2C2A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{item} ›</button>
-                  ))}
+              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{activeDesignerDetailTitle[activeDesignerDetail]}</div>
+                    <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>只顯示目前選擇設計師的資料</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#888780", fontWeight: 600 }}>共 {activeDesignerDetailRows.length} 筆</div>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#F1EFE8" }}>
+                        {["日期", "明細", "數量", "金額"].map((head) => (
+                          <th key={head} style={{ padding: "10px 14px", fontSize: 12, color: "#888780", fontWeight: 700, textAlign: "left" }}>{head}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeDesignerDetailRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} style={{ padding: "18px 14px", color: "#888780", fontSize: 13, textAlign: "center" }}>目前沒有明細</td>
+                        </tr>
+                      ) : activeDesignerDetailRows.map((row, index) => {
+                        const showDate = index === 0 || activeDesignerDetailRows[index - 1].date !== row.date;
+                        return (
+                          <tr key={row.id} style={{ borderTop: "0.5px solid #F1EFE8" }}>
+                            <td style={{ padding: "11px 14px", fontSize: 13, color: showDate ? "#2C2C2A" : "#B4AEA4", fontWeight: showDate ? 700 : 500 }}>{showDate ? row.date : ""}</td>
+                            <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A", fontWeight: 600 }}>
+                              <span style={{ color: "#888780", marginRight: 8 }}>{row.kind}</span>
+                              {row.itemName}
+                            </td>
+                            <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A" }}>{row.quantity}</td>
+                            <td style={{ padding: "11px 14px", fontSize: 13, color: row.isNegative ? "#A32D2D" : "#1976C9", fontWeight: 800 }}>{row.amount}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -937,7 +988,7 @@ export default function AdminReport() {
         )}
       </div>
 
-      <AdminBottomNav current="report" />
+      <AdminBottomNav current={reportMode === "designer" ? "report-designer" : "report-shop"} />
     </div>
   );
 }

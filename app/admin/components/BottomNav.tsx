@@ -23,7 +23,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
   const router = useRouter();
   const [isDesktop, setIsDesktop] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    reports: current === "report",
+    reports: current === "report" || current.startsWith("report-"),
     work: current === "bookings",
     people: current === "designers",
     catalog: ["services", "products", "inventory", "prices"].includes(current),
@@ -117,8 +117,8 @@ export default function AdminBottomNav({ current }: { current: string }) {
   ];
 
   const isChildActive = (key: string) => {
-    if (key === "report-shop") return current === "report";
-    if (key === "report-designer") return false;
+    if (key === "report-shop") return current === "report" || current === "report-shop";
+    if (key === "report-designer") return current === "report-designer";
     if (key === "bookings") return current === "bookings";
     if (key === "schedule") return false;
     if (key === "permissions") return false;
