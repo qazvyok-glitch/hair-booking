@@ -6,19 +6,22 @@ import AdminBottomNav from "../components/BottomNav";
 
 type Product = { id: number; name: string; unit: string; unit_price: number; category: string; is_active: boolean; stock_quantity: number; barcode: string };
 type StockRecord = { id: number; product_id: number; product_name: string; quantity: number; type: string; note: string; created_at: string };
+type Designer = { id: number; name: string; display_name?: string | null; nickname?: string | null };
 
 export default function AdminInventory() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [records, setRecords] = useState<StockRecord[]>([]);
+  const [designers, setDesigners] = useState<Designer[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [tab, setTab] = useState<"stock" | "records" | "scan">("stock");
   const [showForm, setShowForm] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustQty, setAdjustQty] = useState("");
-  const [adjustType, setAdjustType] = useState<"in" | "adjust">("in");
+  const [adjustType, setAdjustType] = useState<"in" | "shop_use" | "adjust">("in");
   const [adjustNote, setAdjustNote] = useState("");
+  const [shopUseDesignerId, setShopUseDesignerId] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -43,12 +46,14 @@ export default function AdminInventory() {
   }, [router]);
 
   async function fetchData() {
-    const [{ data: pData }, { data: rData }] = await Promise.all([
+    const [{ data: pData }, { data: rData }, { data: dData }] = await Promise.all([
       supabase.from("products").select("*").order("category").order("sort_order"),
       supabase.from("stock_records").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("designers").select("id, name, display_name, nickname").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
     ]);
     if (pData) setProducts(pData);
     if (rData) setRecords(rData);
+    if (dData) setDesigners(dData);
     setLoading(false);
   }
 
@@ -59,29 +64,36 @@ export default function AdminInventory() {
     return true;
   });
 
-  function openAdjust(p: Product, type: "in" | "adjust") {
+  function openAdjust(p: Product, type: "in" | "shop_use" | "adjust") {
     setSelectedProduct(p);
     setAdjustType(type);
     setAdjustQty("");
     setAdjustNote("");
+    setShopUseDesignerId("");
     setShowForm(true);
   }
 
   async function handleAdjust() {
     if (!selectedProduct || !adjustQty) { alert("請填寫數量"); return; }
+    if (adjustType === "shop_use" && designers.length > 0 && !shopUseDesignerId) { alert("請選擇領用設計師"); return; }
     setSaving(true);
     const qty = parseInt(adjustQty);
+    const currentStock = selectedProduct.stock_quantity || 0;
+    const selectedDesigner = designers.find((designer) => String(designer.id) === shopUseDesignerId);
+    const selectedDesignerName = selectedDesigner?.display_name || selectedDesigner?.name || selectedDesigner?.nickname || "後台";
     const newStock = adjustType === "in"
-      ? (selectedProduct.stock_quantity || 0) + qty
-      : qty;
+      ? currentStock + qty
+      : adjustType === "shop_use"
+        ? Math.max(0, currentStock - qty)
+        : qty;
 
     await supabase.from("products").update({ stock_quantity: newStock }).eq("id", selectedProduct.id);
     await supabase.from("stock_records").insert({
       product_id: selectedProduct.id,
       product_name: selectedProduct.name,
-      quantity: adjustType === "in" ? qty : newStock - (selectedProduct.stock_quantity || 0),
-      type: adjustType,
-      note: adjustNote,
+      quantity: adjustType === "in" ? qty : newStock - currentStock,
+      type: adjustType === "shop_use" ? "out" : adjustType,
+      note: adjustType === "shop_use" ? `店用領料 - ${selectedDesignerName}${adjustNote ? `｜${adjustNote}` : ""}` : adjustNote,
     });
 
     setProducts(products.map(p => p.id === selectedProduct.id ? { ...p, stock_quantity: newStock } : p));
@@ -216,6 +228,7 @@ export default function AdminInventory() {
                         <td style={{ padding: "10px 12px" }}>
                           <div style={{ display: "flex", gap: 4 }}>
                             <button onClick={() => openAdjust(p, "in")} style={{ padding: "4px 8px", background: "#E1F5EE", color: "#085041", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>＋ 進貨</button>
+                            <button onClick={() => openAdjust(p, "shop_use")} style={{ padding: "4px 8px", background: "#E8F2FF", color: "#0B66C3", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>店用</button>
                             <button onClick={() => openAdjust(p, "adjust")} style={{ padding: "4px 8px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>盤點</button>
                           </div>
                         </td>
@@ -252,6 +265,7 @@ export default function AdminInventory() {
                   </div>
                   <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
                     <button onClick={() => openAdjust(p, "in")} style={{ flex: 1, padding: "7px 0", background: "#E1F5EE", color: "#085041", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>＋ 進貨</button>
+                    <button onClick={() => openAdjust(p, "shop_use")} style={{ flex: 1, padding: "7px 0", background: "#E8F2FF", color: "#0B66C3", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>店用</button>
                     <button onClick={() => openAdjust(p, "adjust")} style={{ flex: 1, padding: "7px 0", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>盤點調整</button>
                   </div>
                 </div>
@@ -270,7 +284,7 @@ export default function AdminInventory() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{r.product_name}</div>
-                  <div style={{ fontSize: 11, color: "#888780" }}>{r.created_at?.slice(0,10).replace(/-/g,"/")} ・ {r.type === "in" ? "進貨" : r.type === "out" ? "自領" : "盤點"}</div>
+                  <div style={{ fontSize: 11, color: "#888780" }}>{r.created_at?.slice(0,10).replace(/-/g,"/")} ・ {r.type === "in" ? "進貨" : (r.note || "").startsWith("店用領料") ? "店用領料" : r.type === "out" ? "自領" : "盤點"}</div>
                   {r.note && <div style={{ fontSize: 11, color: "#888780" }}>{r.note}</div>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: r.type === "in" ? "#085041" : r.type === "out" ? "#A32D2D" : "#BA7517" }}>
@@ -288,7 +302,7 @@ export default function AdminInventory() {
           <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{adjustType === "in" ? "進貨" : "盤點調整"}</div>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{adjustType === "in" ? "進貨" : adjustType === "shop_use" ? "店用領料" : "盤點調整"}</div>
                 <div style={{ fontSize: 12, color: "#888780" }}>{selectedProduct.name}</div>
               </div>
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
@@ -301,13 +315,13 @@ export default function AdminInventory() {
 
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>
-                {adjustType === "in" ? "進貨數量" : "調整後庫存數量"}
+                {adjustType === "in" ? "進貨數量" : adjustType === "shop_use" ? "領用數量" : "調整後庫存數量"}
               </div>
               <input
                 value={adjustQty}
                 onChange={e => setAdjustQty(e.target.value)}
                 type="number"
-                placeholder={adjustType === "in" ? "輸入進貨數量" : "輸入實際庫存數量"}
+                placeholder={adjustType === "in" ? "輸入進貨數量" : adjustType === "shop_use" ? "輸入店用領料數量" : "輸入實際庫存數量"}
                 style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box" }}
               />
               {adjustType === "in" && adjustQty && (
@@ -315,15 +329,32 @@ export default function AdminInventory() {
                   進貨後庫存：{(selectedProduct.stock_quantity||0) + parseInt(adjustQty||"0")} {selectedProduct.unit}
                 </div>
               )}
+              {adjustType === "shop_use" && adjustQty && (
+                <div style={{ fontSize: 11, color: "#0B66C3", marginTop: 4 }}>
+                  領用後庫存：{Math.max(0, (selectedProduct.stock_quantity||0) - parseInt(adjustQty||"0"))} {selectedProduct.unit}，只扣庫存不扣設計師收入
+                </div>
+              )}
             </div>
+
+            {adjustType === "shop_use" && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>領用設計師</div>
+                <select value={shopUseDesignerId} onChange={e => setShopUseDesignerId(e.target.value)} style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+                  <option value="">請選擇設計師</option>
+                  {designers.map((designer) => (
+                    <option key={designer.id} value={designer.id}>{designer.display_name || designer.name || designer.nickname}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
-              <input value={adjustNote} onChange={e => setAdjustNote(e.target.value)} placeholder="供應商、批次..." style={{ width: "100%", padding: "9px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              <input value={adjustNote} onChange={e => setAdjustNote(e.target.value)} placeholder={adjustType === "shop_use" ? "用途、備註..." : "供應商、批次..."} style={{ width: "100%", padding: "9px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
             </div>
 
-            <button onClick={handleAdjust} disabled={saving} style={{ width: "100%", padding: "13px 0", background: saving ? "#D3D1C7" : adjustType === "in" ? "#1D9E75" : "#BA7517", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
-              {saving ? "儲存中..." : adjustType === "in" ? "確認進貨" : "確認盤點"}
+            <button onClick={handleAdjust} disabled={saving} style={{ width: "100%", padding: "13px 0", background: saving ? "#D3D1C7" : adjustType === "in" ? "#1D9E75" : adjustType === "shop_use" ? "#0B66C3" : "#BA7517", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
+              {saving ? "儲存中..." : adjustType === "in" ? "確認進貨" : adjustType === "shop_use" ? "確認店用領料" : "確認盤點"}
             </button>
           </div>
         </div>

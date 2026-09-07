@@ -637,7 +637,7 @@ export default function AdminReport() {
   const shopUseRows: ReportDetailRow[] = monthlyShopUseRecords.map((record) => ({
     id: `shop-use-${record.id}`,
     date: formatReportDate(record.created_at),
-    designerName: (record.note || "").replace("店用領料 - ", "") || "-",
+    designerName: ((record.note || "").replace("店用領料 - ", "").split("｜")[0] || "-").trim(),
     kind: "店用領料",
     itemName: record.product_name,
     quantity: String(Math.abs(Number(record.quantity || 0))),
