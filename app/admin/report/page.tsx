@@ -818,53 +818,6 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         doc.text(productTotal.toLocaleString(), 390, finalY + 26, { align: "right" });
       }
 
-      doc.addPage("a4", "portrait");
-      doc.setFont("NotoSansTC", "normal");
-      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 202, 22, 190, 65);
-      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
-      doc.setFont("NotoSansTC", "bold");
-      doc.setFontSize(11);
-      doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
-      doc.text(serviceTotal.toLocaleString(), 430, 126);
-
-      autoTable(doc, {
-        startY: 150,
-        head: [["費用明細小計"]],
-        body: [],
-        styles: { font: "NotoSansTC", fontStyle: "bold", fontSize: 13, halign: "center", cellPadding: 5 },
-        headStyles: { fillColor: [58, 139, 211], textColor: [255, 255, 255] },
-        margin: { left: 175, right: 175 },
-      });
-      autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY,
-        head: [["日期", "明細", "金額"]],
-        body: [
-          [getRocMonthLabel(reportStartDate), "收益共享服務費", feeTotal.toLocaleString()],
-          [getRocMonthLabel(reportStartDate), "品牌社群資源共享費", reports.reduce((sum, item) => sum + item.report.brandFee, 0).toLocaleString()],
-          ["", "費用合計", totalDue.toLocaleString()],
-        ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 3, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.6 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [215, 230, 244], textColor: [0, 0, 0], fontSize: 10, halign: "center" },
-        alternateRowStyles: { fillColor: [202, 224, 244] },
-        bodyStyles: { fillColor: [240, 247, 253] },
-        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 180 }, 2: { cellWidth: 80, halign: "right" } },
-        margin: { left: 175, right: 175 },
-      });
-
-      autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 54,
-        head: [["本月應繳", ""]],
-        body: [
-          ["費用小計", totalDue.toLocaleString()],
-          ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
-          ["本月應繳總額", totalDue.toLocaleString()],
-        ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5, textColor: [0, 0, 0], lineColor: [139, 211, 112], lineWidth: 0.8 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [116, 205, 88], textColor: [0, 0, 0], fontSize: 15, halign: "center" },
-        columnStyles: { 0: { cellWidth: 210, halign: "center" }, 1: { cellWidth: 130, halign: "right" } },
-        margin: { left: 175, right: 175 },
-      });
-
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
       return;
     } catch(e) {
