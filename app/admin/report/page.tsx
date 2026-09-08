@@ -854,8 +854,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         const x = 38;
         const width = 1114;
         const headerY = 152;
-        const headerHeight = 70;
-        const rowHeight = 74;
+        const headerHeight = 54;
+        const rowHeight = 50;
         const columns = [
           { label: "訂單日期", x: 0, width: 188, align: "start" as const },
           { label: "分類", x: 188, width: 126, align: "start" as const },
@@ -881,13 +881,13 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
             ${renderText(item.payment, x + 998, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 12 })}
           </g>`;
         }).join("");
-        const totalY = headerY + headerHeight + items.length * rowHeight + 16;
+        const totalY = headerY + headerHeight + items.length * rowHeight + 8;
         const totalSvg = includeTotal ? `<g>
-          <rect x="${x}" y="${totalY}" width="${width}" height="76" fill="#D4E9FA"/>
-          ${renderText("總計", x + 12, totalY + 48, { size: 24, color: "#20262C", weight: 900 })}
-          ${renderText(`${dailyDetailItems.length.toLocaleString()} 筆`, x + 176, totalY + 48, { size: 22, color: "#20262C", weight: 800 })}
-          ${renderText(dailySalesTotal.toLocaleString(), x + 812, totalY + 48, { anchor: "end", size: 22, color: "#20262C", weight: 900 })}
-          ${renderText(dailyDiscountTotal.toLocaleString(), x + 892, totalY + 48, { anchor: "end", size: 22, color: "#20262C", weight: 900 })}
+          <rect x="${x}" y="${totalY}" width="${width}" height="56" fill="#D4E9FA"/>
+          ${renderText("總計", x + 12, totalY + 36, { size: 22, color: "#20262C", weight: 900 })}
+          ${renderText(`${dailyDetailItems.length.toLocaleString()} 筆`, x + 176, totalY + 36, { size: 20, color: "#20262C", weight: 800 })}
+          ${renderText(dailySalesTotal.toLocaleString(), x + 812, totalY + 36, { anchor: "end", size: 20, color: "#20262C", weight: 900 })}
+          ${renderText(dailyDiscountTotal.toLocaleString(), x + 892, totalY + 36, { anchor: "end", size: 20, color: "#20262C", weight: 900 })}
         </g>` : "";
         const emptySvg = !items.length ? renderText("此區間尚無每日明細", x + 12, headerY + headerHeight + 52, { size: 22, color: "#59636D", weight: 700 }) : "";
         return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
@@ -895,14 +895,14 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           <rect width="100%" height="100%" fill="#fff"/>
           ${renderText("每日明細", 38, 86, { size: 42, color: "#20262C", weight: 900 })}
           <rect x="${x}" y="${headerY}" width="${width}" height="${headerHeight}" fill="#009799"/>
-          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 44, { size: 22, color: "#fff", weight: 800 })).join("")}
+          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 36, { size: 21, color: "#fff", weight: 800 })).join("")}
           ${rowsSvg}
           ${emptySvg}
           ${totalSvg}
           ${renderText(`Bing Cherry Hair Hub 2.0 · Page ${pageIndex + 1} of ${pageCount}`, 38, 1628, { size: 16, color: "#7D7A73", weight: 600 })}
         </svg>`;
       };
-      const rowsPerPage = 16;
+      const rowsPerPage = 24;
       const dailyPages = dailyDetailItems.length
         ? Array.from({ length: Math.ceil(dailyDetailItems.length / rowsPerPage) }, (_, index) => dailyDetailItems.slice(index * rowsPerPage, (index + 1) * rowsPerPage))
         : [[]];
