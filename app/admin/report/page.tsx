@@ -855,12 +855,12 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         startY: 72,
         head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
         body: dailyDetailBody,
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.4, cellPadding: { top: 5, right: 3, bottom: 5, left: 3 }, overflow: "linebreak", textColor: [34, 48, 57], lineWidth: 0, minCellHeight: 23 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [255, 255, 255], textColor: [23, 111, 159], fontSize: 9.6, halign: "left", cellPadding: { top: 6, right: 3, bottom: 6, left: 3 }, lineColor: [23, 111, 159], lineWidth: { bottom: 1.2 } },
-        alternateRowStyles: { fillColor: [229, 240, 251] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.6, cellPadding: { top: 5, right: 3, bottom: 5, left: 3 }, overflow: "linebreak", textColor: [21, 34, 43], lineWidth: 0, minCellHeight: 23 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [21, 119, 171], textColor: [255, 255, 255], fontSize: 9.8, halign: "left", cellPadding: { top: 7, right: 3, bottom: 7, left: 3 } },
+        alternateRowStyles: { fillColor: [210, 230, 248] },
         bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: {
-          0: { cellWidth: 82, fontStyle: "bold", textColor: [28, 80, 142] },
+          0: { cellWidth: 82, fontStyle: "bold", textColor: [17, 80, 145] },
           1: { cellWidth: 70 },
           2: { cellWidth: 205 },
           3: { cellWidth: 55, halign: "right" },
@@ -873,9 +873,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           if (data.section !== "body") return;
           const raw = data.row.raw as string[];
           if (String(raw?.[0] || "") === "總計") {
-            data.cell.styles.fillColor = [216, 231, 247];
+            data.cell.styles.fillColor = [191, 217, 243];
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [34, 48, 57];
+            data.cell.styles.textColor = [21, 34, 43];
             data.cell.styles.cellPadding = { top: 9, right: 3, bottom: 9, left: 3 };
           }
           if (String(raw?.[1] || "") === "商品") {
