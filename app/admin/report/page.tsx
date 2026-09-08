@@ -773,7 +773,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         ${renderText(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 665, 365, { size: 24, color: "#111" })}
         ${renderText(`Date：${getPdfDateLabel(reportStartDate)}`, 665, 415, { size: 24, color: "#111" })}
         ${feeSvg.html}
-        ${productSvg.html}
+        ${productSvg}
         ${totalSvg.html}
       </svg>`;
       const invoiceDataUrl = await svgToPngDataUrl(invoiceSvg, svgWidth, svgHeight);
