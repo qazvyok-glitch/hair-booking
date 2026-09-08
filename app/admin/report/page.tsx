@@ -454,6 +454,18 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     return `${start.getMonth() + 1}-${end.getMonth() + 1}月份`;
   }
 
+  function getRocMonthLabel(dateString: string) {
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return dateString;
+    return `${date.getFullYear() - 1911} / ${String(date.getMonth() + 1).padStart(2, "0")}月`;
+  }
+
+  function getPdfDateLabel(dateString: string) {
+    const date = new Date(`${dateString}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return dateString.replace(/-/g, " / ");
+    return `${date.getFullYear()} / ${String(date.getMonth() + 1).padStart(2, "0")} / ${String(date.getDate()).padStart(2, "0")}`;
+  }
+
   // 導出 Excel — 格式與舊系統訂單列表對齊
   function exportExcel() {
     try {
@@ -508,97 +520,244 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const formatPdfMoney = (amount: number) => `NT$${Number(amount || 0).toLocaleString()}`;
       const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
       await applyChinesePdfFont(doc);
-      const title = reportMode === "shop" ? "店舖報表" : "設計師報表";
       const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map((designer) => normalizePdfText(getExportName(designer))).join("、");
       const logoDataUrl = await loadImageAsDataUrl("/logo.png");
-      const summaryRows = exportDesigners.map((designer) => {
-        const report = calcDesignerReport(designer);
-        return [
-          normalizePdfText(getExportName(designer)),
-          report.transactionCount,
-          formatPdfMoney(report.serviceRevenue),
-          formatPdfMoney(report.serviceCommission),
-          formatPdfMoney(report.brandFee),
-          formatPdfMoney(report.totalCommission),
-        ];
-      });
+      const coverDataUrl = await loadImageAsDataUrl("/report-cover-template.jpg");
+      const reports = exportDesigners.map((designer) => ({ designer, report: calcDesignerReport(designer) }));
+      const feeRows = reports.flatMap(({ designer, report }) => [
+        [
+          getRocMonthLabel(reportStartDate) + " - 收益共享服務費",
+          "1",
+          "",
+          report.serviceCommission.toLocaleString(),
+          `(${formatPdfMoney(report.serviceRevenue)} - ${formatPdfMoney(report.baseDeduction)}) x ${Math.round(Number(designer.commission_rate || 0) * 100)}%`,
+        ],
+        [
+          getRocMonthLabel(reportStartDate) + " - 品牌社群資源共享費",
+          "1",
+          "",
+          report.brandFee.toLocaleString(),
+          `${formatPdfMoney(report.serviceRevenue)} x ${Math.round(Number(report.brandFeeRate || 0) * 100)}%`,
+        ],
+      ]);
+      const feeTotal = reports.reduce((sum, item) => sum + item.report.serviceCommission + item.report.brandFee, 0);
+      const exportDesignerIds = new Set(exportDesigners.map((designer) => designer.id));
+      const productRows = monthlyProductUsages
+        .filter((usage) => exportDesignerIds.has(usage.designer_id))
+        .map((usage) => [
+          formatReportDate(usage.used_at),
+          String(Number(usage.quantity || 1)),
+          normalizePdfText(usage.product_name),
+          Number(usage.total_cost || 0).toLocaleString(),
+        ]);
+      const productTotal = productRows.reduce((sum, row) => sum + Number(String(row[3] || "0").replace(/[^\d.-]/g, "")), 0);
+      const serviceTotal = reports.reduce((sum, item) => sum + item.report.serviceRevenue, 0);
+      const totalDue = feeTotal;
       const detailRows = orderRows.map((row) => [
+        row["訂單號碼"],
         row["訂單時間"],
-        normalizePdfText(row["工作人員"]),
         row["分類"],
         normalizePdfText(row["品項"]),
-        row["數量"],
         row["總價"],
+        row["折扣"],
+        normalizePdfText(row["工作人員"]),
         row["支付方式"],
       ]);
 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
-      doc.setFillColor(250, 250, 248);
-      doc.rect(0, 0, pageWidth, pageHeight, "F");
-      doc.setDrawColor(235, 232, 224);
-      for (let i = 0; i < 18; i++) {
-        doc.setDrawColor(238 - i, 236 - i, 232 - i);
-        doc.line(30 + i * 42, 0, 0, 90 + i * 46);
-        doc.line(pageWidth, 120 + i * 38, 120 + i * 35, pageHeight);
+      if (coverDataUrl) {
+        doc.addImage(coverDataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
+        doc.setFillColor(52, 71, 61);
+        doc.rect(265, 282, 265, 52, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("NotoSansTC", "bold");
+        doc.setFontSize(28);
+        doc.text(`${getPdfMonthLabel()} / ${targetLabel}`, 520, 318, { align: "right" });
+      } else {
+        doc.setFillColor(250, 250, 248);
+        doc.rect(0, 0, pageWidth, pageHeight, "F");
+        doc.setFillColor(52, 71, 61);
+        doc.rect(72, 140, pageWidth - 144, 215, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("NotoSansTC", "normal");
+        doc.setFontSize(44);
+        doc.text("Monthly Report", pageWidth - 96, 216, { align: "right" });
+        doc.setFontSize(34);
+        doc.text("月報表", pageWidth - 96, 274, { align: "right" });
+        doc.setFont("NotoSansTC", "bold");
+        doc.setFontSize(30);
+        doc.text(`${getPdfMonthLabel()} / ${targetLabel}`, pageWidth - 96, 326, { align: "right" });
+        if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", pageWidth / 2 - 48, 418, 96, 96);
+        doc.setTextColor(20, 20, 20);
+        doc.setFontSize(32);
+        doc.text("Bing Cherry", pageWidth / 2, 565, { align: "center" });
+        doc.setFont("NotoSansTC", "normal");
+        doc.setFontSize(24);
+        doc.text("Hair Hub 2.0", pageWidth / 2, 602, { align: "center" });
+        doc.setFontSize(20);
+        doc.text("超越共享，打造屬於我們的美髮社區", pageWidth / 2, 720, { align: "center" });
       }
-      doc.setFillColor(52, 71, 61);
-      doc.rect(72, 140, pageWidth - 144, 215, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("NotoSansTC", "normal");
-      doc.setFontSize(44);
-      doc.text("Monthly Report", pageWidth - 96, 216, { align: "right" });
-      doc.setFontSize(34);
-      doc.text("月報表", pageWidth - 96, 274, { align: "right" });
-      doc.setFont("NotoSansTC", "bold");
-      doc.setFontSize(30);
-      doc.text(`${getPdfMonthLabel()} / ${targetLabel}`, pageWidth - 96, 326, { align: "right" });
-      if (logoDataUrl) {
-        doc.addImage(logoDataUrl, "PNG", pageWidth / 2 - 48, 418, 96, 96);
-      }
-      doc.setTextColor(20, 20, 20);
-      doc.setFontSize(32);
-      doc.text("Bing Cherry", pageWidth / 2, 565, { align: "center" });
-      doc.setFont("NotoSansTC", "normal");
-      doc.setFontSize(24);
-      doc.text("Hair Hub 2.0", pageWidth / 2, 602, { align: "center" });
-      doc.setFontSize(20);
-      doc.text("超越共享，打造屬於我們的美髮社區", pageWidth / 2, 720, { align: "center" });
-      doc.setFontSize(12);
-      doc.text("More than a space, we're a creative community.", pageWidth / 2, 744, { align: "center" });
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
-      doc.setTextColor(32, 32, 32);
-      doc.setFontSize(18);
-      doc.text(title, 40, 42);
-      doc.setFontSize(10);
-      doc.text(`結算區間：${reportStartDate} 至 ${reportEndDate}`, 40, 64);
-      doc.text(`結算日：${settlementDate}`, 40, 80);
-      doc.text(`設計師：${targetLabel}`, 40, 96);
+      doc.setTextColor(0, 0, 0);
+      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 250, 22, 94, 94);
+      doc.setFont("NotoSansTC", "bold");
+      doc.setFontSize(22);
+      doc.text("INVOICE", pageWidth / 2, 150, { align: "center" });
+      doc.setFontSize(13);
+      doc.text(`Bill To：${targetLabel}`, 40, 190);
+      doc.text(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 330, 190);
+      doc.text(`Date：${getPdfDateLabel(reportStartDate)}`, 330, 214);
 
       autoTable(doc, {
-        startY: 124,
-        head: [["設計師", "筆數", "服務業績", "服務抽成", "品牌共享費", "應付抽成"]],
-        body: summaryRows.length ? summaryRows : [["無資料", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 6, overflow: "linebreak", textColor: [39, 39, 42], lineColor: [190, 186, 176], lineWidth: 0.6 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [225, 221, 211], textColor: [31, 41, 55], lineColor: [175, 170, 160], lineWidth: 0.8 },
-        alternateRowStyles: { fillColor: [248, 247, 243] },
+        startY: 250,
+        head: [["費用明細", "數量", "單價", "金額", "備註"]],
+        body: [
+          ...feeRows,
+          ["費用小計", "", "", feeTotal.toLocaleString(), ""],
+        ],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 4, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.7 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [83, 150, 211], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
+        alternateRowStyles: { fillColor: [215, 230, 244] },
+        columnStyles: { 0: { cellWidth: 205 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 130 } },
         margin: { left: 40, right: 40 },
+        didParseCell: (data) => {
+          if (data.row.index === feeRows.length) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [215, 230, 244];
+            data.cell.styles.lineColor = [35, 88, 140];
+            data.cell.styles.lineWidth = 1.1;
+          }
+        },
       });
 
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 28,
-        head: [["訂單時間", "設計師", "分類", "品項", "數量", "總價", "支付方式"]],
-        body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.5, cellPadding: 5, overflow: "linebreak", textColor: [39, 39, 42], lineColor: [200, 196, 186], lineWidth: 0.5 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [225, 221, 211], textColor: [31, 41, 55], lineColor: [175, 170, 160], lineWidth: 0.8 },
-        alternateRowStyles: { fillColor: [248, 247, 243] },
-        columnStyles: { 0: { cellWidth: 76 }, 1: { cellWidth: 58 }, 2: { cellWidth: 66 }, 3: { cellWidth: 170 }, 4: { cellWidth: 36 }, 5: { cellWidth: 54 }, 6: { cellWidth: 70 } },
+        startY: (doc as any).lastAutoTable.finalY + 38,
+        head: [["商品明細", "數量", "品名", "金額"]],
+        body: [
+          ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
+          ["自領商品合計", "", "", productTotal.toLocaleString()],
+        ],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 4, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.7 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [240, 165, 126], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
+        alternateRowStyles: { fillColor: [249, 225, 211] },
+        columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 270 }, 3: { cellWidth: 95, halign: "right" } },
         margin: { left: 40, right: 40 },
+        didParseCell: (data) => {
+          if (data.row.index === (productRows.length ? productRows.length : 1)) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [249, 225, 211];
+            data.cell.styles.lineColor = [195, 83, 21];
+            data.cell.styles.lineWidth = 1.1;
+          }
+        },
+      });
+
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 42,
+        head: [["本月應繳總額", ""]],
+        body: [
+          ["費用小計", feeTotal.toLocaleString()],
+          ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
+          ["本月應繳總額", totalDue.toLocaleString()],
+        ],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5, textColor: [0, 0, 0], lineColor: [139, 211, 112], lineWidth: 0.8 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [139, 211, 112], textColor: [255, 255, 255], fontSize: 16, halign: "center" },
+        columnStyles: { 0: { cellWidth: 340, halign: "center" }, 1: { cellWidth: 175, halign: "right" } },
+        margin: { left: 40, right: 40 },
+        didParseCell: (data) => {
+          if (data.row.index === 2) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fontSize = 14;
+            data.cell.styles.lineColor = [105, 190, 75];
+            data.cell.styles.lineWidth = 1.2;
+          }
+        },
+      });
+
+      doc.addPage("a4", "portrait");
+      doc.setFont("NotoSansTC", "normal");
+      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
+      doc.setFont("NotoSansTC", "bold");
+      doc.setFontSize(11);
+      doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
+      doc.text(serviceTotal.toLocaleString(), 430, 126);
+
+      autoTable(doc, {
+        startY: 150,
+        head: [["訂單號碼", "訂單時間", "分類", "品項", "總價", "折扣", "工作人員", "支付方式"]],
+        body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", "", ""]],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.2, cellPadding: 2.2, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [83, 150, 211], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
+        alternateRowStyles: { fillColor: [215, 230, 244] },
+        columnStyles: { 0: { cellWidth: 78 }, 1: { cellWidth: 72 }, 2: { cellWidth: 54 }, 3: { cellWidth: 150 }, 4: { cellWidth: 45, halign: "right" }, 5: { cellWidth: 38, halign: "right" }, 6: { cellWidth: 50 }, 7: { cellWidth: 68 } },
+        margin: { left: 20, right: 20 },
+        didParseCell: (data) => {
+          if (data.section === "body" && String(data.row.raw?.[2] || "").includes("商品")) {
+            data.cell.styles.textColor = [255, 0, 0];
+          }
+        },
+      });
+
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      if (finalY < pageHeight - 56) {
+        doc.setFont("NotoSansTC", "normal");
+        doc.setFontSize(9);
+        doc.text("服務業績", 230, finalY + 10);
+        doc.text(serviceTotal.toLocaleString(), 390, finalY + 10, { align: "right" });
+        doc.text("商品銷售", 230, finalY + 26);
+        doc.text(productTotal.toLocaleString(), 390, finalY + 26, { align: "right" });
+      }
+
+      doc.addPage("a4", "portrait");
+      doc.setFont("NotoSansTC", "normal");
+      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
+      doc.setFont("NotoSansTC", "bold");
+      doc.setFontSize(11);
+      doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
+      doc.text(serviceTotal.toLocaleString(), 430, 126);
+
+      autoTable(doc, {
+        startY: 150,
+        head: [["費用明細小計"]],
+        body: [],
+        styles: { font: "NotoSansTC", fontStyle: "bold", fontSize: 13, halign: "center", cellPadding: 5 },
+        headStyles: { fillColor: [83, 150, 211], textColor: [255, 255, 255] },
+        margin: { left: 175, right: 175 },
+      });
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY,
+        head: [["日期", "明細", "金額"]],
+        body: [
+          [getRocMonthLabel(reportStartDate), "收益共享服務費", feeTotal.toLocaleString()],
+          [getRocMonthLabel(reportStartDate), "品牌社群資源共享費", reports.reduce((sum, item) => sum + item.report.brandFee, 0).toLocaleString()],
+          ["", "費用合計", totalDue.toLocaleString()],
+        ],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 3, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.6 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [215, 230, 244], textColor: [0, 0, 0], fontSize: 10, halign: "center" },
+        alternateRowStyles: { fillColor: [215, 230, 244] },
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 180 }, 2: { cellWidth: 80, halign: "right" } },
+        margin: { left: 175, right: 175 },
+      });
+
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 54,
+        head: [["本月應繳", ""]],
+        body: [
+          ["費用小計", totalDue.toLocaleString()],
+          ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
+          ["本月應繳總額", totalDue.toLocaleString()],
+        ],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5, textColor: [0, 0, 0], lineColor: [139, 211, 112], lineWidth: 0.8 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [139, 211, 112], textColor: [0, 0, 0], fontSize: 15, halign: "center" },
+        columnStyles: { 0: { cellWidth: 210, halign: "center" }, 1: { cellWidth: 130, halign: "right" } },
+        margin: { left: 175, right: 175 },
       });
 
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
+      return;
     } catch(e) {
       alert("PDF 導出失敗");
     }
