@@ -64,8 +64,8 @@ export default function AdminBottomNav({ current }: { current: string }) {
       label: "報表",
       icon: "📈",
       children: [
-        { key: "report-shop", label: "店鋪報表", icon: "🏪", path: "/admin/report?mode=shop" },
-        { key: "report-designer", label: "設計師報表", icon: "🧾", path: "/admin/report?mode=designer" },
+        { key: "report-shop", label: "店舖報表", icon: "🏪", path: "/admin/report/shop" },
+        { key: "report-designer", label: "設計師報表", icon: "🧾", path: "/admin/report/designer" },
       ],
     },
     {
@@ -135,10 +135,6 @@ export default function AdminBottomNav({ current }: { current: string }) {
   };
 
   const navigate = (path: string) => {
-    if (typeof window !== "undefined" && path.includes("?") && window.location.pathname === path.split("?")[0]) {
-      window.location.assign(path);
-      return;
-    }
     router.push(path);
   };
 

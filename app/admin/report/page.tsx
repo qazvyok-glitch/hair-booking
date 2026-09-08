@@ -178,7 +178,11 @@ function getReportTotals(transactions: Transaction[], productUsages: ProductUsag
   };
 }
 
-export default function AdminReport() {
+type AdminReportProps = {
+  initialMode?: "shop" | "designer";
+};
+
+export default function AdminReport({ initialMode = "shop" }: AdminReportProps = {}) {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -208,10 +212,7 @@ export default function AdminReport() {
     const now = new Date();
     return formatDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 5));
   });
-  const [reportMode, setReportMode] = useState<"shop" | "designer">(() => {
-    if (typeof window === "undefined") return "shop";
-    return new URLSearchParams(window.location.search).get("mode") === "designer" ? "designer" : "shop";
-  });
+  const [reportMode, setReportMode] = useState<"shop" | "designer">(initialMode);
   const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
   const [activeDesignerDetail, setActiveDesignerDetail] = useState<DesignerDetailKey>("actualIncome");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
@@ -229,6 +230,12 @@ export default function AdminReport() {
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
+  }, []);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("mode") === "designer") {
+      setReportMode("designer");
+    }
   }, []);
 
   // 依設定顯示設計師名字
@@ -786,7 +793,7 @@ export default function AdminReport() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>收入報表</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{reportMode === "shop" ? "店舖報表" : "設計師報表"}</div>
         </div>
         <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -862,8 +869,7 @@ export default function AdminReport() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: "#2C2C2A" }}>📅 結算區間</div>
-              <button onClick={() => { setReportMode("shop"); router.replace("/admin/report?mode=shop"); }} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: reportMode === "shop" ? "#534AB7" : "#F1EFE8", color: reportMode === "shop" ? "#fff" : "#5F5E5A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>店舖報表</button>
-              <button onClick={() => { setReportMode("designer"); router.replace("/admin/report?mode=designer"); }} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: reportMode === "designer" ? "#534AB7" : "#F1EFE8", color: reportMode === "designer" ? "#fff" : "#5F5E5A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>設計師報表</button>
+              <div style={{ padding: "8px 13px", borderRadius: 12, background: reportMode === "shop" ? "#F7F5FF" : "#F1EFE8", color: reportMode === "shop" ? "#534AB7" : "#5F5E5A", fontSize: 13, fontWeight: 800 }}>{reportMode === "shop" ? "店舖報表" : "設計師報表"}</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => shiftReportPeriod(1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#D7F8E6", color: "#047857", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>下一期</button>
