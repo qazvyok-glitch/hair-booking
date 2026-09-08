@@ -43,6 +43,34 @@ function sortPriceItems<T extends PriceItem>(list: T[], categoryOrder: string[] 
   });
 }
 
+const durationPresets = [30, 45, 60, 75, 90, 120, 150, 180, 240];
+
+function parseDurationMinutes(duration?: string | null) {
+  if (!duration) return 0;
+  const text = String(duration).replace(/\s+/g, "");
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)小時/);
+  const minuteMatch = text.match(/(\d+)分/);
+  if (hourMatch || minuteMatch) {
+    return Math.round((hourMatch ? Number(hourMatch[1]) * 60 : 0) + (minuteMatch ? Number(minuteMatch[1]) : 0));
+  }
+  const numberMatch = text.match(/\d+/);
+  return numberMatch ? Number(numberMatch[0]) : 0;
+}
+
+function formatDuration(minutes: number) {
+  if (!minutes) return "";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest} 分鐘`;
+  if (!rest) return `${hours} 小時`;
+  return `${hours} 小時 ${rest} 分鐘`;
+}
+
+function formatDurationLabel(duration?: string | null) {
+  const minutes = parseDurationMinutes(duration);
+  return minutes ? formatDuration(minutes) : "未設定";
+}
+
 export default function AdminDesignerPrices() {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
@@ -408,7 +436,7 @@ export default function AdminDesignerPrices() {
                     <td style={{ padding: "10px 12px", fontSize: 12, color: "#888780" }}>{item.category}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#2C2C2A" }}>{item.name}</td>
                     <td style={{ padding: "10px 12px", fontSize: 13, color: "#534AB7", fontWeight: 500 }}>{item.price_range}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 12, color: "#5F5E5A" }}>{item.duration || "未設定"}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12, color: item.duration ? "#2C2C2A" : "#888780", fontWeight: item.duration ? 600 : 400 }}>{formatDurationLabel(item.duration)}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -438,7 +466,7 @@ export default function AdminDesignerPrices() {
                   <div style={{ fontSize: 11, color: "#888780", marginBottom: 2 }}>{item.category} · {item.is_active ? "顯示" : "隱藏"}</div>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "#2C2C2A" }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: "#534AB7", marginTop: 2 }}>{item.price_range}</div>
-                  <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>時長：{item.duration || "未設定"}</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>時長：{formatDurationLabel(item.duration)}</div>
                 </div>
                 <div style={{ display: "flex", gap: 4, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <button onClick={() => openEdit(item)} style={{ padding: "3px 8px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
@@ -479,7 +507,24 @@ export default function AdminDesignerPrices() {
             </div>
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>預設時長</div>
-              <input value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} placeholder="例如：60 分鐘、90 分鐘" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+                <input
+                  value={parseDurationMinutes(form.duration) || ""}
+                  onChange={(e) => setForm({ ...form, duration: e.target.value ? formatDuration(Number(e.target.value) || 0) : "" })}
+                  type="number"
+                  min={0}
+                  step={15}
+                  placeholder="輸入分鐘"
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 15, outline: "none", boxSizing: "border-box" }}
+                />
+                <div style={{ minWidth: 92, padding: "10px 12px", borderRadius: 8, background: "#F1EFE8", color: "#2C2C2A", fontSize: 13, fontWeight: 700, textAlign: "center" }}>{formatDurationLabel(form.duration)}</div>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {durationPresets.map((minutes) => (
+                  <button key={minutes} onClick={() => setForm({ ...form, duration: formatDuration(minutes) })} type="button" style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #D3D1C7", background: parseDurationMinutes(form.duration) === minutes ? "#534AB7" : "#fff", color: parseDurationMinutes(form.duration) === minutes ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{formatDuration(minutes)}</button>
+                ))}
+                <button onClick={() => setForm({ ...form, duration: "" })} type="button" style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #E7C9C9", background: "#FFF7F7", color: "#A32D2D", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>清除</button>
+              </div>
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 13, color: "#5F5E5A" }}>
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
