@@ -615,104 +615,175 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
       const reportTableLeft = 34;
       const reportTableWidth = pageWidth - 68;
-      const drawPdfSectionTitle = (title: string, y: number, color: [number, number, number]) => {
+      const drawPdfSectionTitle = (title: string, y: number, color: [number, number, number], height = 30) => {
         doc.setFillColor(...color);
-        doc.roundedRect(reportTableLeft, y, reportTableWidth, 28, 8, 8, "F");
+        doc.roundedRect(reportTableLeft, y, reportTableWidth, height, 8, 8, "F");
         doc.setFillColor(...color);
-        doc.rect(reportTableLeft, y + 14, reportTableWidth, 14, "F");
+        doc.rect(reportTableLeft, y + height / 2, reportTableWidth, height / 2, "F");
         doc.setTextColor(255, 255, 255);
         doc.setFont("NotoSansTC", "normal");
-        doc.setFontSize(15);
-        doc.text(title, pageWidth / 2, y + 19, { align: "center" });
+        doc.setFontSize(16);
+        doc.text(title, pageWidth / 2, y + 21, { align: "center" });
+      };
+      const drawManualReportTable = ({
+        y,
+        title,
+        columns,
+        rows,
+        subtotalIndex,
+        theme,
+        rowHeight = 28,
+      }: {
+        y: number;
+        title: string;
+        columns: { label: string; width: number; align?: "left" | "center" | "right" }[];
+        rows: string[][];
+        subtotalIndex: number;
+        theme: {
+          main: [number, number, number];
+          header: [number, number, number];
+          stripe: [number, number, number];
+          subtotal: [number, number, number];
+          line: [number, number, number];
+          text: [number, number, number];
+          headerText: [number, number, number];
+        };
+        rowHeight?: number;
+      }) => {
+        drawPdfSectionTitle(title, y, theme.main);
+        const tableTop = y + 30;
+        const headerHeight = 27;
+        const tableHeight = headerHeight + rows.length * rowHeight;
+        const drawCellText = (text: string, x: number, cellY: number, width: number, height: number, align: "left" | "center" | "right", fontSize = 10) => {
+          doc.setFontSize(fontSize);
+          const maxWidth = Math.max(width - 14, 12);
+          const lines = doc.splitTextToSize(text || "", maxWidth).slice(0, 2);
+          const textX = align === "right" ? x + width - 8 : align === "center" ? x + width / 2 : x + 8;
+          const lineHeight = fontSize + 2;
+          const firstLineY = cellY + height / 2 - ((lines.length - 1) * lineHeight) / 2 + fontSize * 0.35;
+          doc.text(lines, textX, firstLineY, { align });
+        };
+
+        doc.setFillColor(...theme.header);
+        doc.rect(reportTableLeft, tableTop, reportTableWidth, headerHeight, "F");
+        doc.setTextColor(...theme.headerText);
+        doc.setFont("NotoSansTC", "normal");
+        let x = reportTableLeft;
+        columns.forEach((column) => {
+          drawCellText(column.label, x, tableTop, column.width, headerHeight, column.align || "center", 10.5);
+          x += column.width;
+        });
+
+        rows.forEach((row, rowIndex) => {
+          const currentY = tableTop + headerHeight + rowIndex * rowHeight;
+          if (rowIndex === subtotalIndex) doc.setFillColor(...theme.subtotal);
+          else if (rowIndex % 2 === 0) doc.setFillColor(...theme.stripe);
+          else doc.setFillColor(255, 255, 255);
+          doc.rect(reportTableLeft, currentY, reportTableWidth, rowHeight, "F");
+          doc.setTextColor(...theme.text);
+          doc.setFont("NotoSansTC", rowIndex === subtotalIndex ? "bold" : "normal");
+          let cellX = reportTableLeft;
+          row.forEach((cell, cellIndex) => {
+            drawCellText(cell, cellX, currentY, columns[cellIndex].width, rowHeight, columns[cellIndex].align || "left", rowIndex === subtotalIndex ? 10.2 : 9.4);
+            cellX += columns[cellIndex].width;
+          });
+        });
+
+        doc.setDrawColor(...theme.line);
+        doc.setLineWidth(0.65);
+        let gridX = reportTableLeft;
+        columns.slice(0, -1).forEach((column) => {
+          gridX += column.width;
+          doc.line(gridX, tableTop, gridX, tableTop + tableHeight);
+        });
+        for (let i = 0; i <= rows.length; i += 1) {
+          const lineY = tableTop + headerHeight + i * rowHeight;
+          doc.line(reportTableLeft, lineY, reportTableLeft + reportTableWidth, lineY);
+        }
+        doc.setDrawColor(...theme.main);
+        doc.setLineWidth(1.35);
+        doc.roundedRect(reportTableLeft, y, reportTableWidth, 30 + tableHeight, 8, 8);
+        return y + 30 + tableHeight;
       };
 
       const feeStartY = 244;
-      drawPdfSectionTitle("費用明細", feeStartY, [23, 111, 174]);
-      autoTable(doc, {
-        startY: feeStartY + 28,
-        head: [["費用項目", "數量", "單價", "金額", "備註"]],
-        body: [
+      const feeEndY = drawManualReportTable({
+        y: feeStartY,
+        title: "費用明細",
+        columns: [
+          { label: "費用項目", width: 255, align: "center" },
+          { label: "數量", width: 70, align: "center" },
+          { label: "單價", width: 70, align: "center" },
+          { label: "金額", width: 90, align: "center" },
+          { label: "備註", width: reportTableWidth - 485, align: "center" },
+        ],
+        rows: [
           ...feeRows,
           ["費用小計", "", "", feeTotal.toLocaleString(), ""],
         ],
-        theme: "grid",
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8.8, cellPadding: 4.4, textColor: [45, 58, 70], lineColor: [198, 224, 243], lineWidth: 0.55, minCellHeight: 21 },
-        headStyles: { font: "NotoSansTC", fontStyle: "normal", fillColor: [232, 245, 255], textColor: [66, 108, 143], fontSize: 9.8, halign: "center", lineColor: [198, 224, 243], lineWidth: 0.6, minCellHeight: 23 },
-        alternateRowStyles: { fillColor: [238, 246, 253] },
-        bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: { 0: { cellWidth: 205 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 130 } },
-        margin: { left: 40, right: 40 },
-        didParseCell: (data) => {
-          if (data.row.index === feeRows.length) {
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [211, 231, 247];
-            data.cell.styles.lineColor = [23, 111, 174];
-            data.cell.styles.lineWidth = 0.9;
-          }
+        subtotalIndex: feeRows.length,
+        theme: {
+          main: [23, 111, 174],
+          header: [229, 244, 255],
+          stripe: [237, 246, 253],
+          subtotal: [211, 231, 247],
+          line: [188, 222, 245],
+          text: [47, 67, 83],
+          headerText: [72, 114, 150],
         },
       });
-      doc.setDrawColor(23, 111, 174);
-      doc.setLineWidth(1.3);
-      doc.roundedRect(reportTableLeft, feeStartY, reportTableWidth, (doc as any).lastAutoTable.finalY - feeStartY, 8, 8);
 
-      const productStartY = (doc as any).lastAutoTable.finalY + 34;
-      drawPdfSectionTitle("商品明細", productStartY, [215, 103, 36]);
-      autoTable(doc, {
-        startY: productStartY + 28,
-        head: [["日期", "數量", "品名", "金額"]],
-        body: [
+      const productStartY = feeEndY + 48;
+      const productEndY = drawManualReportTable({
+        y: productStartY,
+        title: "商品明細",
+        columns: [
+          { label: "日期", width: 110, align: "center" },
+          { label: "數量", width: 70, align: "center" },
+          { label: "品名", width: reportTableWidth - 300, align: "center" },
+          { label: "金額", width: 120, align: "center" },
+        ],
+        rows: [
           ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
           ["自領商品合計", "", "", productTotal.toLocaleString()],
         ],
-        theme: "grid",
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8.8, cellPadding: 4.4, textColor: [76, 52, 38], lineColor: [244, 199, 172], lineWidth: 0.55, minCellHeight: 21 },
-        headStyles: { font: "NotoSansTC", fontStyle: "normal", fillColor: [255, 239, 228], textColor: [150, 74, 34], fontSize: 9.8, halign: "center", lineColor: [244, 199, 172], lineWidth: 0.6, minCellHeight: 23 },
-        alternateRowStyles: { fillColor: [255, 244, 237] },
-        bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 270 }, 3: { cellWidth: 95, halign: "right" } },
-        margin: { left: 40, right: 40 },
-        didParseCell: (data) => {
-          if (data.row.index === (productRows.length ? productRows.length : 1)) {
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [250, 220, 202];
-            data.cell.styles.lineColor = [215, 103, 36];
-            data.cell.styles.lineWidth = 0.9;
-          }
+        subtotalIndex: productRows.length ? productRows.length : 1,
+        theme: {
+          main: [215, 103, 36],
+          header: [255, 239, 228],
+          stripe: [255, 245, 238],
+          subtotal: [250, 220, 202],
+          line: [244, 195, 165],
+          text: [82, 57, 42],
+          headerText: [165, 80, 36],
         },
       });
-      doc.setDrawColor(215, 103, 36);
-      doc.setLineWidth(1.3);
-      doc.roundedRect(reportTableLeft, productStartY, reportTableWidth, (doc as any).lastAutoTable.finalY - productStartY, 8, 8);
 
-      const totalStartY = (doc as any).lastAutoTable.finalY + 38;
-      drawPdfSectionTitle("本月應繳總額", totalStartY, [69, 174, 73]);
-      autoTable(doc, {
-        startY: totalStartY + 28,
-        showHead: "never",
-        body: [
+      const totalStartY = productEndY + 52;
+      drawManualReportTable({
+        y: totalStartY,
+        title: "本月應繳總額",
+        columns: [
+          { label: "", width: 360, align: "center" },
+          { label: "", width: reportTableWidth - 360, align: "right" },
+        ],
+        rows: [
           ["費用小計", feeTotal.toLocaleString()],
           ["自領商品小計", productTotal.toLocaleString()],
           ["本月應繳總額", formatPdfMoney(totalDue)],
         ],
-        theme: "grid",
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 7.5, textColor: [42, 82, 47], lineColor: [104, 192, 92], lineWidth: 0.65, minCellHeight: 25 },
-        bodyStyles: { fillColor: [250, 255, 247] },
-        columnStyles: { 0: { cellWidth: 340, halign: "center" }, 1: { cellWidth: 175, halign: "right" } },
-        margin: { left: 40, right: 40 },
-        didParseCell: (data) => {
-          if (data.row.index === 2) {
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fontSize = 13.5;
-            data.cell.styles.textColor = [39, 142, 77];
-            data.cell.styles.fillColor = [235, 252, 238];
-            data.cell.styles.lineColor = [69, 174, 73];
-            data.cell.styles.lineWidth = 1;
-          }
+        subtotalIndex: 2,
+        rowHeight: 27,
+        theme: {
+          main: [69, 174, 73],
+          header: [250, 255, 247],
+          stripe: [250, 255, 247],
+          subtotal: [235, 252, 238],
+          line: [104, 192, 92],
+          text: [42, 82, 47],
+          headerText: [42, 82, 47],
         },
       });
-      doc.setDrawColor(69, 174, 73);
-      doc.setLineWidth(1.3);
-      doc.roundedRect(reportTableLeft, totalStartY, reportTableWidth, (doc as any).lastAutoTable.finalY - totalStartY, 8, 8);
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
