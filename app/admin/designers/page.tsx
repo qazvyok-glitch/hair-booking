@@ -32,20 +32,67 @@ type DesignerAuth = {
   password_hash: string;
 };
 
+type SettlementItemType = "addition" | "deduction";
+type SettlementCalculationType = "fixed" | "percent";
+type SettlementCalculationBase = "service_revenue" | "product_revenue" | "total_revenue" | "net_income";
+
+type SettlementItem = {
+  id: number;
+  designer_id: number;
+  name: string;
+  item_type: SettlementItemType;
+  calculation_type: SettlementCalculationType;
+  amount: number;
+  rate: number;
+  calculation_base: SettlementCalculationBase;
+  include_in_bc_receivable: boolean;
+  show_in_reports: boolean;
+  note: string | null;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type SettlementItemForm = {
+  name: string;
+  item_type: SettlementItemType;
+  calculation_type: SettlementCalculationType;
+  amount: number;
+  rate: number;
+  calculation_base: SettlementCalculationBase;
+  include_in_bc_receivable: boolean;
+  show_in_reports: boolean;
+  note: string;
+};
+
 type FormSection = "profile" | "settlement";
 
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
+const defaultSettlementItemForm: SettlementItemForm = {
+  name: "",
+  item_type: "deduction",
+  calculation_type: "fixed",
+  amount: 0,
+  rate: 0,
+  calculation_base: "service_revenue",
+  include_in_bc_receivable: true,
+  show_in_reports: true,
+  note: "",
+};
 
 export function AdminDesignersContent() {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [authByDesignerId, setAuthByDesignerId] = useState<Record<number, DesignerAuth>>({});
+  const [settlementItems, setSettlementItems] = useState<SettlementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Designer | null>(null);
   const [sortDesignerIndex, setSortDesignerIndex] = useState<number | null>(null);
   const [formSection, setFormSection] = useState<FormSection>("profile");
+  const [showSettlementForm, setShowSettlementForm] = useState(false);
+  const [editingSettlementItemId, setEditingSettlementItemId] = useState<number | null>(null);
+  const [settlementForm, setSettlementForm] = useState<SettlementItemForm>(defaultSettlementItemForm);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "", display_name: "", nickname: "", initials: "", style: "", ig: "", avatar_url: "",
@@ -76,14 +123,16 @@ export function AdminDesignersContent() {
   }, [router]);
 
   async function fetchData() {
-    const [{ data }, { data: authData }] = await Promise.all([
+    const [{ data }, { data: authData }, { data: settlementData }] = await Promise.all([
       supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("designer_auth").select("designer_id, username, password_hash"),
+      supabase.from("designer_settlement_items").select("*").order("sort_order").order("id"),
     ]);
     if (data) setDesigners(data);
     if (authData) {
       setAuthByDesignerId(Object.fromEntries((authData as DesignerAuth[]).map((auth) => [auth.designer_id, auth])));
     }
+    if (settlementData) setSettlementItems(settlementData as SettlementItem[]);
     setLoading(false);
   }
 
@@ -104,6 +153,9 @@ export function AdminDesignersContent() {
       login_username: "", login_password: "",
       work_hours: defaultWorkHours,
     } as any);
+    setShowSettlementForm(false);
+    setEditingSettlementItemId(null);
+    setSettlementForm({ ...defaultSettlementItemForm });
     setShowForm(true);
   }
 
@@ -136,6 +188,9 @@ export function AdminDesignersContent() {
       login_password: auth?.password_hash || "",
       work_hours: d.work_hours || defaultWorkHours,
     });
+    setShowSettlementForm(false);
+    setEditingSettlementItemId(null);
+    setSettlementForm({ ...defaultSettlementItemForm });
     setShowForm(true);
   }
 
@@ -176,6 +231,98 @@ export function AdminDesignersContent() {
     setShowForm(false);
   }
 
+  function openSettlementItemForm(item?: SettlementItem) {
+    if (!editing) {
+      alert("請先儲存設計師資料，再新增其他結算項目");
+      return;
+    }
+    if (item) {
+      setEditingSettlementItemId(item.id);
+      setSettlementForm({
+        name: item.name,
+        item_type: item.item_type,
+        calculation_type: item.calculation_type,
+        amount: item.amount || 0,
+        rate: Number(item.rate || 0),
+        calculation_base: item.calculation_base,
+        include_in_bc_receivable: item.include_in_bc_receivable,
+        show_in_reports: item.show_in_reports,
+        note: item.note || "",
+      });
+    } else {
+      setEditingSettlementItemId(null);
+      setSettlementForm({ ...defaultSettlementItemForm });
+    }
+    setShowSettlementForm(true);
+  }
+
+  async function saveSettlementItem() {
+    if (!editing) {
+      alert("請先儲存設計師資料，再新增其他結算項目");
+      return;
+    }
+    if (!settlementForm.name.trim()) {
+      alert("請填寫項目名稱");
+      return;
+    }
+
+    const designerItems = settlementItems.filter((item) => item.designer_id === editing.id);
+    const payload = {
+      ...settlementForm,
+      designer_id: editing.id,
+      amount: Number(settlementForm.amount || 0),
+      rate: Number(settlementForm.rate || 0),
+      sort_order: editingSettlementItemId ? designerItems.find((item) => item.id === editingSettlementItemId)?.sort_order || 0 : designerItems.length + 1,
+      is_active: true,
+    };
+
+    if (editingSettlementItemId) {
+      const { data, error } = await supabase
+        .from("designer_settlement_items")
+        .update(payload)
+        .eq("id", editingSettlementItemId)
+        .select()
+        .single();
+      if (error) {
+        alert("結算項目更新失敗，請再試一次");
+        return;
+      }
+      setSettlementItems(settlementItems.map((item) => (item.id === editingSettlementItemId ? data as SettlementItem : item)));
+    } else {
+      const { data, error } = await supabase
+        .from("designer_settlement_items")
+        .insert(payload)
+        .select()
+        .single();
+      if (error) {
+        alert("結算項目新增失敗，請再試一次");
+        return;
+      }
+      setSettlementItems([...settlementItems, data as SettlementItem]);
+    }
+
+    setShowSettlementForm(false);
+    setEditingSettlementItemId(null);
+    setSettlementForm({ ...defaultSettlementItemForm });
+  }
+
+  async function deleteSettlementItem(itemId: number) {
+    const ok = window.confirm("確定要刪除此結算項目嗎？");
+    if (!ok) return;
+    const { error } = await supabase.from("designer_settlement_items").delete().eq("id", itemId);
+    if (error) {
+      alert("刪除失敗，請再試一次");
+      return;
+    }
+    setSettlementItems(settlementItems.filter((item) => item.id !== itemId));
+  }
+
+  function formatSettlementItemValue(item: SettlementItem) {
+    const sign = item.item_type === "addition" ? "+" : "-";
+    if (item.calculation_type === "percent") return `${sign}${Math.round(Number(item.rate || 0) * 100)}%`;
+    return `${sign}NT$${Number(item.amount || 0).toLocaleString()}`;
+  }
+
   async function moveDesigner(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= designers.length) return;
@@ -210,6 +357,12 @@ export function AdminDesignersContent() {
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
     </div>
   );
+
+  const currentSettlementItems = editing
+    ? settlementItems
+        .filter((item) => item.designer_id === editing.id)
+        .sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id))
+    : [];
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
@@ -524,6 +677,116 @@ export function AdminDesignersContent() {
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
+            </div>
+
+            <div style={{ marginTop: 6, background: "#fff", border: "1px solid #E5E1D7", borderRadius: 18, padding: isDesktop ? 18 : 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: isDesktop ? "center" : "flex-start", gap: 12, flexDirection: isDesktop ? "row" : "column", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 900 }}>其他結算項目</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 4, lineHeight: 1.5 }}>可新增租金、清潔費、補貼、特殊扣款或其他分潤，會同步到線上資料庫供報表使用。</div>
+                </div>
+                <button onClick={() => openSettlementItemForm()} style={{ width: isDesktop ? "auto" : "100%", padding: "10px 14px", borderRadius: 12, border: "none", background: "#534AB7", color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>＋ 新增項目</button>
+              </div>
+
+              {!editing && (
+                <div style={{ background: "#FFF7E8", color: "#BA7517", borderRadius: 12, padding: "10px 12px", fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
+                  新增設計師時，請先儲存設計師資料，再回來新增其他結算項目。
+                </div>
+              )}
+
+              {editing && currentSettlementItems.length === 0 && !showSettlementForm && (
+                <div style={{ background: "#F8F7F3", borderRadius: 12, padding: "14px 12px", color: "#888780", fontSize: 12, textAlign: "center", marginBottom: 12 }}>
+                  尚未新增其他結算項目
+                </div>
+              )}
+
+              {currentSettlementItems.length > 0 && (
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  {currentSettlementItems.map((item) => (
+                    <div key={item.id} style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr auto auto auto" : "1fr", gap: 8, alignItems: "center", background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 14, padding: "11px 12px" }}>
+                      <div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 900 }}>{item.name}</span>
+                          <span style={{ padding: "3px 8px", borderRadius: 999, background: item.item_type === "addition" ? "#E1F5EE" : "#FCEBEB", color: item.item_type === "addition" ? "#085041" : "#A32D2D", fontSize: 11, fontWeight: 800 }}>
+                            {item.item_type === "addition" ? "加項" : "扣項"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#888780", marginTop: 4, lineHeight: 1.5 }}>
+                          {item.calculation_type === "fixed" ? "固定金額" : "百分比計算"}｜{item.include_in_bc_receivable ? "列入 BC 應收" : "不列入 BC 應收"}｜{item.show_in_reports ? "顯示報表" : "不顯示報表"}
+                          {item.note ? `｜${item.note}` : ""}
+                        </div>
+                      </div>
+                      <div style={{ color: item.item_type === "addition" ? "#085041" : "#A32D2D", fontSize: 14, fontWeight: 900, whiteSpace: "nowrap" }}>{formatSettlementItemValue(item)}</div>
+                      <button onClick={() => openSettlementItemForm(item)} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #D3D1C7", background: "#fff", color: "#534AB7", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>編輯</button>
+                      <button onClick={() => deleteSettlementItem(item.id)} style={{ padding: "8px 12px", borderRadius: 10, border: "none", background: "#FCEBEB", color: "#A32D2D", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>刪除</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showSettlementForm && (
+                <div style={{ background: "#EEEDFE", borderRadius: 16, padding: isDesktop ? 16 : 12 }}>
+                  <div style={{ fontSize: 13, color: "#534AB7", fontWeight: 900, marginBottom: 12 }}>{editingSettlementItemId ? "編輯結算項目" : "新增結算項目"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(2, minmax(0, 1fr))" : "1fr", gap: 10 }}>
+                    <div style={{ gridColumn: isDesktop ? "1 / -1" : "auto" }}>
+                      <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>項目名稱 *</div>
+                      <input value={settlementForm.name} onChange={(e) => setSettlementForm({ ...settlementForm, name: e.target.value })} placeholder="例如 固定租金、清潔費、活動獎金" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>類型</div>
+                      <select value={settlementForm.item_type} onChange={(e) => setSettlementForm({ ...settlementForm, item_type: e.target.value as SettlementItemType })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+                        <option value="deduction">扣項</option>
+                        <option value="addition">加項</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>計算方式</div>
+                      <select value={settlementForm.calculation_type} onChange={(e) => setSettlementForm({ ...settlementForm, calculation_type: e.target.value as SettlementCalculationType })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+                        <option value="fixed">固定金額</option>
+                        <option value="percent">百分比</option>
+                      </select>
+                    </div>
+                    {settlementForm.calculation_type === "fixed" ? (
+                      <div>
+                        <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>金額（元）</div>
+                        <input value={settlementForm.amount || ""} onChange={(e) => setSettlementForm({ ...settlementForm, amount: parseInt(e.target.value) || 0 })} type="number" min="0" placeholder="0" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>百分比</div>
+                          <input value={Math.round((settlementForm.rate || 0) * 100) || ""} onChange={(e) => setSettlementForm({ ...settlementForm, rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>計算來源</div>
+                          <select value={settlementForm.calculation_base} onChange={(e) => setSettlementForm({ ...settlementForm, calculation_base: e.target.value as SettlementCalculationBase })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+                            <option value="service_revenue">服務業績</option>
+                            <option value="product_revenue">商品銷售</option>
+                            <option value="total_revenue">總營業額</option>
+                            <option value="net_income">實收金額</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#2C2C2A", fontWeight: 700 }}>
+                      <input type="checkbox" checked={settlementForm.include_in_bc_receivable} onChange={(e) => setSettlementForm({ ...settlementForm, include_in_bc_receivable: e.target.checked })} />
+                      列入 BC 應收
+                    </label>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, color: "#2C2C2A", fontWeight: 700 }}>
+                      <input type="checkbox" checked={settlementForm.show_in_reports} onChange={(e) => setSettlementForm({ ...settlementForm, show_in_reports: e.target.checked })} />
+                      顯示於報表
+                    </label>
+                    <div style={{ gridColumn: isDesktop ? "1 / -1" : "auto" }}>
+                      <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
+                      <input value={settlementForm.note} onChange={(e) => setSettlementForm({ ...settlementForm, note: e.target.value })} placeholder="例如 每月固定清潔分攤費" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                    <button onClick={() => { setShowSettlementForm(false); setEditingSettlementItemId(null); setSettlementForm({ ...defaultSettlementItemForm }); }} style={{ padding: "9px 16px", borderRadius: 10, border: "1px solid #D3D1C7", background: "#fff", color: "#5F5E5A", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>取消</button>
+                    <button onClick={saveSettlementItem} style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: "#534AB7", color: "#fff", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>{editingSettlementItemId ? "更新項目" : "新增項目"}</button>
+                  </div>
+                </div>
+              )}
             </div>
               </>
             )}
