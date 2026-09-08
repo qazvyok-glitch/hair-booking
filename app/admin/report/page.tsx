@@ -856,8 +856,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         startY: 72,
         head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
         body: dailyDetailBody,
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.8, cellPadding: { top: 7, right: 3, bottom: 7, left: 3 }, overflow: "linebreak", textColor: [34, 38, 42], lineWidth: 0, minCellHeight: 28 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [68, 190, 188], textColor: [255, 255, 255], fontSize: 11, halign: "left", cellPadding: { top: 10, right: 3, bottom: 10, left: 3 } },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 10.2, cellPadding: { top: 7, right: 3, bottom: 7, left: 3 }, overflow: "linebreak", textColor: [16, 24, 32], lineWidth: 0, minCellHeight: 28 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [0, 151, 153], textColor: [255, 255, 255], fontSize: 11.8, halign: "left", cellPadding: { top: 11, right: 3, bottom: 11, left: 3 } },
         alternateRowStyles: { fillColor: [255, 255, 255] },
         bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: {
@@ -874,10 +874,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           if (data.section !== "body") return;
           const raw = data.row.raw as string[];
           if (String(raw?.[0] || "") === "總計") {
-            data.cell.styles.fillColor = [212, 231, 250];
+            data.cell.styles.fillColor = [189, 219, 246];
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [34, 38, 42];
-            data.cell.styles.fontSize = 11;
+            data.cell.styles.textColor = [16, 24, 32];
+            data.cell.styles.fontSize = 11.4;
             data.cell.styles.cellPadding = { top: 11, right: 3, bottom: 11, left: 3 };
           }
           if (String(raw?.[1] || "") === "商品") {
