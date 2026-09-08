@@ -387,14 +387,17 @@ export function AdminDesignersContent() {
 
       {/* 表單跳窗 */}
       {showForm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{editing ? "編輯設計師" : "新增設計師"}</div>
-              <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: isDesktop ? "center" : "flex-end", justifyContent: "center", padding: isDesktop ? 24 : 0 }}>
+          <div style={{ width: "100%", maxWidth: isDesktop ? 1040 : 480, background: "#fff", borderRadius: isDesktop ? 22 : "20px 20px 0 0", padding: isDesktop ? 24 : "20px 16px 32px", maxHeight: isDesktop ? "86vh" : "90vh", overflowY: "auto", boxShadow: isDesktop ? "0 24px 70px rgba(0,0,0,0.25)" : "none" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 18 }}>
+              <div>
+                <div style={{ fontSize: isDesktop ? 24 : 15, fontWeight: 900, color: "#2C2C2A" }}>{editing ? "編輯設計師" : "新增設計師"}</div>
+                <div style={{ fontSize: 12, color: "#888780", marginTop: 4 }}>依設定分類編輯，儲存後同步後台、設計師端與顧客端公開資訊</div>
+              </div>
+              <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: isDesktop ? 14 : 8, width: isDesktop ? 44 : 32, height: isDesktop ? 44 : 32, fontSize: isDesktop ? 24 : 16, cursor: "pointer" }}>✕</button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, minmax(0, 1fr))" : "1fr 1fr", gap: 10, marginBottom: 18, background: isDesktop ? "#F8F7F3" : "transparent", padding: isDesktop ? 8 : 0, borderRadius: 18 }}>
               {[
                 { key: "profile", label: "個人基本設定" },
                 { key: "login", label: "登入帳密" },
@@ -404,7 +407,7 @@ export function AdminDesignersContent() {
                 <button
                   key={item.key}
                   onClick={() => setFormSection(item.key as FormSection)}
-                  style={{ padding: "10px 8px", borderRadius: 10, border: "none", background: formSection === item.key ? "#534AB7" : "#F1EFE8", color: formSection === item.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+                  style={{ padding: isDesktop ? "14px 10px" : "10px 8px", borderRadius: 14, border: "none", background: formSection === item.key ? "#534AB7" : "#EFEBE4", color: formSection === item.key ? "#fff" : "#5F5E5A", fontSize: isDesktop ? 14 : 12, fontWeight: 900, cursor: "pointer" }}
                 >
                   {item.label}
                 </button>
@@ -413,7 +416,8 @@ export function AdminDesignersContent() {
 
             {formSection === "profile" && (
               <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>基本資料</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#888780", marginBottom: 10 }}>基本資料</div>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(2, minmax(0, 1fr))" : "1fr", columnGap: 14 }}>
             {[
               { key: "name", label: "英文名 *", placeholder: "Cherry" },
               { key: "display_name", label: "中文名", placeholder: "林亮瑩" },
@@ -432,6 +436,7 @@ export function AdminDesignersContent() {
                 />
               </div>
             ))}
+            </div>
 
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>頭像圖片網址</div>
@@ -444,7 +449,7 @@ export function AdminDesignersContent() {
               <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>此區資料會同步到設計師端個人資料與顧客端設計師資訊。</div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>背景色</div>
                 <input type="color" value={form.bg_color} onChange={(e) => setForm({ ...form, bg_color: e.target.value })} style={{ width: "100%", height: 38, borderRadius: 8, border: "1px solid #D3D1C7", cursor: "pointer" }} />
@@ -460,10 +465,11 @@ export function AdminDesignersContent() {
             {formSection === "login" && (
               <>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>登入帳號密碼</div>
-            <div style={{ background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
                 此帳號密碼會同步到設計師端登入使用，由後台統一管理。
               </div>
+              <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: isDesktop ? 14 : 0 }}>
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>登入帳號 *</div>
                 <input
@@ -483,6 +489,7 @@ export function AdminDesignersContent() {
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
                 />
               </div>
+              </div>
             </div>
               </>
             )}
@@ -490,7 +497,8 @@ export function AdminDesignersContent() {
             {formSection === "settlement" && (
               <>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>結算規則</div>
-            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 12 }}>
+            <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>服務業績抽成</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
                 計算方式：(業績 - 底扣) × 抽成%<br/>
@@ -512,7 +520,7 @@ export function AdminDesignersContent() {
               </div>
             </div>
 
-            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>品牌社群資源共享費</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
                 計算方式：總服務業績 × %，會從設計師抽成中扣除並列入 BC 應收。
@@ -523,7 +531,7 @@ export function AdminDesignersContent() {
               </div>
             </div>
 
-            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>商品販售抽成</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
                 計算方式：商品銷售額 × %，報表會獨立顯示商品業績與商品抽成。
@@ -538,12 +546,13 @@ export function AdminDesignersContent() {
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
+            </div>
               </>
             )}
 
             {formSection === "permissions" && (
               <>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>加入日期</div>
                 <input type="date" value={form.joined_date} onChange={(e) => setForm({ ...form, joined_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
@@ -555,7 +564,8 @@ export function AdminDesignersContent() {
             </div>
 
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>權限設定</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "#F1EFE8", borderRadius: 10, marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
               <div>
                 <div style={{ fontSize: 13, color: "#2C2C2A" }}>可查看會員資料</div>
                 <div style={{ fontSize: 11, color: "#888780" }}>關閉後設計師無法查看客人聯絡資料</div>
@@ -564,7 +574,7 @@ export function AdminDesignersContent() {
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.can_view_members ? 22 : 2, transition: "left 0.2s" }} />
               </div>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "#F1EFE8", borderRadius: 10, marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
               <div>
                 <div style={{ fontSize: 13, color: "#2C2C2A" }}>店長權限</div>
                 <div style={{ fontSize: 11, color: "#888780" }}>可查看全店預約，並協助新增、確認或取消預約</div>
@@ -572,6 +582,7 @@ export function AdminDesignersContent() {
               <div onClick={() => setForm({ ...form, is_manager: !form.is_manager })} style={{ width: 44, height: 24, borderRadius: 12, background: form.is_manager ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.is_manager ? 22 : 2, transition: "left 0.2s" }} />
               </div>
+            </div>
             </div>
 
             <div style={{ marginBottom: 16 }}>
@@ -587,7 +598,7 @@ export function AdminDesignersContent() {
               </>
             )}
 
-            <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
+            <button onClick={handleSave} disabled={saving} style={{ width: isDesktop ? 220 : "100%", display: "block", marginLeft: isDesktop ? "auto" : 0, padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}
             </button>
           </div>
