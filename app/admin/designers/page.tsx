@@ -177,26 +177,6 @@ export function AdminDesignersContent() {
     setShowForm(false);
   }
 
-  async function toggleStatus(d: Designer) {
-    const newStatus = d.status === "active" ? "inactive" : "active";
-    const isActive = newStatus === "active";
-    const leftDate = newStatus === "inactive" ? new Date().toISOString().split("T")[0] : null;
-    await supabase.from("designers").update({ status: newStatus, is_active: isActive, left_date: leftDate }).eq("id", d.id);
-    setDesigners(designers.map(x => x.id === d.id ? { ...x, status: newStatus, is_active: isActive, left_date: leftDate || "" } : x));
-  }
-
-  async function toggleMemberAccess(d: Designer) {
-    const newVal = !d.can_view_members;
-    await supabase.from("designers").update({ can_view_members: newVal }).eq("id", d.id);
-    setDesigners(designers.map(x => x.id === d.id ? { ...x, can_view_members: newVal } : x));
-  }
-
-  async function toggleManagerAccess(d: Designer) {
-    const newVal = !d.is_manager;
-    await supabase.from("designers").update({ is_manager: newVal }).eq("id", d.id);
-    setDesigners(designers.map(x => x.id === d.id ? { ...x, is_manager: newVal } : x));
-  }
-
   async function moveDesigner(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= designers.length) return;
@@ -370,15 +350,6 @@ export function AdminDesignersContent() {
               <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "14px", background: "#fff", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
                 <div style={{ fontSize: 15, fontWeight: 900 }}>專屬價目表</div>
                 <div style={{ fontSize: 12, color: "#888780", marginTop: 4, lineHeight: 1.35 }}>管理此設計師專屬服務與價格</div>
-              </button>
-              <button onClick={() => { toggleStatus(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.status === "active" ? "#FCEBEB" : "#E1F5EE", color: actionDesigner.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                {actionDesigner.status === "active" ? "設為離職" : "恢復在職"}
-              </button>
-              <button onClick={() => { toggleMemberAccess(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                {actionDesigner.can_view_members ? "關閉會員查看" : "開啟會員查看"}
-              </button>
-              <button onClick={() => { toggleManagerAccess(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.is_manager ? "#FCEBEB" : "#EEEDFE", color: actionDesigner.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
-                {actionDesigner.is_manager ? "取消店長權限" : "設為店長"}
               </button>
             </div>
           </div>
