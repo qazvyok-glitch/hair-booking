@@ -25,7 +25,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     reports: current === "report" || current.startsWith("report-"),
     work: current === "bookings",
-    people: current === "designers" || current === "permissions",
+    people: current === "designers",
     catalog: ["services", "products", "inventory", "prices"].includes(current),
   });
 
@@ -85,7 +85,6 @@ export default function AdminBottomNav({ current }: { current: string }) {
       icon: "🧑‍💼",
       children: [
         { key: "designers", label: "設計師管理", icon: "💇", path: "/admin/designers" },
-        { key: "permissions", label: "權限 / 職務", icon: "🔐", path: "/admin/designers/permissions" },
       ],
     },
     {
@@ -121,7 +120,6 @@ export default function AdminBottomNav({ current }: { current: string }) {
     if (key === "report-designer") return current === "report-designer";
     if (key === "bookings") return current === "bookings";
     if (key === "schedule") return false;
-    if (key === "permissions") return current === "permissions";
     return current === key;
   };
 
