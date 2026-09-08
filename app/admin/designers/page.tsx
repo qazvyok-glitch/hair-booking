@@ -26,11 +26,18 @@ type Designer = {
   sort_order?: number | null;
 };
 
+type DesignerAuth = {
+  designer_id: number;
+  username: string;
+  password_hash: string;
+};
+
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
 
 export function AdminDesignersContent() {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
+  const [authByDesignerId, setAuthByDesignerId] = useState<Record<number, DesignerAuth>>({});
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -49,6 +56,7 @@ export function AdminDesignersContent() {
     product_commission_rate: 0,
     joined_date: "", left_date: "",
     can_view_members: true, is_manager: false, status: "active",
+    login_username: "", login_password: "",
     work_hours: defaultWorkHours,
   });
 
@@ -66,8 +74,14 @@ export function AdminDesignersContent() {
   }, [router]);
 
   async function fetchData() {
-    const { data } = await supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id");
+    const [{ data }, { data: authData }] = await Promise.all([
+      supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id"),
+      supabase.from("designer_auth").select("designer_id, username, password_hash"),
+    ]);
     if (data) setDesigners(data);
+    if (authData) {
+      setAuthByDesignerId(Object.fromEntries((authData as DesignerAuth[]).map((auth) => [auth.designer_id, auth])));
+    }
     setLoading(false);
   }
 
@@ -84,12 +98,14 @@ export function AdminDesignersContent() {
       product_commission_rate: 0,
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, is_manager: false, status: "active",
+      login_username: "", login_password: "",
       work_hours: defaultWorkHours,
     } as any);
     setShowForm(true);
   }
 
   function openEdit(d: Designer) {
+    const auth = authByDesignerId[d.id];
     setEditing(d);
     setForm({
       name: d.name,
@@ -111,6 +127,8 @@ export function AdminDesignersContent() {
       can_view_members: d.can_view_members ?? true,
       is_manager: d.is_manager ?? false,
       status: d.status || "active",
+      login_username: auth?.username || d.name.toLowerCase(),
+      login_password: auth?.password_hash || "",
       work_hours: d.work_hours || defaultWorkHours,
     });
     setShowForm(true);
@@ -118,23 +136,35 @@ export function AdminDesignersContent() {
 
   async function handleSave() {
     if (!form.name) { alert("請填寫設計師姓名"); return; }
+    if (!form.login_username) { alert("請填寫登入帳號"); return; }
+    if (!editing && !form.login_password) { alert("新增設計師時請設定登入密碼"); return; }
     setSaving(true);
     const isActive = form.status === "active";
     const nextSortOrder = designers.reduce((max, designer) => Math.max(max, designer.sort_order || 0), 0) + 1;
-    const saveData = { ...form, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null, sort_order: editing?.sort_order || nextSortOrder };
+    const { login_username, login_password, ...designerForm } = form;
+    const saveData = { ...designerForm, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null, sort_order: editing?.sort_order || nextSortOrder };
     if (editing) {
       await supabase.from("designers").update(saveData).eq("id", editing.id);
-      await supabase.from("designer_auth").update({ username: form.name.toLowerCase() }).eq("designer_id", editing.id);
-      setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...form, is_active: isActive } : d));
+      const authPayload = {
+        designer_id: editing.id,
+        username: login_username,
+        password_hash: login_password || authByDesignerId[editing.id]?.password_hash || "",
+      };
+      const { error: authUpdateError } = await supabase.from("designer_auth").update(authPayload).eq("designer_id", editing.id);
+      if (authUpdateError) await supabase.from("designer_auth").insert(authPayload);
+      setAuthByDesignerId({ ...authByDesignerId, [editing.id]: authPayload });
+      setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...designerForm, is_active: isActive } : d));
     } else {
       const { data } = await supabase.from("designers").insert(saveData).select().single();
       if (data) {
         setDesigners([...designers, data].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id)));
-        await supabase.from("designer_auth").insert({
+        const authPayload = {
           designer_id: data.id,
-          username: form.name.toLowerCase(),
-          password_hash: "bc2024" + form.name.toLowerCase(),
-        });
+          username: login_username,
+          password_hash: login_password,
+        };
+        await supabase.from("designer_auth").insert(authPayload);
+        setAuthByDesignerId({ ...authByDesignerId, [data.id]: authPayload });
       }
     }
     setSaving(false);
@@ -240,6 +270,7 @@ export function AdminDesignersContent() {
                     </div>
                     {d.nickname && <div style={{ fontSize: 11, color: "#7B6FD4" }}>{d.nickname}</div>}
                     <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{d.style}</div>
+                    <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>登入帳號：{authByDesignerId[d.id]?.username || "未設定"}</div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 500 }}>
@@ -369,6 +400,32 @@ export function AdminDesignersContent() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>文字色</div>
                 <input type="color" value={form.text_color} onChange={(e) => setForm({ ...form, text_color: e.target.value })} style={{ width: "100%", height: 38, borderRadius: 8, border: "1px solid #D3D1C7", cursor: "pointer" }} />
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>登入帳號密碼</div>
+            <div style={{ background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
+                此帳號密碼會同步到設計師端登入使用，由後台統一管理。
+              </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>登入帳號 *</div>
+                <input
+                  value={form.login_username}
+                  onChange={(e) => setForm({ ...form, login_username: e.target.value })}
+                  placeholder="例如 cherry"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>登入密碼 {editing ? "" : "*"}</div>
+                <input
+                  value={form.login_password}
+                  onChange={(e) => setForm({ ...form, login_password: e.target.value })}
+                  type="text"
+                  placeholder={editing ? "輸入新密碼即可變更" : "請設定登入密碼"}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
               </div>
             </div>
 
