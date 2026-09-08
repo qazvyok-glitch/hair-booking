@@ -438,6 +438,34 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     });
   }
 
+  async function svgToPngDataUrl(svg: string, width: number, height: number) {
+    return await new Promise<string>((resolve, reject) => {
+      const image = new Image();
+      const svgUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          URL.revokeObjectURL(svgUrl);
+          reject(new Error("無法建立 PDF 圖片畫布"));
+          return;
+        }
+        context.fillStyle = "#fff";
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        URL.revokeObjectURL(svgUrl);
+        resolve(canvas.toDataURL("image/png", 1));
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        reject(new Error("報表圖片生成失敗"));
+      };
+      image.src = svgUrl;
+    });
+  }
+
   function normalizePdfText(value: any) {
     // PDF 字型不支援彩色 emoji，導出時移除 emoji 可避免出現方塊。
     return String(value ?? "").replace(/[\u{1F300}-\u{1FAFF}\u{FE0F}]/gu, "").trim();
@@ -601,189 +629,144 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       }
 
       doc.addPage("a4", "portrait");
-      doc.setFont("NotoSansTC", "normal");
-      doc.setTextColor(0, 0, 0);
-      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 190, 34, 216, 74);
-      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 250, 22, 94, 94);
-      doc.setFont("NotoSansTC", "bold");
-      doc.setFontSize(22);
-      doc.text("INVOICE", pageWidth / 2, 150, { align: "center" });
-      doc.setFontSize(13);
-      doc.text(`Bill To：${targetLabel}`, 40, 190);
-      doc.text(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 330, 190);
-      doc.text(`Date：${getPdfDateLabel(reportStartDate)}`, 330, 214);
-
-      const reportTableLeft = 34;
-      const reportTableWidth = pageWidth - 68;
-      const drawPdfSectionTitle = (title: string, y: number, color: [number, number, number], height = 30) => {
-        doc.setFillColor(...color);
-        doc.roundedRect(reportTableLeft, y, reportTableWidth, height, 8, 8, "F");
-        doc.setFillColor(...color);
-        doc.rect(reportTableLeft, y + height / 2, reportTableWidth, height / 2, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.setFont("NotoSansTC", "normal");
-        doc.setFontSize(16);
-        doc.text(title, pageWidth / 2, y + 21, { align: "center" });
+      const svgWidth = 1190;
+      const svgHeight = 1684;
+      const escapeSvg = (value: unknown) => String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+      const wrapSvgText = (value: unknown, maxChars = 24) => {
+        const text = escapeSvg(value);
+        if (text.length <= maxChars) return [text];
+        return [text.slice(0, maxChars), text.slice(maxChars, maxChars * 2)];
       };
-      const drawManualReportTable = ({
+      const renderText = (value: unknown, x: number, y: number, options: { anchor?: "start" | "middle" | "end"; size?: number; color?: string; weight?: number; maxChars?: number; lineHeight?: number } = {}) => {
+        const lines = wrapSvgText(value, options.maxChars || 28);
+        const lineHeight = options.lineHeight || (options.size || 20) + 6;
+        const tspans = lines.map((line, index) => `<tspan x="${x}" dy="${index === 0 ? 0 : lineHeight}">${line}</tspan>`).join("");
+        return `<text x="${x}" y="${y}" text-anchor="${options.anchor || "start"}" font-size="${options.size || 20}" font-weight="${options.weight || 400}" fill="${options.color || "#263544"}">${tspans}</text>`;
+      };
+      const renderInvoiceTable = ({
         y,
         title,
         columns,
         rows,
-        subtotalIndex,
         theme,
-        rowHeight = 28,
+        rowHeight = 43,
       }: {
         y: number;
         title: string;
-        columns: { label: string; width: number; align?: "left" | "center" | "right" }[];
+        columns: { label: string; width: number; align?: "left" | "center" | "right"; maxChars?: number }[];
         rows: string[][];
-        subtotalIndex: number;
-        theme: {
-          main: [number, number, number];
-          header: [number, number, number];
-          stripe: [number, number, number];
-          subtotal: [number, number, number];
-          line: [number, number, number];
-          text: [number, number, number];
-          headerText: [number, number, number];
-        };
+        theme: { main: string; header: string; stripe: string; subtotal: string; line: string; text: string; headerText: string };
         rowHeight?: number;
       }) => {
-        drawPdfSectionTitle(title, y, theme.main);
-        const tableTop = y + 30;
-        const headerHeight = 27;
-        const tableHeight = headerHeight + rows.length * rowHeight;
-        const drawCellText = (text: string, x: number, cellY: number, width: number, height: number, align: "left" | "center" | "right", fontSize = 10) => {
-          doc.setFontSize(fontSize);
-          const maxWidth = Math.max(width - 14, 12);
-          const lines = doc.splitTextToSize(text || "", maxWidth).slice(0, 2);
-          const textX = align === "right" ? x + width - 8 : align === "center" ? x + width / 2 : x + 8;
-          const lineHeight = fontSize + 2;
-          const firstLineY = cellY + height / 2 - ((lines.length - 1) * lineHeight) / 2 + fontSize * 0.35;
-          doc.text(lines, textX, firstLineY, { align });
-        };
-
-        doc.setFillColor(...theme.header);
-        doc.rect(reportTableLeft, tableTop, reportTableWidth, headerHeight, "F");
-        doc.setTextColor(...theme.headerText);
-        doc.setFont("NotoSansTC", "normal");
-        let x = reportTableLeft;
+        const x = 38;
+        const width = 1114;
+        const titleHeight = 58;
+        const headerHeight = 50;
+        const height = titleHeight + headerHeight + rows.length * rowHeight;
+        let html = `<g>`;
+        html += `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="15" fill="#fff" stroke="${theme.main}" stroke-width="3"/>`;
+        html += `<path d="M ${x + 15} ${y} H ${x + width - 15} Q ${x + width} ${y} ${x + width} ${y + 15} V ${y + titleHeight} H ${x} V ${y + 15} Q ${x} ${y} ${x + 15} ${y}" fill="${theme.main}"/>`;
+        html += renderText(title, x + width / 2, y + 38, { anchor: "middle", size: 30, color: "#fff", weight: 400 });
+        html += `<rect x="${x}" y="${y + titleHeight}" width="${width}" height="${headerHeight}" fill="${theme.header}"/>`;
+        let currentX = x;
         columns.forEach((column) => {
-          drawCellText(column.label, x, tableTop, column.width, headerHeight, column.align || "center", 10.5);
-          x += column.width;
+          html += renderText(column.label, currentX + column.width / 2, y + titleHeight + 32, { anchor: "middle", size: 22, color: theme.headerText });
+          currentX += column.width;
         });
-
         rows.forEach((row, rowIndex) => {
-          const currentY = tableTop + headerHeight + rowIndex * rowHeight;
-          if (rowIndex === subtotalIndex) doc.setFillColor(...theme.subtotal);
-          else if (rowIndex % 2 === 0) doc.setFillColor(...theme.stripe);
-          else doc.setFillColor(255, 255, 255);
-          doc.rect(reportTableLeft, currentY, reportTableWidth, rowHeight, "F");
-          doc.setTextColor(...theme.text);
-          doc.setFont("NotoSansTC", rowIndex === subtotalIndex ? "bold" : "normal");
-          let cellX = reportTableLeft;
+          const rowY = y + titleHeight + headerHeight + rowIndex * rowHeight;
+          const fill = rowIndex === rows.length - 1 ? theme.subtotal : rowIndex % 2 === 0 ? theme.stripe : "#fff";
+          html += `<rect x="${x}" y="${rowY}" width="${width}" height="${rowHeight}" fill="${fill}"/>`;
+          currentX = x;
           row.forEach((cell, cellIndex) => {
-            drawCellText(cell, cellX, currentY, columns[cellIndex].width, rowHeight, columns[cellIndex].align || "left", rowIndex === subtotalIndex ? 10.2 : 9.4);
-            cellX += columns[cellIndex].width;
+            const column = columns[cellIndex];
+            const anchor = column.align === "right" ? "end" : column.align === "center" ? "middle" : "start";
+            const textX = column.align === "right" ? currentX + column.width - 12 : column.align === "center" ? currentX + column.width / 2 : currentX + 12;
+            html += renderText(cell, textX, rowY + (rowHeight > 48 ? 25 : 28), {
+              anchor,
+              size: rowIndex === rows.length - 1 ? 20 : 19,
+              weight: rowIndex === rows.length - 1 ? 700 : 400,
+              color: theme.text,
+              maxChars: column.maxChars || 26,
+              lineHeight: 22,
+            });
+            currentX += column.width;
           });
         });
-
-        doc.setDrawColor(...theme.line);
-        doc.setLineWidth(0.65);
-        let gridX = reportTableLeft;
+        currentX = x;
         columns.slice(0, -1).forEach((column) => {
-          gridX += column.width;
-          doc.line(gridX, tableTop, gridX, tableTop + tableHeight);
+          currentX += column.width;
+          html += `<line x1="${currentX}" y1="${y + titleHeight}" x2="${currentX}" y2="${y + height}" stroke="${theme.line}" stroke-width="1.3"/>`;
         });
         for (let i = 0; i <= rows.length; i += 1) {
-          const lineY = tableTop + headerHeight + i * rowHeight;
-          doc.line(reportTableLeft, lineY, reportTableLeft + reportTableWidth, lineY);
+          const lineY = y + titleHeight + headerHeight + i * rowHeight;
+          html += `<line x1="${x}" y1="${lineY}" x2="${x + width}" y2="${lineY}" stroke="${i === rows.length - 1 ? theme.main : theme.line}" stroke-width="${i === rows.length - 1 ? 2.4 : 1.3}"/>`;
         }
-        doc.setDrawColor(...theme.main);
-        doc.setLineWidth(1.35);
-        doc.roundedRect(reportTableLeft, y, reportTableWidth, 30 + tableHeight, 8, 8);
-        return y + 30 + tableHeight;
+        html += `</g>`;
+        return { html, endY: y + height };
       };
-
-      const feeStartY = 244;
-      const feeEndY = drawManualReportTable({
-        y: feeStartY,
+      const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
+      const productInvoiceRows = [
+        ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
+        ["自領商品合計", "", "", productTotal.toLocaleString()],
+      ];
+      const feeSvg = renderInvoiceTable({
+        y: 405,
         title: "費用明細",
         columns: [
-          { label: "費用項目", width: 255, align: "center" },
-          { label: "數量", width: 70, align: "center" },
-          { label: "單價", width: 70, align: "center" },
-          { label: "金額", width: 90, align: "center" },
-          { label: "備註", width: reportTableWidth - 485, align: "center" },
+          { label: "費用項目", width: 440, maxChars: 24 },
+          { label: "數量", width: 115, align: "right" },
+          { label: "單價", width: 115, align: "right" },
+          { label: "金額", width: 150, align: "right" },
+          { label: "備註", width: 294, maxChars: 22 },
         ],
-        rows: [
-          ...feeRows,
-          ["費用小計", "", "", feeTotal.toLocaleString(), ""],
-        ],
-        subtotalIndex: feeRows.length,
-        theme: {
-          main: [23, 111, 174],
-          header: [229, 244, 255],
-          stripe: [237, 246, 253],
-          subtotal: [211, 231, 247],
-          line: [188, 222, 245],
-          text: [47, 67, 83],
-          headerText: [72, 114, 150],
-        },
+        rows: feeInvoiceRows,
+        theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
       });
-
-      const productStartY = feeEndY + 48;
-      const productEndY = drawManualReportTable({
-        y: productStartY,
+      const productSvg = renderInvoiceTable({
+        y: feeSvg.endY + 85,
         title: "商品明細",
         columns: [
-          { label: "日期", width: 110, align: "center" },
-          { label: "數量", width: 70, align: "center" },
-          { label: "品名", width: reportTableWidth - 300, align: "center" },
-          { label: "金額", width: 120, align: "center" },
+          { label: "日期", width: 170 },
+          { label: "數量", width: 120, align: "right" },
+          { label: "品名", width: 634, maxChars: 35 },
+          { label: "金額", width: 190, align: "right" },
         ],
-        rows: [
-          ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
-          ["自領商品合計", "", "", productTotal.toLocaleString()],
-        ],
-        subtotalIndex: productRows.length ? productRows.length : 1,
-        theme: {
-          main: [215, 103, 36],
-          header: [255, 239, 228],
-          stripe: [255, 245, 238],
-          subtotal: [250, 220, 202],
-          line: [244, 195, 165],
-          text: [82, 57, 42],
-          headerText: [165, 80, 36],
-        },
+        rows: productInvoiceRows,
+        theme: { main: "#D96724", header: "#FFEFE4", stripe: "#FFF4EC", subtotal: "#FADCCA", line: "#F3C2A4", text: "#573A2B", headerText: "#A55124" },
       });
-
-      const totalStartY = productEndY + 52;
-      drawManualReportTable({
-        y: totalStartY,
+      const totalSvg = renderInvoiceTable({
+        y: productSvg.endY + 92,
         title: "本月應繳總額",
         columns: [
-          { label: "", width: 360, align: "center" },
-          { label: "", width: reportTableWidth - 360, align: "right" },
+          { label: "", width: 610, align: "center" },
+          { label: "", width: 504, align: "right" },
         ],
         rows: [
           ["費用小計", feeTotal.toLocaleString()],
           ["自領商品小計", productTotal.toLocaleString()],
           ["本月應繳總額", formatPdfMoney(totalDue)],
         ],
-        subtotalIndex: 2,
-        rowHeight: 27,
-        theme: {
-          main: [69, 174, 73],
-          header: [250, 255, 247],
-          stripe: [250, 255, 247],
-          subtotal: [235, 252, 238],
-          line: [104, 192, 92],
-          text: [42, 82, 47],
-          headerText: [42, 82, 47],
-        },
+        rowHeight: 52,
+        theme: { main: "#45AE49", header: "#FAFFF7", stripe: "#FAFFF7", subtotal: "#EBFCEE", line: "#68C05C", text: "#2A522F", headerText: "#2A522F" },
       });
+      const invoiceSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+        <rect width="100%" height="100%" fill="#fff"/>
+        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="360" y="58" width="470" height="162" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 595, 150, { anchor: "middle", size: 56, color: "#111" })}
+        ${renderText("INVOICE", 595, 286, { anchor: "middle", size: 38, color: "#111", weight: 300 })}
+        ${renderText(`Bill To：${targetLabel}`, 40, 365, { size: 24, color: "#111" })}
+        ${renderText(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 665, 365, { size: 24, color: "#111" })}
+        ${renderText(`Date：${getPdfDateLabel(reportStartDate)}`, 665, 415, { size: 24, color: "#111" })}
+        ${feeSvg.html}
+        ${productSvg.html}
+        ${totalSvg.html}
+      </svg>`;
+      const invoiceDataUrl = await svgToPngDataUrl(invoiceSvg, svgWidth, svgHeight);
+      doc.addImage(invoiceDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
