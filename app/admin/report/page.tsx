@@ -587,11 +587,14 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         row["訂單時間"],
         row["分類"],
         normalizePdfText(row["品項"]),
+        row["數量"],
         row["總價"],
         row["折扣"],
         normalizePdfText(row["工作人員"]),
         row["支付方式"],
       ]);
+      const dailyServiceRows = detailRows.filter((row) => String(row[2]).startsWith("美髮-"));
+      const soldProductRows = detailRows.filter((row) => String(row[2]) === "商品");
       const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
         const category = normalizePdfText(row["分類"]);
         if (!category.startsWith("美髮-")) return map;
@@ -757,7 +760,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
       const productUsageCount = productRows.reduce((sum, row) => sum + Number(row[1] || 0), 0);
       const feeSvg = renderInvoiceTable({
-        y: 945,
+        y: 760,
         title: "費用明細",
         columns: [
           { label: "費用項目", width: 430, maxChars: 22 },
@@ -770,7 +773,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         rowHeight: 48,
         theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
       });
-      const productY = feeSvg.endY + 38;
+      const productY = feeSvg.endY + 34;
       const productHeight = 58 + 104 + 46;
       const productEndY = productY + productHeight;
       const productSvg = `<g>
@@ -793,7 +796,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="none" stroke="#D96724" stroke-width="3.2"/>
       </g>`;
       const totalSvg = renderInvoiceTable({
-        y: productEndY + 38,
+        y: productEndY + 34,
         title: "本月應繳總額",
         columns: [
           { label: "", width: 610, align: "center" },
@@ -810,49 +813,18 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       });
       const invoiceSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
         <rect width="100%" height="100%" fill="#fff"/>
-        <rect x="0" y="0" width="${svgWidth}" height="138" fill="#FFFDF8"/>
-        <line x1="0" y1="138" x2="${svgWidth}" y2="138" stroke="#C8A46B" stroke-width="8"/>
-        ${renderText("Bing Cherry", 68, 84, { size: 50, color: "#111", weight: 300 })}
-        ${renderText("Designer Monthly Statement", 1130, 62, { anchor: "end", size: 28, color: "#263A32", weight: 700 })}
-        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 1130, 98, { anchor: "end", size: 18, color: "#7D7A73", weight: 400 })}
-        ${renderText(targetLabel, 62, 218, { size: 44, color: "#263A32", weight: 900 })}
-        ${renderText(`月份：${getPdfMonthLabel()}　｜　結算日：${getPdfDateLabel(settlementDate)}`, 62, 260, { size: 21, color: "#7D7A73" })}
-        <rect x="862" y="176" width="250" height="104" rx="20" fill="#E8F5FC"/>
-        ${renderText("本月應繳總額", 987, 214, { anchor: "middle", size: 18, color: "#1674AE", weight: 800 })}
-        ${renderText(formatPdfMoney(totalDue), 987, 256, { anchor: "middle", size: 38, color: "#1674AE", weight: 900 })}
-        <rect x="62" y="318" width="1066" height="76" rx="14" fill="#EEF8F7"/>
-        <rect x="62" y="318" width="8" height="76" rx="4" fill="#32BBB8"/>
-        ${renderText("本期重點", 96, 350, { size: 23, color: "#263A32", weight: 900 })}
-        ${renderText(`服務業績 ${formatPdfMoney(serviceTotal)}，品牌共享費 ${formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))}，自領商品 ${formatPdfMoney(productTotal)}。`, 96, 378, { size: 17, color: "#7D7A73", maxChars: 56 })}
-        ${renderText(`${detailRows.filter((row) => String(row[2]).startsWith("美髮-")).length.toLocaleString()} 筆服務`, 1076, 366, { anchor: "end", size: 36, color: "#2FB7B4", weight: 900 })}
-        ${renderText("結算摘要", 62, 458, { size: 26, color: "#263A32", weight: 900 })}
-        ${[
-          ["完成交易數", `${detailRows.filter((row) => String(row[2]).startsWith("美髮-")).length.toLocaleString()} 筆`],
-          ["服務業績", formatPdfMoney(serviceTotal)],
-          ["服務抽成", formatPdfMoney(reports.reduce((sum, item) => sum + item.report.serviceCommission, 0))],
-          ["品牌共享費", formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))],
-          ["自領商品", formatPdfMoney(productTotal)],
-          ["本月應繳", formatPdfMoney(totalDue)],
-        ].map((item, index) => {
-          const x = 62 + (index % 3) * 245;
-          const y = 488 + Math.floor(index / 3) * 74;
-          const isTotal = index === 5;
-          return `<rect x="${x}" y="${y}" width="220" height="56" rx="10" fill="${isTotal ? "#ECFAEF" : "#F7F7F5"}" stroke="${isTotal ? "#D4EFD9" : "#EFEDE7"}"/>
-            ${renderText(item[0], x + 18, y + 23, { size: 14, color: "#7D7A73", weight: 700 })}
-            ${renderText(item[1], x + 202, y + 42, { anchor: "end", size: 20, color: isTotal ? "#35A84B" : "#263A32", weight: 900 })}`;
-        }).join("")}
-        <rect x="820" y="458" width="308" height="160" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
-        ${renderPieChart(serviceCategoryTotals, 900, 538, 58)}
-        <rect x="62" y="658" width="515" height="124" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
-        <rect x="597" y="658" width="531" height="124" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
-        <rect x="84" y="686" width="5" height="62" rx="3" fill="#C8A46B"/>
-        <rect x="619" y="686" width="5" height="62" rx="3" fill="#C8A46B"/>
-        ${renderText("收益共享服務費", 106, 690, { size: 18, color: "#263A32", weight: 900 })}
-        ${renderText(`max(服務業績 - 底扣, 0) x 抽成比例`, 106, 720, { size: 16, color: "#665F55", maxChars: 28 })}
-        ${renderText(`本期：max(${formatPdfMoney(serviceTotal)} - ${formatPdfMoney(reports[0]?.report.baseDeduction || 0)}, 0) x ${Math.round(Number(reports[0]?.designer.commission_rate || 0) * 100)}%`, 106, 750, { size: 16, color: "#665F55", maxChars: 34 })}
-        ${renderText("品牌共享費", 641, 690, { size: 18, color: "#263A32", weight: 900 })}
-        ${renderText(`服務業績 x ${Math.round(Number(reports[0]?.report.brandFeeRate || 0) * 100)}%`, 641, 720, { size: 16, color: "#665F55", maxChars: 28 })}
-        ${renderText(`本期：${formatPdfMoney(serviceTotal)} x ${Math.round(Number(reports[0]?.report.brandFeeRate || 0) * 100)}% = ${formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))}`, 641, 750, { size: 16, color: "#665F55", maxChars: 34 })}
+        <rect x="0" y="0" width="${svgWidth}" height="198" fill="#FFFDF8"/>
+        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="38" y="34" width="430" height="126" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 38, 112, { size: 70, color: "#111", weight: 300 })}
+        <rect x="736" y="48" width="410" height="102" fill="#FFFDF8"/>
+        ${renderText(targetLabel, 762, 98, { size: 45, color: "#263A32", weight: 900 })}
+        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 762, 146, { size: 25, color: "#7D7A73", weight: 700 })}
+        <line x1="0" y1="198" x2="${svgWidth}" y2="198" stroke="#C8A46B" stroke-width="8"/>
+        ${renderText("結算摘要", 62, 300, { size: 28, color: "#263A32", weight: 900 })}
+        <rect x="878" y="280" width="250" height="104" rx="20" fill="#E8F5FC"/>
+        ${renderText("本月應繳總額", 1003, 318, { anchor: "middle", size: 18, color: "#1674AE", weight: 800 })}
+        ${renderText(formatPdfMoney(totalDue), 1003, 360, { anchor: "middle", size: 38, color: "#1674AE", weight: 900 })}
+        <rect x="224" y="430" width="454" height="250" rx="16" fill="#FFFDF8" stroke="#E6DAC7" stroke-width="2"/>
+        ${renderPieChart(serviceCategoryTotals, 342, 555, 84)}
         ${feeSvg.html}
         ${productSvg}
         ${totalSvg.html}
@@ -861,40 +833,42 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.addImage(invoiceDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
 
       doc.addPage("a4", "portrait");
-      doc.setFont("NotoSansTC", "normal");
-      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 202, 22, 190, 65);
-      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
       doc.setFont("NotoSansTC", "bold");
-      doc.setFontSize(11);
-      doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
-      doc.text(serviceTotal.toLocaleString(), 430, 126);
-
+      doc.setFontSize(18);
+      doc.text("每日服務明細", 40, 52);
+      doc.setFont("NotoSansTC", "normal");
+      doc.setFontSize(9);
+      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 40, 72);
       autoTable(doc, {
-        startY: 150,
-        head: [["訂單號碼", "訂單時間", "分類", "品項", "總價", "折扣", "工作人員", "支付方式"]],
-        body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", "", ""]],
+        startY: 92,
+        head: [["訂單時間", "分類", "品項", "數量", "金額", "折扣", "支付方式"]],
+        body: dailyServiceRows.length ? dailyServiceRows.map((row) => [row[1], row[2], row[3], row[4], row[5], row[6], row[8]]) : [["此區間尚無服務明細", "", "", "", "", "", ""]],
         styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.2, cellPadding: 2.2, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45 },
         headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [58, 139, 211], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
         alternateRowStyles: { fillColor: [202, 224, 244] },
         bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: { 0: { cellWidth: 78 }, 1: { cellWidth: 72 }, 2: { cellWidth: 54 }, 3: { cellWidth: 150 }, 4: { cellWidth: 45, halign: "right" }, 5: { cellWidth: 38, halign: "right" }, 6: { cellWidth: 50 }, 7: { cellWidth: 68 } },
-        margin: { left: 20, right: 20 },
-        didParseCell: (data) => {
-          if (data.section === "body" && String(data.row.raw?.[2] || "").includes("商品")) {
-            data.cell.styles.textColor = [255, 0, 0];
-          }
-        },
+        columnStyles: { 0: { cellWidth: 86 }, 1: { cellWidth: 70 }, 2: { cellWidth: 210 }, 3: { cellWidth: 38, halign: "right" }, 4: { cellWidth: 58, halign: "right" }, 5: { cellWidth: 45, halign: "right" }, 6: { cellWidth: 58 } },
+        margin: { left: 30, right: 30 },
       });
 
-      const finalY = (doc as any).lastAutoTable.finalY + 10;
-      if (finalY < pageHeight - 56) {
-        doc.setFont("NotoSansTC", "normal");
-        doc.setFontSize(9);
-        doc.text("服務業績", 230, finalY + 10);
-        doc.text(serviceTotal.toLocaleString(), 390, finalY + 10, { align: "right" });
-        doc.text("商品銷售", 230, finalY + 26);
-        doc.text(productTotal.toLocaleString(), 390, finalY + 26, { align: "right" });
-      }
+      doc.addPage("a4", "portrait");
+      doc.setFont("NotoSansTC", "bold");
+      doc.setFontSize(18);
+      doc.text("商品販售明細", 40, 52);
+      doc.setFont("NotoSansTC", "normal");
+      doc.setFontSize(9);
+      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 40, 72);
+      autoTable(doc, {
+        startY: 92,
+        head: [["訂單時間", "品項", "數量", "金額", "支付方式"]],
+        body: soldProductRows.length ? soldProductRows.map((row) => [row[1], row[3], row[4], row[5], row[8]]) : [["此區間尚無商品販售明細", "", "", "", ""]],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8, cellPadding: 3, overflow: "linebreak", textColor: [80, 55, 42], lineColor: [245, 198, 170], lineWidth: 0.45 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [217, 103, 36], textColor: [255, 255, 255], fontSize: 10, halign: "center" },
+        alternateRowStyles: { fillColor: [255, 240, 229] },
+        bodyStyles: { fillColor: [255, 255, 255] },
+        columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 280 }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 60 } },
+        margin: { left: 30, right: 30 },
+      });
 
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
       return;
