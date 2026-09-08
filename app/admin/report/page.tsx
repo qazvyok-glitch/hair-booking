@@ -427,9 +427,31 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     doc.setFont("NotoSansTC", "normal");
   }
 
+  async function loadImageAsDataUrl(path: string) {
+    const response = await fetch(path);
+    if (!response.ok) return "";
+    const blob = await response.blob();
+    return await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   function normalizePdfText(value: any) {
     // PDF 字型不支援彩色 emoji，導出時移除 emoji 可避免出現方塊。
     return String(value ?? "").replace(/[\u{1F300}-\u{1FAFF}\u{FE0F}]/gu, "").trim();
+  }
+
+  function getPdfMonthLabel() {
+    const start = new Date(`${reportStartDate}T00:00:00`);
+    const end = new Date(`${reportEndDate}T00:00:00`);
+    if (Number.isNaN(start.getTime())) return selectedMonth.slice(5) + "月份";
+    const startLabel = `${start.getMonth() + 1}月份`;
+    if (Number.isNaN(end.getTime()) || start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+      return startLabel;
+    }
+    return `${start.getMonth() + 1}-${end.getMonth() + 1}月份`;
   }
 
   // 導出 Excel — 格式與舊系統訂單列表對齊
@@ -484,10 +506,11 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const orderRows = buildExportOrderRows(exportTx);
       const exportDesigners = getExportDesigners();
       const formatPdfMoney = (amount: number) => `NT$${Number(amount || 0).toLocaleString()}`;
-      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
       await applyChinesePdfFont(doc);
       const title = reportMode === "shop" ? "店舖報表" : "設計師報表";
       const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map((designer) => normalizePdfText(getExportName(designer))).join("、");
+      const logoDataUrl = await loadImageAsDataUrl("/logo.png");
       const summaryRows = exportDesigners.map((designer) => {
         const report = calcDesignerReport(designer);
         return [
@@ -509,20 +532,58 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         row["支付方式"],
       ]);
 
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      doc.setFillColor(250, 250, 248);
+      doc.rect(0, 0, pageWidth, pageHeight, "F");
+      doc.setDrawColor(235, 232, 224);
+      for (let i = 0; i < 18; i++) {
+        doc.setDrawColor(238 - i, 236 - i, 232 - i);
+        doc.line(30 + i * 42, 0, 0, 90 + i * 46);
+        doc.line(pageWidth, 120 + i * 38, 120 + i * 35, pageHeight);
+      }
+      doc.setFillColor(52, 71, 61);
+      doc.rect(72, 140, pageWidth - 144, 215, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("NotoSansTC", "normal");
+      doc.setFontSize(44);
+      doc.text("Monthly Report", pageWidth - 96, 216, { align: "right" });
+      doc.setFontSize(34);
+      doc.text("月報表", pageWidth - 96, 274, { align: "right" });
+      doc.setFont("NotoSansTC", "bold");
+      doc.setFontSize(30);
+      doc.text(`${getPdfMonthLabel()} / ${targetLabel}`, pageWidth - 96, 326, { align: "right" });
+      if (logoDataUrl) {
+        doc.addImage(logoDataUrl, "PNG", pageWidth / 2 - 48, 418, 96, 96);
+      }
+      doc.setTextColor(20, 20, 20);
+      doc.setFontSize(32);
+      doc.text("Bing Cherry", pageWidth / 2, 565, { align: "center" });
+      doc.setFont("NotoSansTC", "normal");
+      doc.setFontSize(24);
+      doc.text("Hair Hub 2.0", pageWidth / 2, 602, { align: "center" });
+      doc.setFontSize(20);
+      doc.text("超越共享，打造屬於我們的美髮社區", pageWidth / 2, 720, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("More than a space, we're a creative community.", pageWidth / 2, 744, { align: "center" });
+
+      doc.addPage("a4", "portrait");
+      doc.setFont("NotoSansTC", "normal");
+      doc.setTextColor(32, 32, 32);
       doc.setFontSize(18);
       doc.text(title, 40, 42);
       doc.setFontSize(10);
       doc.text(`結算區間：${reportStartDate} 至 ${reportEndDate}`, 40, 64);
       doc.text(`結算日：${settlementDate}`, 40, 80);
-      doc.text(`導出對象：${targetLabel}`, 40, 96);
+      doc.text(`設計師：${targetLabel}`, 40, 96);
 
       autoTable(doc, {
         startY: 124,
         head: [["設計師", "筆數", "服務業績", "服務抽成", "品牌共享費", "應付抽成"]],
         body: summaryRows.length ? summaryRows : [["無資料", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 6, overflow: "linebreak" },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [241, 239, 232], textColor: [44, 44, 42] },
-        alternateRowStyles: { fillColor: [251, 250, 247] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 6, overflow: "linebreak", textColor: [39, 39, 42], lineColor: [190, 186, 176], lineWidth: 0.6 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [225, 221, 211], textColor: [31, 41, 55], lineColor: [175, 170, 160], lineWidth: 0.8 },
+        alternateRowStyles: { fillColor: [248, 247, 243] },
         margin: { left: 40, right: 40 },
       });
 
@@ -530,9 +591,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         startY: (doc as any).lastAutoTable.finalY + 28,
         head: [["訂單時間", "設計師", "分類", "品項", "數量", "總價", "支付方式"]],
         body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8, cellPadding: 5, overflow: "linebreak" },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [241, 239, 232], textColor: [44, 44, 42] },
-        alternateRowStyles: { fillColor: [251, 250, 247] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.5, cellPadding: 5, overflow: "linebreak", textColor: [39, 39, 42], lineColor: [200, 196, 186], lineWidth: 0.5 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [225, 221, 211], textColor: [31, 41, 55], lineColor: [175, 170, 160], lineWidth: 0.8 },
+        alternateRowStyles: { fillColor: [248, 247, 243] },
+        columnStyles: { 0: { cellWidth: 76 }, 1: { cellWidth: 58 }, 2: { cellWidth: 66 }, 3: { cellWidth: 170 }, 4: { cellWidth: 36 }, 5: { cellWidth: 54 }, 6: { cellWidth: 70 } },
         margin: { left: 40, right: 40 },
       });
 
