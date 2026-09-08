@@ -654,6 +654,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         rows,
         theme,
         rowHeight = 43,
+        showHeader = true,
       }: {
         y: number;
         title: string;
@@ -661,25 +662,28 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         rows: string[][];
         theme: { main: string; header: string; stripe: string; subtotal: string; line: string; text: string; headerText: string };
         rowHeight?: number;
+        showHeader?: boolean;
       }) => {
         const x = 38;
         const width = 1114;
         const titleHeight = 58;
-        const headerHeight = 50;
+        const headerHeight = showHeader ? 50 : 0;
         const height = titleHeight + headerHeight + rows.length * rowHeight;
         let html = `<g>`;
         html += `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="15" fill="#fff" stroke="${theme.main}" stroke-width="3"/>`;
         html += `<path d="M ${x + 15} ${y} H ${x + width - 15} Q ${x + width} ${y} ${x + width} ${y + 15} V ${y + titleHeight} H ${x} V ${y + 15} Q ${x} ${y} ${x + 15} ${y}" fill="${theme.main}"/>`;
         html += renderText(title, x + width / 2, y + 38, { anchor: "middle", size: 30, color: "#fff", weight: 400 });
-        html += `<rect x="${x}" y="${y + titleHeight}" width="${width}" height="${headerHeight}" fill="${theme.header}"/>`;
+        if (showHeader) html += `<rect x="${x}" y="${y + titleHeight}" width="${width}" height="${headerHeight}" fill="${theme.header}"/>`;
         let currentX = x;
-        columns.forEach((column) => {
-          html += renderText(column.label, currentX + column.width / 2, y + titleHeight + 32, { anchor: "middle", size: 22, color: theme.headerText });
-          currentX += column.width;
-        });
+        if (showHeader) {
+          columns.forEach((column) => {
+            html += renderText(column.label, currentX + column.width / 2, y + titleHeight + 32, { anchor: "middle", size: 22, color: theme.headerText, weight: 700 });
+            currentX += column.width;
+          });
+        }
         rows.forEach((row, rowIndex) => {
           const rowY = y + titleHeight + headerHeight + rowIndex * rowHeight;
-          const fill = rowIndex === rows.length - 1 ? theme.subtotal : rowIndex % 2 === 0 ? theme.stripe : "#fff";
+          const fill = rowIndex === rows.length - 1 ? theme.subtotal : "#fff";
           html += `<rect x="${x}" y="${rowY}" width="${width}" height="${rowHeight}" fill="${fill}"/>`;
           currentX = x;
           row.forEach((cell, cellIndex) => {
@@ -710,10 +714,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         return { html, endY: y + height };
       };
       const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
-      const productInvoiceRows = [
-        ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
-        ["自領商品合計", "", "", productTotal.toLocaleString()],
-      ];
+      const productUsageCount = productRows.reduce((sum, row) => sum + Number(row[1] || 0), 0);
       const feeSvg = renderInvoiceTable({
         y: 405,
         title: "費用明細",
@@ -727,20 +728,29 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         rows: feeInvoiceRows,
         theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
       });
-      const productSvg = renderInvoiceTable({
-        y: feeSvg.endY + 85,
-        title: "商品明細",
-        columns: [
-          { label: "日期", width: 170 },
-          { label: "數量", width: 120, align: "right" },
-          { label: "品名", width: 634, maxChars: 35 },
-          { label: "金額", width: 190, align: "right" },
-        ],
-        rows: productInvoiceRows,
-        theme: { main: "#D96724", header: "#FFEFE4", stripe: "#FFF4EC", subtotal: "#FADCCA", line: "#F3C2A4", text: "#573A2B", headerText: "#A55124" },
-      });
+      const productY = feeSvg.endY + 85;
+      const productHeight = 58 + 118 + 48;
+      const productEndY = productY + productHeight;
+      const productSvg = `<g>
+        <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="#fff" stroke="#D96724" stroke-width="3"/>
+        <path d="M 53 ${productY} H 1137 Q 1152 ${productY} 1152 ${productY + 15} V ${productY + 58} H 38 V ${productY + 15} Q 38 ${productY} 53 ${productY}" fill="#D96724"/>
+        ${renderText("自領商品", 595, productY + 38, { anchor: "middle", size: 30, color: "#fff", weight: 700 })}
+        <line x1="409" y1="${productY + 58}" x2="409" y2="${productY + 176}" stroke="#F3C2A4" stroke-width="1.3"/>
+        <line x1="780" y1="${productY + 58}" x2="780" y2="${productY + 176}" stroke="#F3C2A4" stroke-width="1.3"/>
+        ${renderText("自領日期區間", 224, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
+        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 224, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
+        ${renderText("自領件數", 595, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
+        ${renderText(`${productUsageCount.toLocaleString()} 件`, 595, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
+        ${renderText("自領商品小計", 966, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
+        ${renderText(formatPdfMoney(productTotal), 966, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
+        <rect x="38" y="${productY + 176}" width="1114" height="48" fill="#FADCCA"/>
+        <line x1="38" y1="${productY + 176}" x2="1152" y2="${productY + 176}" stroke="#D96724" stroke-width="2.4"/>
+        <line x1="780" y1="${productY + 176}" x2="780" y2="${productY + 224}" stroke="#D96724" stroke-width="1.5"/>
+        ${renderText("自領商品合計", 62, productY + 207, { size: 21, color: "#9A4318", weight: 900 })}
+        ${renderText(productTotal.toLocaleString(), 1132, productY + 207, { anchor: "end", size: 21, color: "#9A4318", weight: 900 })}
+      </g>`;
       const totalSvg = renderInvoiceTable({
-        y: productSvg.endY + 92,
+        y: productEndY + 92,
         title: "本月應繳總額",
         columns: [
           { label: "", width: 610, align: "center" },
@@ -753,6 +763,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         ],
         rowHeight: 52,
         theme: { main: "#45AE49", header: "#FAFFF7", stripe: "#FAFFF7", subtotal: "#EBFCEE", line: "#68C05C", text: "#2A522F", headerText: "#2A522F" },
+        showHeader: false,
       });
       const invoiceSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
         <rect width="100%" height="100%" fill="#fff"/>
