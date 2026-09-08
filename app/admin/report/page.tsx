@@ -848,16 +848,20 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.addImage(invoiceDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
 
       doc.addPage("a4", "portrait");
+      doc.setFillColor(12, 103, 158);
+      doc.roundedRect(10, 44, pageWidth - 20, 36, 7, 7, "F");
       doc.setFont("NotoSansTC", "bold");
+      doc.setTextColor(255, 255, 255);
       doc.setFontSize(18);
-      doc.text("每日明細", 30, 52);
+      doc.text("每日明細", pageWidth / 2, 67, { align: "center" });
+      doc.setTextColor(21, 34, 43);
       autoTable(doc, {
-        startY: 72,
+        startY: 82,
         head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
         body: dailyDetailBody,
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.6, cellPadding: { top: 5, right: 3, bottom: 5, left: 3 }, overflow: "linebreak", textColor: [21, 34, 43], lineWidth: 0, minCellHeight: 23 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [21, 119, 171], textColor: [255, 255, 255], fontSize: 9.8, halign: "left", cellPadding: { top: 7, right: 3, bottom: 7, left: 3 } },
-        alternateRowStyles: { fillColor: [210, 230, 248] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.7, cellPadding: { top: 5, right: 3, bottom: 5, left: 3 }, overflow: "linebreak", textColor: [18, 30, 38], lineWidth: 0, minCellHeight: 23 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [219, 239, 252], textColor: [15, 82, 132], fontSize: 9.8, halign: "left", cellPadding: { top: 7, right: 3, bottom: 7, left: 3 } },
+        alternateRowStyles: { fillColor: [201, 224, 245] },
         bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: {
           0: { cellWidth: 82, fontStyle: "bold", textColor: [17, 80, 145] },
@@ -873,9 +877,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           if (data.section !== "body") return;
           const raw = data.row.raw as string[];
           if (String(raw?.[0] || "") === "總計") {
-            data.cell.styles.fillColor = [191, 217, 243];
+            data.cell.styles.fillColor = [179, 209, 238];
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [21, 34, 43];
+            data.cell.styles.textColor = [18, 30, 38];
             data.cell.styles.cellPadding = { top: 9, right: 3, bottom: 9, left: 3 };
           }
           if (String(raw?.[1] || "") === "商品") {
