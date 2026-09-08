@@ -286,38 +286,36 @@ export function AdminDesignersContent() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 8, marginTop: 10 }}>
-                  <div style={{ background: "#EEEDFE", borderRadius: 10, padding: "10px 12px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, minmax(118px, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
+                  <div style={{ background: "#EEEDFE", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: "#7B6FD4", fontWeight: 700 }}>服務業績抽成</div>
-                    <div style={{ fontSize: 16, color: "#534AB7", fontWeight: 800, marginTop: 2 }}>{Math.round((d.commission_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>底扣 NT${((d as any).commission_base_deduction || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 20, color: "#534AB7", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round((d.commission_rate || 0) * 100)}%</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>底扣 NT${((d as any).commission_base_deduction || 0).toLocaleString()}</div>
                   </div>
-                  <div style={{ background: "#E1F5EE", borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ background: "#E1F5EE", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: "#08785E", fontWeight: 700 }}>商品販售抽成</div>
-                    <div style={{ fontSize: 16, color: "#085041", fontWeight: 800, marginTop: 2 }}>{Math.round(((d as any).product_commission_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>商品銷售獨立計算</div>
+                    <div style={{ fontSize: 20, color: "#085041", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round(((d as any).product_commission_rate || 0) * 100)}%</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>商品銷售獨立計算</div>
                   </div>
-                  <div style={{ background: "#F8F7F3", borderRadius: 10, padding: "10px 12px", border: "1px solid #E5E1D7" }}>
+                  <div style={{ background: "#F8F7F3", borderRadius: 12, padding: "10px 12px", border: "1px solid #E5E1D7", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: "#BA7517", fontWeight: 700 }}>品牌共享費</div>
-                    <div style={{ fontSize: 16, color: "#BA7517", fontWeight: 800, marginTop: 2 }}>{Math.round(((d as any).brand_fee_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>列入 BC 應收</div>
+                    <div style={{ fontSize: 20, color: "#BA7517", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round(((d as any).brand_fee_rate || 0) * 100)}%</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>列入 BC 應收</div>
                   </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 8, marginTop: 8 }}>
-                  <div style={{ background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: d.status === "active" ? "#08785E" : "#A32D2D", fontWeight: 700 }}>職務狀態</div>
-                    <div style={{ fontSize: 14, color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 800, marginTop: 2 }}>{d.status === "active" ? "在職" : "離職"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>{d.left_date ? `離職日 ${d.left_date.replace(/-/g, "/")}` : "可正常預約與登入"}</div>
+                    <div style={{ fontSize: 18, color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.status === "active" ? "在職" : "離職"}</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>{d.left_date ? `離職日 ${d.left_date.replace(/-/g, "/")}` : "可預約與登入"}</div>
                   </div>
-                  <div style={{ background: d.is_manager ? "#EEEDFE" : "#F8F7F3", borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ background: d.is_manager ? "#EEEDFE" : "#F8F7F3", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 700 }}>店長權限</div>
-                    <div style={{ fontSize: 14, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 800, marginTop: 2 }}>{d.is_manager ? "已開啟" : "未開啟"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>可查看全員排程與待確認</div>
+                    <div style={{ fontSize: 18, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.is_manager ? "已開啟" : "未開啟"}</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>全員排程與待確認</div>
                   </div>
-                  <div style={{ background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", borderRadius: 10, padding: "10px 12px" }}>
+                  <div style={{ background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
                     <div style={{ fontSize: 11, color: d.can_view_members ? "#08785E" : "#A32D2D", fontWeight: 700 }}>會員資料</div>
-                    <div style={{ fontSize: 14, color: d.can_view_members ? "#085041" : "#A32D2D", fontWeight: 800, marginTop: 2 }}>{d.can_view_members ? "可查看" : "不可查看"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>控制設計師端顧客資料權限</div>
+                    <div style={{ fontSize: 18, color: d.can_view_members ? "#085041" : "#A32D2D", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.can_view_members ? "可查看" : "不可查看"}</div>
+                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>設計師端顧客資料</div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11, color: "#888780" }}>
@@ -352,12 +350,27 @@ export function AdminDesignersContent() {
               </div>
               <button onClick={() => setActionDesigner(null)} style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#F1EFE8", color: "#5F5E5A", fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "profile")} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>設計師個人基本設定</button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "login")} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>登入帳號密碼</button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "settlement")} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>結算規則</button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "permissions")} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>職務與權限</button>
-              <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>專屬價目表</button>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 10 }}>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "profile")} style={{ padding: "14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>個人基本設定</div>
+                <div style={{ fontSize: 12, color: "#7B6FD4", marginTop: 4, lineHeight: 1.35 }}>顧客端顯示、姓名、暱稱、專長、頭像</div>
+              </button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "login")} style={{ padding: "14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>登入帳號密碼</div>
+                <div style={{ fontSize: 12, color: "#888780", marginTop: 4, lineHeight: 1.35 }}>設定設計師端登入帳號與密碼</div>
+              </button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "settlement")} style={{ padding: "14px", background: "#E1F5EE", color: "#085041", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>結算規則</div>
+                <div style={{ fontSize: 12, color: "#08785E", marginTop: 4, lineHeight: 1.35 }}>服務抽成、商品抽成、品牌共享費</div>
+              </button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "permissions")} style={{ padding: "14px", background: "#FDF1DE", color: "#BA7517", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>職務與權限</div>
+                <div style={{ fontSize: 12, color: "#BA7517", marginTop: 4, lineHeight: 1.35 }}>在職狀態、店長權限、會員資料權限</div>
+              </button>
+              <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "14px", background: "#fff", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>專屬價目表</div>
+                <div style={{ fontSize: 12, color: "#888780", marginTop: 4, lineHeight: 1.35 }}>管理此設計師專屬服務與價格</div>
+              </button>
               <button onClick={() => { toggleStatus(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.status === "active" ? "#FCEBEB" : "#E1F5EE", color: actionDesigner.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
                 {actionDesigner.status === "active" ? "設為離職" : "恢復在職"}
               </button>
