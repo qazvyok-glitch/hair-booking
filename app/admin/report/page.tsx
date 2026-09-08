@@ -407,6 +407,31 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     URL.revokeObjectURL(url);
   }
 
+  function arrayBufferToBase64(buffer: ArrayBuffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  async function applyChinesePdfFont(doc: jsPDF) {
+    const response = await fetch("/fonts/NotoSansTC.ttf");
+    if (!response.ok) throw new Error("中文字型載入失敗");
+    const fontBase64 = arrayBufferToBase64(await response.arrayBuffer());
+    doc.addFileToVFS("NotoSansTC.ttf", fontBase64);
+    doc.addFont("NotoSansTC.ttf", "NotoSansTC", "normal");
+    doc.addFont("NotoSansTC.ttf", "NotoSansTC", "bold");
+    doc.setFont("NotoSansTC", "normal");
+  }
+
+  function normalizePdfText(value: any) {
+    // PDF 字型不支援彩色 emoji，導出時移除 emoji 可避免出現方塊。
+    return String(value ?? "").replace(/[\u{1F300}-\u{1FAFF}\u{FE0F}]/gu, "").trim();
+  }
+
   // 導出 Excel — 格式與舊系統訂單列表對齊
   function exportExcel() {
     try {
@@ -453,19 +478,20 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     }
   }
 
-  function exportPdf() {
+  async function exportPdf() {
     try {
       const exportTx = getExportTransactions();
       const orderRows = buildExportOrderRows(exportTx);
       const exportDesigners = getExportDesigners();
       const formatPdfMoney = (amount: number) => `NT$${Number(amount || 0).toLocaleString()}`;
       const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      await applyChinesePdfFont(doc);
       const title = reportMode === "shop" ? "店舖報表" : "設計師報表";
-      const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map(getExportName).join("、");
+      const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map((designer) => normalizePdfText(getExportName(designer))).join("、");
       const summaryRows = exportDesigners.map((designer) => {
         const report = calcDesignerReport(designer);
         return [
-          getExportName(designer),
+          normalizePdfText(getExportName(designer)),
           report.transactionCount,
           formatPdfMoney(report.serviceRevenue),
           formatPdfMoney(report.serviceCommission),
@@ -475,9 +501,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       });
       const detailRows = orderRows.map((row) => [
         row["訂單時間"],
-        row["工作人員"],
+        normalizePdfText(row["工作人員"]),
         row["分類"],
-        row["品項"],
+        normalizePdfText(row["品項"]),
         row["數量"],
         row["總價"],
         row["支付方式"],
@@ -494,8 +520,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         startY: 124,
         head: [["設計師", "筆數", "服務業績", "服務抽成", "品牌共享費", "應付抽成"]],
         body: summaryRows.length ? summaryRows : [["無資料", "", "", "", "", ""]],
-        styles: { fontSize: 9, cellPadding: 6, overflow: "linebreak" },
-        headStyles: { fillColor: [241, 239, 232], textColor: [44, 44, 42] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 6, overflow: "linebreak" },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [241, 239, 232], textColor: [44, 44, 42] },
         alternateRowStyles: { fillColor: [251, 250, 247] },
         margin: { left: 40, right: 40 },
       });
@@ -504,8 +530,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         startY: (doc as any).lastAutoTable.finalY + 28,
         head: [["訂單時間", "設計師", "分類", "品項", "數量", "總價", "支付方式"]],
         body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", ""]],
-        styles: { fontSize: 8, cellPadding: 5, overflow: "linebreak" },
-        headStyles: { fillColor: [241, 239, 232], textColor: [44, 44, 42] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8, cellPadding: 5, overflow: "linebreak" },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [241, 239, 232], textColor: [44, 44, 42] },
         alternateRowStyles: { fillColor: [251, 250, 247] },
         margin: { left: 40, right: 40 },
       });
