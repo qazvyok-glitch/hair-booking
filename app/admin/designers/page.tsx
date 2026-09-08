@@ -32,6 +32,8 @@ type DesignerAuth = {
   password_hash: string;
 };
 
+type FormSection = "profile" | "login" | "settlement" | "permissions";
+
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
 
 export function AdminDesignersContent() {
@@ -44,9 +46,10 @@ export function AdminDesignersContent() {
   const [editing, setEditing] = useState<Designer | null>(null);
   const [actionDesigner, setActionDesigner] = useState<Designer | null>(null);
   const [sortDesignerIndex, setSortDesignerIndex] = useState<number | null>(null);
+  const [formSection, setFormSection] = useState<FormSection>("profile");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    name: "", display_name: "", nickname: "", initials: "", style: "", ig: "",
+    name: "", display_name: "", nickname: "", initials: "", style: "", ig: "", avatar_url: "",
     bg_color: "#EEEDFE", text_color: "#3C3489",
     commission_rate: 0.5,
     commission_base_deduction: 0,
@@ -87,8 +90,9 @@ export function AdminDesignersContent() {
 
   function openNew() {
     setEditing(null);
+    setFormSection("profile");
     setForm({
-      name: "", display_name: "", nickname: "", initials: "", style: "", ig: "",
+      name: "", display_name: "", nickname: "", initials: "", style: "", ig: "", avatar_url: "",
       bg_color: "#EEEDFE", text_color: "#3C3489",
       commission_rate: 0.5,
       commission_base_deduction: 0,
@@ -104,9 +108,10 @@ export function AdminDesignersContent() {
     setShowForm(true);
   }
 
-  function openEdit(d: Designer) {
+  function openEdit(d: Designer, section: FormSection = "profile") {
     const auth = authByDesignerId[d.id];
     setEditing(d);
+    setFormSection(section);
     setForm({
       name: d.name,
       display_name: d.display_name || "",
@@ -114,6 +119,7 @@ export function AdminDesignersContent() {
       initials: d.initials || "",
       style: d.style || "",
       ig: d.ig || "",
+      avatar_url: d.avatar_url || "",
       bg_color: d.bg_color || "#EEEDFE",
       text_color: d.text_color || "#3C3489",
       commission_rate: d.commission_rate ?? 0.5,
@@ -220,9 +226,9 @@ export function AdminDesignersContent() {
     setSortDesignerIndex(null);
   }
 
-  function handleEditFromMenu(d: Designer) {
+  function handleEditFromMenu(d: Designer, section: FormSection = "profile") {
     setActionDesigner(null);
-    openEdit(d);
+    openEdit(d, section);
   }
 
   function handleOpenPricesFromMenu(d: Designer) {
@@ -347,7 +353,10 @@ export function AdminDesignersContent() {
               <button onClick={() => setActionDesigner(null)} style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#F1EFE8", color: "#5F5E5A", fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
             <div style={{ display: "grid", gap: 8 }}>
-              <button onClick={() => handleEditFromMenu(actionDesigner)} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>編輯資料與結算規則</button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "profile")} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>設計師個人基本設定</button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "login")} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>登入帳號密碼</button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "settlement")} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>結算規則</button>
+              <button onClick={() => handleEditFromMenu(actionDesigner, "permissions")} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>職務與權限</button>
               <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>專屬價目表</button>
               <button onClick={() => { toggleStatus(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.status === "active" ? "#FCEBEB" : "#E1F5EE", color: actionDesigner.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
                 {actionDesigner.status === "active" ? "設為離職" : "恢復在職"}
@@ -372,6 +381,25 @@ export function AdminDesignersContent() {
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
             </div>
 
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              {[
+                { key: "profile", label: "個人基本設定" },
+                { key: "login", label: "登入帳密" },
+                { key: "settlement", label: "結算規則" },
+                { key: "permissions", label: "職務與權限" },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => setFormSection(item.key as FormSection)}
+                  style={{ padding: "10px 8px", borderRadius: 10, border: "none", background: formSection === item.key ? "#534AB7" : "#F1EFE8", color: formSection === item.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {formSection === "profile" && (
+              <>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>基本資料</div>
             {[
               { key: "name", label: "英文名 *", placeholder: "Cherry" },
@@ -392,6 +420,17 @@ export function AdminDesignersContent() {
               </div>
             ))}
 
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>頭像圖片網址</div>
+              <input
+                value={form.avatar_url}
+                onChange={(e) => setForm({ ...form, avatar_url: e.target.value })}
+                placeholder="貼上圖片網址，會同步設計師端頭像"
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+              />
+              <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>此區資料會同步到設計師端個人資料與顧客端設計師資訊。</div>
+            </div>
+
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>背景色</div>
@@ -402,7 +441,11 @@ export function AdminDesignersContent() {
                 <input type="color" value={form.text_color} onChange={(e) => setForm({ ...form, text_color: e.target.value })} style={{ width: "100%", height: 38, borderRadius: 8, border: "1px solid #D3D1C7", cursor: "pointer" }} />
               </div>
             </div>
+              </>
+            )}
 
+            {formSection === "login" && (
+              <>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>登入帳號密碼</div>
             <div style={{ background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
@@ -428,7 +471,11 @@ export function AdminDesignersContent() {
                 />
               </div>
             </div>
+              </>
+            )}
 
+            {formSection === "settlement" && (
+              <>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>結算規則</div>
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>服務業績抽成</div>
@@ -478,7 +525,11 @@ export function AdminDesignersContent() {
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
+              </>
+            )}
 
+            {formSection === "permissions" && (
+              <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>加入日期</div>
@@ -520,6 +571,8 @@ export function AdminDesignersContent() {
                 ))}
               </div>
             </div>
+              </>
+            )}
 
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}
