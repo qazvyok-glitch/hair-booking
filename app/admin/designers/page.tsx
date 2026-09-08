@@ -32,7 +32,7 @@ type DesignerAuth = {
   password_hash: string;
 };
 
-type FormSection = "profile" | "login" | "settlement" | "permissions";
+type FormSection = "profile" | "settlement";
 
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
 
@@ -321,16 +321,25 @@ export function AdminDesignersContent() {
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: isDesktop ? 14 : 8, width: isDesktop ? 44 : 32, height: isDesktop ? 44 : 32, fontSize: isDesktop ? 24 : 16, cursor: "pointer" }}>✕</button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, minmax(0, 1fr))" : "1fr 1fr", gap: 10, marginBottom: 18, background: isDesktop ? "#F8F7F3" : "transparent", padding: isDesktop ? 8 : 0, borderRadius: 18 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 10, marginBottom: 18, background: isDesktop ? "#F8F7F3" : "transparent", padding: isDesktop ? 8 : 0, borderRadius: 18 }}>
               {[
                 { key: "profile", label: "個人基本設定" },
-                { key: "login", label: "登入帳密" },
                 { key: "settlement", label: "結算規則" },
-                { key: "permissions", label: "職務與權限" },
+                { key: "prices", label: "專屬價目表" },
               ].map((item) => (
                 <button
                   key={item.key}
-                  onClick={() => setFormSection(item.key as FormSection)}
+                  onClick={() => {
+                    if (item.key === "prices") {
+                      if (!editing) {
+                        alert("請先儲存設計師資料，再設定專屬價目表");
+                        return;
+                      }
+                      router.push(`/admin/designer-prices?designerId=${editing.id}`);
+                      return;
+                    }
+                    setFormSection(item.key as FormSection);
+                  }}
                   style={{ padding: isDesktop ? "14px 10px" : "10px 8px", borderRadius: 14, border: "none", background: formSection === item.key ? "#534AB7" : "#EFEBE4", color: formSection === item.key ? "#fff" : "#5F5E5A", fontSize: isDesktop ? 14 : 12, fontWeight: 900, cursor: "pointer" }}
                 >
                   {item.label}
@@ -383,12 +392,10 @@ export function AdminDesignersContent() {
                 <input type="color" value={form.text_color} onChange={(e) => setForm({ ...form, text_color: e.target.value })} style={{ width: "100%", height: 38, borderRadius: 8, border: "1px solid #D3D1C7", cursor: "pointer" }} />
               </div>
             </div>
-              </>
-            )}
 
-            {formSection === "login" && (
-              <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>登入帳號密碼</div>
+            <div style={{ height: 1, background: "#EEEAE2", margin: isDesktop ? "22px 0 18px" : "18px 0 14px" }} />
+
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#888780", marginBottom: 10 }}>登入帳號密碼</div>
             <div style={{ background: "#F8F7F3", border: "1px solid #E5E1D7", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
                 此帳號密碼會同步到設計師端登入使用，由後台統一管理。
@@ -413,6 +420,53 @@ export function AdminDesignersContent() {
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
                 />
               </div>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: "#EEEAE2", margin: isDesktop ? "22px 0 18px" : "18px 0 14px" }} />
+
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#888780", marginBottom: 10 }}>職務與權限</div>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>加入日期</div>
+                <input type="date" value={form.joined_date} onChange={(e) => setForm({ ...form, joined_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>離職日期</div>
+                <input type="date" value={form.left_date} onChange={(e) => setForm({ ...form, left_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>權限設定</div>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#2C2C2A" }}>可查看會員資料</div>
+                <div style={{ fontSize: 11, color: "#888780" }}>關閉後設計師無法查看客人聯絡資料</div>
+              </div>
+              <div onClick={() => setForm({ ...form, can_view_members: !form.can_view_members })} style={{ width: 44, height: 24, borderRadius: 12, background: form.can_view_members ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.can_view_members ? 22 : 2, transition: "left 0.2s" }} />
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, color: "#2C2C2A" }}>店長權限</div>
+                <div style={{ fontSize: 11, color: "#888780" }}>可查看全店預約，並協助新增、確認或取消預約</div>
+              </div>
+              <div onClick={() => setForm({ ...form, is_manager: !form.is_manager })} style={{ width: 44, height: 24, borderRadius: 12, background: form.is_manager ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.is_manager ? 22 : 2, transition: "left 0.2s" }} />
+              </div>
+            </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>狀態</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[{ val: "active", label: "在職" }, { val: "inactive", label: "離職" }].map(s => (
+                  <button key={s.val} onClick={() => setForm({ ...form, status: s.val })} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: form.status === s.val ? (s.val === "active" ? "#E1F5EE" : "#FCEBEB") : "#F1EFE8", color: form.status === s.val ? (s.val === "active" ? "#085041" : "#A32D2D") : "#888780", fontWeight: form.status === s.val ? 600 : 400, fontSize: 13, cursor: "pointer" }}>
+                    {s.label}
+                  </button>
+                ))}
               </div>
             </div>
               </>
@@ -470,54 +524,6 @@ export function AdminDesignersContent() {
                 <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
-            </div>
-              </>
-            )}
-
-            {formSection === "permissions" && (
-              <>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr 1fr", gap: 10, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>加入日期</div>
-                <input type="date" value={form.joined_date} onChange={(e) => setForm({ ...form, joined_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>離職日期</div>
-                <input type="date" value={form.left_date} onChange={(e) => setForm({ ...form, left_date: e.target.value })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>權限設定</div>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
-              <div>
-                <div style={{ fontSize: 13, color: "#2C2C2A" }}>可查看會員資料</div>
-                <div style={{ fontSize: 11, color: "#888780" }}>關閉後設計師無法查看客人聯絡資料</div>
-              </div>
-              <div onClick={() => setForm({ ...form, can_view_members: !form.can_view_members })} style={{ width: 44, height: 24, borderRadius: 12, background: form.can_view_members ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.can_view_members ? 22 : 2, transition: "left 0.2s" }} />
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: isDesktop ? 16 : "10px 12px", background: "#F1EFE8", borderRadius: 16, marginBottom: 10 }}>
-              <div>
-                <div style={{ fontSize: 13, color: "#2C2C2A" }}>店長權限</div>
-                <div style={{ fontSize: 11, color: "#888780" }}>可查看全店預約，並協助新增、確認或取消預約</div>
-              </div>
-              <div onClick={() => setForm({ ...form, is_manager: !form.is_manager })} style={{ width: 44, height: 24, borderRadius: 12, background: form.is_manager ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
-                <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.is_manager ? 22 : 2, transition: "left 0.2s" }} />
-              </div>
-            </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>狀態</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[{ val: "active", label: "在職" }, { val: "inactive", label: "離職" }].map(s => (
-                  <button key={s.val} onClick={() => setForm({ ...form, status: s.val })} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: form.status === s.val ? (s.val === "active" ? "#E1F5EE" : "#FCEBEB") : "#F1EFE8", color: form.status === s.val ? (s.val === "active" ? "#085041" : "#A32D2D") : "#888780", fontWeight: form.status === s.val ? 600 : 400, fontSize: 13, cursor: "pointer" }}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
             </div>
               </>
             )}
