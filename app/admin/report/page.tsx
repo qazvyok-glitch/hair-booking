@@ -592,6 +592,15 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         normalizePdfText(row["工作人員"]),
         row["支付方式"],
       ]);
+      const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
+        const category = normalizePdfText(row["分類"]);
+        if (!category.startsWith("美髮-")) return map;
+        const amount = Number(row["業績"] || 0);
+        if (amount <= 0) return map;
+        const label = category.replace("美髮-", "");
+        map.set(label, (map.get(label) || 0) + amount);
+        return map;
+      }, new Map<string, number>())).map(([label, amount]) => ({ label, amount }));
 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -714,46 +723,74 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         html += `</g>`;
         return { html, endY: y + height };
       };
+      const renderPieChart = (items: { label: string; amount: number }[], cx: number, cy: number, r: number) => {
+        const colors = ["#1674AE", "#D96724", "#42B34E", "#C8A46B", "#7A5BD6", "#2FB7B4"];
+        const total = items.reduce((sum, item) => sum + item.amount, 0);
+        if (total <= 0) {
+          return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#EEF1F3"/>
+            ${renderText("本月無服務", cx, cy + 6, { anchor: "middle", size: 18, color: "#7D7A73", weight: 700 })}`;
+        }
+        let offset = 0;
+        const circumference = 2 * Math.PI * r;
+        const circles = items.map((item, index) => {
+          const length = circumference * (item.amount / total);
+          const dash = `${Math.max(length - 2, 0)} ${circumference - length + 2}`;
+          const circle = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[index % colors.length]}" stroke-width="34" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
+          offset += length;
+          return circle;
+        }).join("");
+        const legend = items.slice(0, 5).map((item, index) => {
+          const y = cy - 72 + index * 30;
+          const pct = Math.round((item.amount / total) * 100);
+          return `<rect x="${cx + 128}" y="${y - 14}" width="16" height="16" rx="4" fill="${colors[index % colors.length]}"/>
+            ${renderText(item.label, cx + 152, y, { size: 15, color: "#263544", weight: 700, maxChars: 8 })}
+            ${renderText(`${pct}%`, cx + 300, y, { anchor: "end", size: 15, color: "#7D7A73", weight: 700 })}`;
+        }).join("");
+        return `${circles}<circle cx="${cx}" cy="${cy}" r="${r - 35}" fill="#fff"/>
+          ${renderText("服務項目", cx, cy - 5, { anchor: "middle", size: 16, color: "#7D7A73", weight: 700 })}
+          ${renderText(formatPdfMoney(total), cx, cy + 25, { anchor: "middle", size: 22, color: "#263A32", weight: 900 })}
+          ${legend}`;
+      };
       const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
       const productUsageCount = productRows.reduce((sum, row) => sum + Number(row[1] || 0), 0);
       const feeSvg = renderInvoiceTable({
-        y: 470,
+        y: 945,
         title: "費用明細",
         columns: [
-          { label: "費用項目", width: 440, maxChars: 24 },
-          { label: "數量", width: 115, align: "right" },
-          { label: "單價", width: 115, align: "right" },
-          { label: "金額", width: 150, align: "right" },
-          { label: "備註", width: 294, maxChars: 18 },
+          { label: "費用項目", width: 430, maxChars: 22 },
+          { label: "數量", width: 100, align: "right" },
+          { label: "單價", width: 100, align: "right" },
+          { label: "金額", width: 140, align: "right" },
+          { label: "備註", width: 344, maxChars: 22 },
         ],
         rows: feeInvoiceRows,
-        rowHeight: 56,
+        rowHeight: 48,
         theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
       });
-      const productY = feeSvg.endY + 56;
-      const productHeight = 58 + 118 + 48;
+      const productY = feeSvg.endY + 38;
+      const productHeight = 58 + 104 + 46;
       const productEndY = productY + productHeight;
       const productSvg = `<g>
         <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="#fff" stroke="#D96724" stroke-width="3"/>
         <path d="M 53 ${productY} H 1137 Q 1152 ${productY} 1152 ${productY + 15} V ${productY + 58} H 38 V ${productY + 15} Q 38 ${productY} 53 ${productY}" fill="#D96724"/>
         ${renderText("自領商品", 595, productY + 38, { anchor: "middle", size: 30, color: "#fff", weight: 700 })}
-        <line x1="409" y1="${productY + 58}" x2="409" y2="${productY + 176}" stroke="#F3C2A4" stroke-width="1.3"/>
-        <line x1="780" y1="${productY + 58}" x2="780" y2="${productY + 176}" stroke="#F3C2A4" stroke-width="1.3"/>
+        <line x1="409" y1="${productY + 58}" x2="409" y2="${productY + 162}" stroke="#F3C2A4" stroke-width="1.3"/>
+        <line x1="780" y1="${productY + 58}" x2="780" y2="${productY + 162}" stroke="#F3C2A4" stroke-width="1.3"/>
         ${renderText("自領日期區間", 224, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 224, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
+        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 224, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
         ${renderText("自領件數", 595, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(`${productUsageCount.toLocaleString()} 件`, 595, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
+        ${renderText(`${productUsageCount.toLocaleString()} 件`, 595, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
         ${renderText("自領商品小計", 966, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(formatPdfMoney(productTotal), 966, productY + 132, { anchor: "middle", size: 26, color: "#573A2B", weight: 800 })}
-        <rect x="38" y="${productY + 176}" width="1114" height="48" fill="#FADCCA"/>
-        <line x1="38" y1="${productY + 176}" x2="1152" y2="${productY + 176}" stroke="#D96724" stroke-width="2.4"/>
-        <line x1="780" y1="${productY + 176}" x2="780" y2="${productY + 224}" stroke="#D96724" stroke-width="1.5"/>
-        ${renderText("自領商品合計", 62, productY + 207, { size: 21, color: "#9A4318", weight: 900 })}
-        ${renderText(productTotal.toLocaleString(), 1132, productY + 207, { anchor: "end", size: 21, color: "#9A4318", weight: 900 })}
+        ${renderText(formatPdfMoney(productTotal), 966, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
+        <rect x="38" y="${productY + 162}" width="1114" height="46" fill="#FADCCA"/>
+        <line x1="38" y1="${productY + 162}" x2="1152" y2="${productY + 162}" stroke="#D96724" stroke-width="2.4"/>
+        <line x1="780" y1="${productY + 162}" x2="780" y2="${productY + 208}" stroke="#D96724" stroke-width="1.5"/>
+        ${renderText("自領商品合計", 62, productY + 192, { size: 21, color: "#9A4318", weight: 900 })}
+        ${renderText(productTotal.toLocaleString(), 1132, productY + 192, { anchor: "end", size: 21, color: "#9A4318", weight: 900 })}
         <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="none" stroke="#D96724" stroke-width="3.2"/>
       </g>`;
       const totalSvg = renderInvoiceTable({
-        y: productEndY + 66,
+        y: productEndY + 38,
         title: "本月應繳總額",
         columns: [
           { label: "", width: 610, align: "center" },
@@ -770,11 +807,49 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       });
       const invoiceSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
         <rect width="100%" height="100%" fill="#fff"/>
-        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="360" y="58" width="470" height="162" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 595, 150, { anchor: "middle", size: 56, color: "#111" })}
-        ${renderText("INVOICE", 595, 286, { anchor: "middle", size: 38, color: "#111", weight: 300 })}
-        ${renderText(`Bill To：${targetLabel}`, 40, 365, { size: 24, color: "#111" })}
-        ${renderText(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 665, 365, { size: 24, color: "#111" })}
-        ${renderText(`Date：${getPdfDateLabel(reportStartDate)}`, 665, 415, { size: 24, color: "#111" })}
+        <rect x="0" y="0" width="${svgWidth}" height="138" fill="#FFFDF8"/>
+        <line x1="0" y1="138" x2="${svgWidth}" y2="138" stroke="#C8A46B" stroke-width="8"/>
+        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="62" y="22" width="315" height="92" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 68, 84, { size: 46, color: "#111" })}
+        ${renderText("Designer Monthly Statement", 1130, 62, { anchor: "end", size: 28, color: "#263A32", weight: 700 })}
+        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 1130, 98, { anchor: "end", size: 18, color: "#7D7A73", weight: 400 })}
+        ${renderText(targetLabel, 62, 218, { size: 44, color: "#263A32", weight: 900 })}
+        ${renderText(`月份：${getPdfMonthLabel()}　｜　結算日：${getPdfDateLabel(payDate)}`, 62, 260, { size: 21, color: "#7D7A73" })}
+        <rect x="862" y="176" width="250" height="104" rx="20" fill="#E8F5FC"/>
+        ${renderText("本月應繳總額", 987, 214, { anchor: "middle", size: 18, color: "#1674AE", weight: 800 })}
+        ${renderText(formatPdfMoney(totalDue), 987, 256, { anchor: "middle", size: 38, color: "#1674AE", weight: 900 })}
+        <rect x="62" y="318" width="1066" height="76" rx="14" fill="#EEF8F7"/>
+        <rect x="62" y="318" width="8" height="76" rx="4" fill="#32BBB8"/>
+        ${renderText("本期重點", 96, 350, { size: 23, color: "#263A32", weight: 900 })}
+        ${renderText(`服務業績 ${formatPdfMoney(serviceTotal)}，品牌共享費 ${formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))}，自領商品 ${formatPdfMoney(productTotal)}。`, 96, 378, { size: 17, color: "#7D7A73", maxChars: 56 })}
+        ${renderText(`${detailRows.filter((row) => String(row[2]).startsWith("美髮-")).length.toLocaleString()} 筆服務`, 1076, 366, { anchor: "end", size: 36, color: "#2FB7B4", weight: 900 })}
+        ${renderText("結算摘要", 62, 458, { size: 26, color: "#263A32", weight: 900 })}
+        ${[
+          ["完成交易數", `${detailRows.filter((row) => String(row[2]).startsWith("美髮-")).length.toLocaleString()} 筆`],
+          ["服務業績", formatPdfMoney(serviceTotal)],
+          ["服務抽成", formatPdfMoney(reports.reduce((sum, item) => sum + item.report.serviceCommission, 0))],
+          ["品牌共享費", formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))],
+          ["自領商品", formatPdfMoney(productTotal)],
+          ["本月應繳", formatPdfMoney(totalDue)],
+        ].map((item, index) => {
+          const x = 62 + (index % 3) * 245;
+          const y = 488 + Math.floor(index / 3) * 74;
+          const isTotal = index === 5;
+          return `<rect x="${x}" y="${y}" width="220" height="56" rx="10" fill="${isTotal ? "#ECFAEF" : "#F7F7F5"}" stroke="${isTotal ? "#D4EFD9" : "#EFEDE7"}"/>
+            ${renderText(item[0], x + 18, y + 23, { size: 14, color: "#7D7A73", weight: 700 })}
+            ${renderText(item[1], x + 202, y + 42, { anchor: "end", size: 20, color: isTotal ? "#35A84B" : "#263A32", weight: 900 })}`;
+        }).join("")}
+        <rect x="820" y="458" width="308" height="160" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
+        ${renderPieChart(serviceCategoryTotals, 900, 538, 58)}
+        <rect x="62" y="658" width="515" height="124" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
+        <rect x="597" y="658" width="531" height="124" rx="16" fill="#FBF8F1" stroke="#E6DAC7"/>
+        <rect x="84" y="686" width="5" height="62" rx="3" fill="#C8A46B"/>
+        <rect x="619" y="686" width="5" height="62" rx="3" fill="#C8A46B"/>
+        ${renderText("收益共享服務費", 106, 690, { size: 18, color: "#263A32", weight: 900 })}
+        ${renderText(`max(服務業績 - 底扣, 0) x 抽成比例`, 106, 720, { size: 16, color: "#665F55", maxChars: 28 })}
+        ${renderText(`本期：max(${formatPdfMoney(serviceTotal)} - ${formatPdfMoney(reports[0]?.report.baseDeduction || 0)}, 0) x ${Math.round(Number(reports[0]?.designer.commission_rate || 0) * 100)}%`, 106, 750, { size: 16, color: "#665F55", maxChars: 34 })}
+        ${renderText("品牌共享費", 641, 690, { size: 18, color: "#263A32", weight: 900 })}
+        ${renderText(`服務業績 x ${Math.round(Number(reports[0]?.report.brandFeeRate || 0) * 100)}%`, 641, 720, { size: 16, color: "#665F55", maxChars: 28 })}
+        ${renderText(`本期：${formatPdfMoney(serviceTotal)} x ${Math.round(Number(reports[0]?.report.brandFeeRate || 0) * 100)}% = ${formatPdfMoney(reports.reduce((sum, item) => sum + item.report.brandFee, 0))}`, 641, 750, { size: 16, color: "#665F55", maxChars: 34 })}
         ${feeSvg.html}
         ${productSvg}
         ${totalSvg.html}
