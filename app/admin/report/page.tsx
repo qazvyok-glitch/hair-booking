@@ -593,8 +593,15 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         normalizePdfText(row["工作人員"]),
         row["支付方式"],
       ]);
-      const dailyServiceRows = detailRows.filter((row) => String(row[2]).startsWith("美髮-"));
-      const soldProductRows = detailRows.filter((row) => String(row[2]) === "商品");
+      let carriedOrderTime = "";
+      const dailySalesRows = detailRows
+        .map((row, index) => {
+          if (row[1]) carriedOrderTime = String(row[1]);
+          return { row, orderTime: carriedOrderTime, index };
+        })
+        .filter(({ row }) => String(row[2]).startsWith("美髮-") || String(row[2]) === "商品")
+        .sort((a, b) => a.orderTime.localeCompare(b.orderTime) || a.index - b.index)
+        .map(({ row }) => row);
       const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
         const category = normalizePdfText(row["分類"]);
         if (!category.startsWith("美髮-")) return map;
@@ -835,39 +842,33 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "bold");
       doc.setFontSize(18);
-      doc.text("每日服務明細", 40, 52);
+      doc.text("每日服務與商品販售明細", 30, 52);
       doc.setFont("NotoSansTC", "normal");
       doc.setFontSize(9);
-      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 40, 72);
+      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}｜依日期排列`, 30, 72);
       autoTable(doc, {
-        startY: 92,
-        head: [["訂單時間", "分類", "品項", "數量", "金額", "折扣", "支付方式"]],
-        body: dailyServiceRows.length ? dailyServiceRows.map((row) => [row[1], row[2], row[3], row[4], row[5], row[6], row[8]]) : [["此區間尚無服務明細", "", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.2, cellPadding: 2.2, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [58, 139, 211], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
-        alternateRowStyles: { fillColor: [202, 224, 244] },
+        startY: 86,
+        body: dailySalesRows.length ? dailySalesRows.map((row) => [row[1], row[2], row[3], row[5], row[6] || "0", row[7], row[8]]) : [["此區間尚無服務或商品販售明細", "", "", "", "", "", ""]],
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 11, cellPadding: { top: 4, right: 4, bottom: 4, left: 4 }, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45, minCellHeight: 21 },
+        alternateRowStyles: { fillColor: [216, 231, 247] },
         bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: { 0: { cellWidth: 86 }, 1: { cellWidth: 70 }, 2: { cellWidth: 210 }, 3: { cellWidth: 38, halign: "right" }, 4: { cellWidth: 58, halign: "right" }, 5: { cellWidth: 45, halign: "right" }, 6: { cellWidth: 58 } },
-        margin: { left: 30, right: 30 },
-      });
-
-      doc.addPage("a4", "portrait");
-      doc.setFont("NotoSansTC", "bold");
-      doc.setFontSize(18);
-      doc.text("商品販售明細", 40, 52);
-      doc.setFont("NotoSansTC", "normal");
-      doc.setFontSize(9);
-      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 40, 72);
-      autoTable(doc, {
-        startY: 92,
-        head: [["訂單時間", "品項", "數量", "金額", "支付方式"]],
-        body: soldProductRows.length ? soldProductRows.map((row) => [row[1], row[3], row[4], row[5], row[8]]) : [["此區間尚無商品販售明細", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 8, cellPadding: 3, overflow: "linebreak", textColor: [80, 55, 42], lineColor: [245, 198, 170], lineWidth: 0.45 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [217, 103, 36], textColor: [255, 255, 255], fontSize: 10, halign: "center" },
-        alternateRowStyles: { fillColor: [255, 240, 229] },
-        bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 280 }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 60 } },
-        margin: { left: 30, right: 30 },
+        columnStyles: {
+          0: { cellWidth: 100 },
+          1: { cellWidth: 76 },
+          2: { cellWidth: 207 },
+          3: { cellWidth: 58, halign: "right" },
+          4: { cellWidth: 48, halign: "right" },
+          5: { cellWidth: 68 },
+          6: { cellWidth: 74 },
+        },
+        margin: { left: 8, right: 8 },
+        didParseCell: (data) => {
+          if (data.section !== "body") return;
+          const raw = data.row.raw as string[];
+          if (String(raw?.[1] || "") === "商品") {
+            data.cell.styles.textColor = [255, 0, 0];
+          }
+        },
       });
 
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
