@@ -181,14 +181,32 @@ export default function AdminPrices() {
   async function handleSave() {
     if (!form.name || !form.price_range) { alert("請填寫名稱與價格"); return; }
     setSaving(true);
+    const payload = { ...form, duration: form.duration || null };
     if (editing) {
-      await supabase.from("price_items").update(form).eq("id", editing.id);
+      const { error } = await supabase.from("price_items").update(payload).eq("id", editing.id);
+      if (error) {
+        alert(`儲存失敗：${error.message}`);
+        setSaving(false);
+        return;
+      }
+      const { error: syncError } = await supabase
+        .from("designer_price_items")
+        .update({ duration: payload.duration, updated_at: new Date().toISOString() })
+        .eq("price_item_id", editing.id);
+      if (syncError) {
+        alert(`公版已儲存，但設計師專屬時長同步失敗：${syncError.message}`);
+      }
       const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set(items.map(p => p.id === editing.id ? form.category : p.category))].filter(Boolean));
       setCategoryOrder(nextCategories);
-      setItems(sortPriceItems(items.map(p => p.id === editing.id ? { ...p, ...form } : p), nextCategories));
+      setItems(sortPriceItems(items.map(p => p.id === editing.id ? { ...p, ...payload } : p), nextCategories));
     } else {
       const nextSortOrder = items.filter((item) => item.category === form.category).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
-      const { data } = await supabase.from("price_items").insert({ ...form, sort_order: nextSortOrder }).select().single();
+      const { data, error } = await supabase.from("price_items").insert({ ...payload, sort_order: nextSortOrder }).select().single();
+      if (error) {
+        alert(`新增失敗：${error.message}`);
+        setSaving(false);
+        return;
+      }
       if (data) {
         const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set([...items.map((item) => item.category), data.category])].filter(Boolean));
         setCategoryOrder(nextCategories);
