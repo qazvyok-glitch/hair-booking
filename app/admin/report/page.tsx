@@ -602,14 +602,17 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         .filter(({ row }) => String(row[2]).startsWith("美髮-") || String(row[2]) === "商品")
         .sort((a, b) => a.orderTime.localeCompare(b.orderTime) || a.index - b.index)
         .map(({ row }) => row);
-      const dailySalesTotal = dailySalesRows.reduce((sum, row) => sum + Number(String(row[5] || "0").replace(/[^\d.-]/g, "")), 0);
-      const dailyDiscountTotal = dailySalesRows.reduce((sum, row) => sum + Number(String(row[6] || "0").replace(/[^\d.-]/g, "")), 0);
-      const dailyDetailBody = dailySalesRows.length
-        ? [
-            ...dailySalesRows.map((row) => [row[1], row[2], row[3], Number(String(row[5] || "0").replace(/[^\d.-]/g, "")).toLocaleString(), Number(String(row[6] || "0").replace(/[^\d.-]/g, "")).toLocaleString(), row[7], row[8]]),
-            ["總計", `${dailySalesRows.length.toLocaleString()} 筆`, "", dailySalesTotal.toLocaleString(), dailyDiscountTotal.toLocaleString(), "", ""],
-          ]
-        : [["此區間尚無每日明細", "", "", "", "", "", ""]];
+      const dailyDetailItems = dailySalesRows.map((row) => ({
+        date: String(row[1] || ""),
+        category: String(row[2] || ""),
+        item: String(row[3] || ""),
+        amount: Number(String(row[5] || "0").replace(/[^\d.-]/g, "")),
+        discount: Number(String(row[6] || "0").replace(/[^\d.-]/g, "")),
+        designer: String(row[7] || ""),
+        payment: String(row[8] || ""),
+      }));
+      const dailySalesTotal = dailyDetailItems.reduce((sum, item) => sum + item.amount, 0);
+      const dailyDiscountTotal = dailyDetailItems.reduce((sum, item) => sum + item.discount, 0);
       const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
         const category = normalizePdfText(row["分類"]);
         if (!category.startsWith("美髮-")) return map;
@@ -847,44 +850,67 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const invoiceDataUrl = await svgToPngDataUrl(invoiceSvg, svgWidth, svgHeight);
       doc.addImage(invoiceDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
 
-      doc.addPage("a4", "portrait");
-      doc.setFont("NotoSansTC", "bold");
-      doc.setTextColor(34, 38, 42);
-      doc.setFontSize(24);
-      doc.text("每日明細", 24, 44);
-      autoTable(doc, {
-        startY: 72,
-        head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
-        body: dailyDetailBody,
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 10.2, cellPadding: { top: 7, right: 3, bottom: 7, left: 3 }, overflow: "linebreak", textColor: [16, 24, 32], lineWidth: 0, minCellHeight: 28 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [0, 151, 153], textColor: [255, 255, 255], fontSize: 11.8, halign: "left", cellPadding: { top: 11, right: 3, bottom: 11, left: 3 } },
-        alternateRowStyles: { fillColor: [255, 255, 255] },
-        bodyStyles: { fillColor: [255, 255, 255] },
-        columnStyles: {
-          0: { cellWidth: 82, fontStyle: "bold", textColor: [24, 82, 150] },
-          1: { cellWidth: 70 },
-          2: { cellWidth: 205 },
-          3: { cellWidth: 55, halign: "right" },
-          4: { cellWidth: 42, halign: "right" },
-          5: { cellWidth: 55 },
-          6: { cellWidth: 66 },
-        },
-        margin: { left: 10, right: 10 },
-        didParseCell: (data) => {
-          if (data.section !== "body") return;
-          const raw = data.row.raw as string[];
-          if (String(raw?.[0] || "") === "總計") {
-            data.cell.styles.fillColor = [189, 219, 246];
-            data.cell.styles.fontStyle = "bold";
-            data.cell.styles.textColor = [16, 24, 32];
-            data.cell.styles.fontSize = 11.4;
-            data.cell.styles.cellPadding = { top: 11, right: 3, bottom: 11, left: 3 };
-          }
-          if (String(raw?.[1] || "") === "商品") {
-            data.cell.styles.textColor = [255, 0, 0];
-          }
-        },
-      });
+      const renderDailyDetailPage = (items: typeof dailyDetailItems, pageIndex: number, pageCount: number, includeTotal: boolean) => {
+        const x = 38;
+        const width = 1114;
+        const headerY = 152;
+        const headerHeight = 70;
+        const rowHeight = 78;
+        const columns = [
+          { label: "訂單日期", x: 0, width: 164, align: "start" as const },
+          { label: "分類", x: 164, width: 136, align: "start" as const },
+          { label: "品項", x: 300, width: 414, align: "start" as const },
+          { label: "金額", x: 714, width: 110, align: "end" as const },
+          { label: "折扣", x: 824, width: 80, align: "end" as const },
+          { label: "設計師", x: 904, width: 104, align: "start" as const },
+          { label: "支付方式", x: 1008, width: 106, align: "start" as const },
+        ];
+        const rowsSvg = items.map((item, index) => {
+          const rowY = headerY + headerHeight + index * rowHeight;
+          const isProduct = item.category === "商品";
+          const fill = index % 2 === 0 ? "#E2F0FC" : "#FFFFFF";
+          const color = isProduct ? "#E02A1F" : "#20262C";
+          return `<g>
+            <rect x="${x}" y="${rowY}" width="${width}" height="${rowHeight}" fill="${fill}"/>
+            ${renderText(item.date, x + 12, rowY + 31, { size: 19, color: isProduct ? "#E02A1F" : "#164F94", weight: 800, maxChars: 18 })}
+            ${renderText(item.category, x + 176, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 600, maxChars: 9 })}
+            ${renderText(item.item, x + 312, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 24, lineHeight: 24 })}
+            ${renderText(item.amount.toLocaleString(), x + 812, rowY + 31, { anchor: "end", size: 19, color, weight: 700 })}
+            ${renderText(item.discount.toLocaleString(), x + 892, rowY + 31, { anchor: "end", size: 19, color, weight: 700 })}
+            ${renderText(item.designer, x + 916, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 8 })}
+            ${renderText(item.payment, x + 1020, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 11 })}
+          </g>`;
+        }).join("");
+        const totalY = headerY + headerHeight + items.length * rowHeight + 16;
+        const totalSvg = includeTotal ? `<g>
+          <rect x="${x}" y="${totalY}" width="${width}" height="76" fill="#D4E9FA"/>
+          ${renderText("總計", x + 12, totalY + 48, { size: 24, color: "#20262C", weight: 900 })}
+          ${renderText(`${dailyDetailItems.length.toLocaleString()} 筆`, x + 176, totalY + 48, { size: 22, color: "#20262C", weight: 800 })}
+          ${renderText(dailySalesTotal.toLocaleString(), x + 812, totalY + 48, { anchor: "end", size: 22, color: "#20262C", weight: 900 })}
+          ${renderText(dailyDiscountTotal.toLocaleString(), x + 892, totalY + 48, { anchor: "end", size: 22, color: "#20262C", weight: 900 })}
+        </g>` : "";
+        const emptySvg = !items.length ? renderText("此區間尚無每日明細", x + 12, headerY + headerHeight + 52, { size: 22, color: "#59636D", weight: 700 }) : "";
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+          <rect width="100%" height="100%" fill="#fff"/>
+          ${renderText("每日明細", 38, 86, { size: 42, color: "#20262C", weight: 900 })}
+          <rect x="${x}" y="${headerY}" width="${width}" height="${headerHeight}" fill="#009799"/>
+          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 44, { size: 24, color: "#fff", weight: 900 })).join("")}
+          ${rowsSvg}
+          ${emptySvg}
+          ${totalSvg}
+          ${renderText(`Bing Cherry Hair Hub 2.0 · Page ${pageIndex + 1} of ${pageCount}`, 38, 1628, { size: 16, color: "#7D7A73", weight: 600 })}
+        </svg>`;
+      };
+      const rowsPerPage = 16;
+      const dailyPages = dailyDetailItems.length
+        ? Array.from({ length: Math.ceil(dailyDetailItems.length / rowsPerPage) }, (_, index) => dailyDetailItems.slice(index * rowsPerPage, (index + 1) * rowsPerPage))
+        : [[]];
+      for (let index = 0; index < dailyPages.length; index += 1) {
+        doc.addPage("a4", "portrait");
+        const dailySvg = renderDailyDetailPage(dailyPages[index], index, dailyPages.length, index === dailyPages.length - 1);
+        const dailyDataUrl = await svgToPngDataUrl(dailySvg, svgWidth, svgHeight);
+        doc.addImage(dailyDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
+      }
 
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
       return;
