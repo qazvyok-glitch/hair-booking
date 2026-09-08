@@ -208,10 +208,6 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   const [stockRecords, setStockRecords] = useState<StockRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [exportMode, setExportMode] = useState<"month" | "year" | "range">("month");
-  const [exportStartDate, setExportStartDate] = useState("");
-  const [exportEndDate, setExportEndDate] = useState("");
-  const [showExportPanel, setShowExportPanel] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -297,19 +293,116 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   }
 
   function getExportTransactions() {
-    if (exportMode === "month") return monthlyTransactions;
-    if (exportMode === "year") return transactions.filter((t: any) => t.created_at?.startsWith(String(selectedYear)));
-    if (exportMode === "range" && exportStartDate && exportEndDate) {
-      return transactions.filter((t: any) => t.created_at >= exportStartDate && t.created_at <= exportEndDate + "T23:59:59");
-    }
-    return monthlyTransactions;
+    const selectedDesignerId = reportMode === "designer"
+      ? (reportDesignerId || designers[0]?.id || null)
+      : selectedShopDesignerId;
+    if (!selectedDesignerId) return monthlyTransactions;
+    return monthlyTransactions.filter((t: any) => t.designer_id === selectedDesignerId);
   }
 
   function getExportLabel() {
-    if (exportMode === "month") return selectedMonth;
-    if (exportMode === "year") return String(selectedYear) + "年";
-    if (exportMode === "range") return exportStartDate + "_" + exportEndDate;
-    return selectedMonth;
+    const selectedDesignerId = reportMode === "designer"
+      ? (reportDesignerId || designers[0]?.id || null)
+      : selectedShopDesignerId;
+    const selectedDesigner = selectedDesignerId ? designers.find((d) => d.id === selectedDesignerId) : null;
+    const dateLabel = reportStartDate === reportEndDate ? reportStartDate : `${reportStartDate}_${reportEndDate}`;
+    return selectedDesigner ? `${dateLabel}_${getExportName(selectedDesigner)}` : dateLabel;
+  }
+
+  function getExportDesigners() {
+    const selectedDesignerId = reportMode === "designer"
+      ? (reportDesignerId || designers[0]?.id || null)
+      : selectedShopDesignerId;
+    if (!selectedDesignerId) return designers;
+    return designers.filter((designer) => designer.id === selectedDesignerId);
+  }
+
+  function buildExportOrderRows(exportTx: Transaction[]) {
+    const productBrandsExport = ["Oright", "O'right", "Sumuzu", "哥德式", "善詩", "威傑式", "沂樂"];
+    const getItemCategory = (name: string) => {
+      if (name.startsWith("[商品]")) return "商品";
+      if (productBrandsExport.some(b => name.includes(b))) return "商品";
+      if (/剪髮|單剪/.test(name)) return "美髮-剪髮";
+      if (/燙|髮根燙/.test(name)) return "美髮-燙髮";
+      if (/染|補染/.test(name)) return "美髮-染髮";
+      if (/護髮/.test(name)) return "美髮-護髮";
+      if (/洗髮|髮浴洗/.test(name)) return "美髮-洗髮";
+      if (/頭皮/.test(name)) return "美髮-頭皮";
+      return "美髮-服務";
+    };
+
+    const rows: any[] = [];
+    exportTx.forEach((t: any, txIdx: number) => {
+      const designer = designers.find((d: any) => d.id === t.designer_id);
+      const designerLabel = designer ? getExportName(designer) : "-";
+      const dateStr = t.created_at?.slice(0,10) || "";
+      const timeStr = t.created_at?.slice(0,16)?.replace("T"," ") || "";
+      const orderNo = dateStr.replace(/-/g,"").slice(2) + String(txIdx+1).padStart(8,"0");
+      const payMethod = t.payment_method ? `${t.payment_method}：${t.total_amount}` : "";
+      const allItems = [
+        ...(t.service_items||[]).map((s: any) => ({
+          category: getItemCategory(s.name),
+          name: s.name.startsWith("[商品]") ? s.name.replace("[商品] ", "") : s.name,
+          qty: 1,
+          price: s.amount,
+          discount: s.discount || 0,
+          performance: s.name.startsWith("[商品]") ? 0 : (s.amount || 0),
+        })),
+        ...(t.product_items||[]).map((p: any) => ({
+          category: "商品",
+          name: p.name,
+          qty: p.quantity || 1,
+          price: p.amount,
+          discount: 0,
+          performance: 0,
+        })),
+      ];
+
+      if (allItems.length === 0) {
+        rows.push({
+          "訂單號碼": orderNo,
+          "訂單時間": timeStr,
+          "分類": "-",
+          "品項": "-",
+          "數量": "",
+          "總價": t.total_amount,
+          "折扣": "",
+          "工作人員": designerLabel,
+          "指定": "-",
+          "業績": t.total_amount,
+          "支付方式": payMethod,
+        });
+        return;
+      }
+
+      allItems.forEach((item: any, idx: number) => {
+        rows.push({
+          "訂單號碼": idx === 0 ? orderNo : "",
+          "訂單時間": idx === 0 ? timeStr : "",
+          "分類": item.category,
+          "品項": item.name,
+          "數量": item.qty,
+          "總價": item.price,
+          "折扣": item.discount || "",
+          "工作人員": designerLabel,
+          "指定": "-",
+          "業績": item.performance,
+          "支付方式": idx === 0 ? payMethod : "",
+        });
+      });
+    });
+    return rows;
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   // 導出 Excel — 格式與舊系統訂單列表對齊
@@ -319,7 +412,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const wb = XLSX.utils.book_new();
 
       // ── Sheet 1：設計師抽成 ──
-      const dr = designers.map((d: any) => {
+      const dr = getExportDesigners().map((d: any) => {
         const r = calcDesignerReport(d);
         return {
           "設計師": getExportName(d),
@@ -335,80 +428,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
       // ── Sheet 2：訂單列表（對齊舊系統格式）──
       // 欄位：訂單號碼 / 訂單時間 / 分類 / 品項 / 數量 / 總價 / 折扣 / 工作人員 / 指定 / 業績 / 支付方式
-      const tr: any[] = [];
-      // 產生流水訂單號（模擬舊系統格式 YYMMDD + 8碼流水）
-      exportTx.forEach((t: any, txIdx: number) => {
-        const designer = designers.find((d: any) => d.id === t.designer_id);
-        const designerLabel = designer ? getExportName(designer) : "-";
-        const dateStr = t.created_at?.slice(0,10) || "";
-        const timeStr = t.created_at?.slice(0,16)?.replace("T"," ") || "";
-        // 訂單號：YYMMDD + 8位流水（與舊系統相容）
-        const orderNo = dateStr.replace(/-/g,"").slice(2) + String(txIdx+1).padStart(8,"0");
-        const payMethod = t.payment_method ? `${t.payment_method}：${t.total_amount}` : "";
-
-        const productBrandsExport = ["Oright", "O'right", "Sumuzu", "哥德式", "善詩", "威傑式", "沂樂"];
-        const getItemCategory = (name: string) => {
-          if (name.startsWith("[商品]")) return "商品";
-          if (productBrandsExport.some(b => name.includes(b))) return "商品";
-          if (/剪髮|單剪/.test(name)) return "美髮-剪髮";
-          if (/燙|髮根燙/.test(name)) return "美髮-燙髮";
-          if (/染|補染/.test(name)) return "美髮-染髮";
-          if (/護髮/.test(name)) return "美髮-護髮";
-          if (/洗髮|髮浴洗/.test(name)) return "美髮-洗髮";
-          if (/頭皮/.test(name)) return "美髮-頭皮";
-          return "美髮-服務";
-        };
-        const allItems = [
-          ...(t.service_items||[]).map((s: any) => ({
-            category: getItemCategory(s.name),
-            name: s.name.startsWith("[商品]") ? s.name.replace("[商品] ", "") : s.name,
-            qty: 1,
-            price: s.amount,
-            discount: s.discount || 0,
-            performance: s.name.startsWith("[商品]") ? 0 : (s.amount || 0),
-          })),
-          ...(t.product_items||[]).map((p: any) => ({
-            category: "商品",
-            name: p.name,
-            qty: p.quantity || 1,
-            price: p.amount,
-            discount: 0,
-            performance: 0,
-          })),
-        ];
-
-        if (allItems.length === 0) {
-          tr.push({
-            "訂單號碼": orderNo,
-            "訂單時間": timeStr,
-            "分類": "-",
-            "品項": "-",
-            "數量": "",
-            "總價": t.total_amount,
-            "折扣": "",
-            "工作人員": designerLabel,
-            "指定": "-",
-            "業績": t.total_amount,
-            "支付方式": payMethod,
-          });
-        } else {
-          allItems.forEach((item: any, idx: number) => {
-            tr.push({
-              "訂單號碼": idx === 0 ? orderNo : "",
-              "訂單時間": idx === 0 ? timeStr : "",
-              "分類": item.category,
-              "品項": item.name,
-              "數量": item.qty,
-              "總價": item.price,
-              "折扣": item.discount || "",
-              "工作人員": designerLabel,
-              "指定": "-",
-              "業績": item.performance,
-              "支付方式": idx === 0 ? payMethod : "",
-            });
-          });
-        }
-      });
+      const tr = buildExportOrderRows(exportTx);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "訂單列表");
 
       // ── Sheet 3：年度統計 ──
@@ -418,6 +438,100 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       XLSX.writeFile(wb, "BC_報表_" + getExportLabel() + ".xlsx");
     } catch(e) {
       alert("Excel 導出失敗");
+    }
+  }
+
+  function exportCsv() {
+    try {
+      const rows = buildExportOrderRows(getExportTransactions());
+      const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(rows));
+      downloadBlob(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }), "BC_報表_" + getExportLabel() + ".csv");
+    } catch(e) {
+      alert("CSV 導出失敗");
+    }
+  }
+
+  function exportPdf() {
+    try {
+      const exportTx = getExportTransactions();
+      const orderRows = buildExportOrderRows(exportTx);
+      const exportDesigners = getExportDesigners();
+      const escapeHtml = (value: any) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" }[char] || char));
+      const formatPdfMoney = (amount: number) => `NT$${Number(amount || 0).toLocaleString()}`;
+      const summaryRows = exportDesigners.map((designer) => {
+        const report = calcDesignerReport(designer);
+        return `
+          <tr>
+            <td>${escapeHtml(getExportName(designer))}</td>
+            <td>${report.transactionCount}</td>
+            <td>${formatPdfMoney(report.serviceRevenue)}</td>
+            <td>${formatPdfMoney(report.serviceCommission)}</td>
+            <td>${formatPdfMoney(report.brandFee)}</td>
+            <td>${formatPdfMoney(report.totalCommission)}</td>
+          </tr>
+        `;
+      }).join("");
+      const detailRows = orderRows.map((row) => `
+        <tr>
+          <td>${escapeHtml(row["訂單時間"])}</td>
+          <td>${escapeHtml(row["工作人員"])}</td>
+          <td>${escapeHtml(row["分類"])}</td>
+          <td>${escapeHtml(row["品項"])}</td>
+          <td>${escapeHtml(row["數量"])}</td>
+          <td>${escapeHtml(row["總價"])}</td>
+          <td>${escapeHtml(row["支付方式"])}</td>
+        </tr>
+      `).join("");
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert("瀏覽器阻擋了 PDF 視窗，請允許彈出視窗後再試一次");
+        return;
+      }
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>BC_報表_${escapeHtml(getExportLabel())}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif; color: #202124; padding: 28px; }
+              h1 { font-size: 24px; margin: 0 0 8px; }
+              .meta { color: #6b7280; margin-bottom: 22px; line-height: 1.7; }
+              h2 { font-size: 18px; margin: 24px 0 10px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+              th, td { border: 1px solid #d8d5ca; padding: 9px 10px; text-align: left; font-size: 12px; vertical-align: top; }
+              th { background: #f3f0e8; color: #4b5563; }
+              tr:nth-child(even) td { background: #fbfaf7; }
+              @media print { body { padding: 12px; } button { display: none; } }
+            </style>
+          </head>
+          <body>
+            <h1>${reportMode === "shop" ? "店舖報表" : "設計師報表"}</h1>
+            <div class="meta">
+              結算區間：${escapeHtml(reportStartDate)} 至 ${escapeHtml(reportEndDate)}<br>
+              結算日：${escapeHtml(settlementDate)}<br>
+              導出對象：${escapeHtml(exportDesigners.length === designers.length ? "全員" : exportDesigners.map(getExportName).join("、"))}
+            </div>
+            <h2>設計師結算概覽</h2>
+            <table>
+              <thead><tr><th>設計師</th><th>筆數</th><th>服務業績</th><th>服務抽成</th><th>品牌共享費</th><th>應付抽成</th></tr></thead>
+              <tbody>${summaryRows || `<tr><td colspan="6">無資料</td></tr>`}</tbody>
+            </table>
+            <h2>明細</h2>
+            <table>
+              <thead><tr><th>訂單時間</th><th>設計師</th><th>分類</th><th>品項</th><th>數量</th><th>總價</th><th>支付方式</th></tr></thead>
+              <tbody>${detailRows || `<tr><td colspan="7">此區間尚無明細</td></tr>`}</tbody>
+            </table>
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch(e) {
+      alert("PDF 導出失敗");
     }
   }
 
@@ -814,7 +928,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={() => setShowImport(!showImport)} style={{ background: "#BA7517", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>匯入歷史</button>
-          <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>導出 Excel ▼</button>
+          <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>導出 Excel</button>
         </div>
       </div>
 
@@ -846,38 +960,6 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
                 {importResult}
               </div>
             )}
-          </div>
-        )}
-
-        {/* 導出面板 */}
-        {showExportPanel && (
-          <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #1D9E75" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 10 }}>選擇導出範圍</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              {[{ key: "month", label: "月份" }, { key: "year", label: "年度" }, { key: "range", label: "自訂區間" }].map(m => (
-                <button key={m.key} onClick={() => setExportMode(m.key as any)} style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", background: exportMode === m.key ? "#1D9E75" : "#F1EFE8", color: exportMode === m.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: exportMode === m.key ? 600 : 400, cursor: "pointer" }}>{m.label}</button>
-              ))}
-            </div>
-            {exportMode === "month" && (
-              <div style={{ fontSize: 12, color: "#888780" }}>導出月份：{selectedMonth}（可在上方月份圖表點選切換）</div>
-            )}
-            {exportMode === "year" && (
-              <div style={{ fontSize: 12, color: "#888780" }}>導出年度：{selectedYear} 年（可在上方年度按鈕切換）</div>
-            )}
-            {exportMode === "range" && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
-                <span style={{ color: "#888780" }}>至</span>
-                <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
-              </div>
-            )}
-            {/* 導出名字格式說明 */}
-            <div style={{ fontSize: 11, color: "#888780", marginTop: 10, background: "#F1EFE8", borderRadius: 8, padding: "6px 10px" }}>
-              導出表格工作人員欄位將使用中文名（與舊系統格式一致）
-            </div>
-            <button onClick={() => { exportExcel(); setShowExportPanel(false); }} style={{ width: "100%", padding: "10px 0", background: "#1D9E75", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 12 }}>
-              確認導出 Excel
-            </button>
           </div>
         )}
 
@@ -919,9 +1001,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
             <button onClick={() => window.location.reload()} style={{ background: "#D7F8E6", color: "#047857", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>重新整理</button>
-            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#E2F2FF", color: "#0877B5", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>CSV</button>
-            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>Excel</button>
-            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#0877B5", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>PDF（每位設計師）</button>
+            <button onClick={exportCsv} style={{ background: "#E2F2FF", color: "#0877B5", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>CSV</button>
+            <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>Excel</button>
+            <button onClick={exportPdf} style={{ background: "#0877B5", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>PDF（每位設計師）</button>
           </div>
         </div>
 
