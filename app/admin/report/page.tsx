@@ -730,14 +730,17 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#EEF1F3"/>
             ${renderText("本月無服務", cx, cy + 6, { anchor: "middle", size: 18, color: "#7D7A73", weight: 700 })}`;
         }
-        let offset = 0;
-        const circumference = 2 * Math.PI * r;
-        const circles = items.map((item, index) => {
-          const length = circumference * (item.amount / total);
-          const dash = `${Math.max(length - 2, 0)} ${circumference - length + 2}`;
-          const circle = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[index % colors.length]}" stroke-width="34" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
-          offset += length;
-          return circle;
+        let startAngle = -Math.PI / 2;
+        const slices = items.map((item, index) => {
+          const angle = (item.amount / total) * Math.PI * 2;
+          const endAngle = startAngle + angle;
+          const largeArc = angle > Math.PI ? 1 : 0;
+          const x1 = cx + Math.cos(startAngle) * r;
+          const y1 = cy + Math.sin(startAngle) * r;
+          const x2 = cx + Math.cos(endAngle) * r;
+          const y2 = cy + Math.sin(endAngle) * r;
+          startAngle = endAngle;
+          return `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${colors[index % colors.length]}"/>`;
         }).join("");
         const legend = items.slice(0, 5).map((item, index) => {
           const y = cy - 72 + index * 30;
@@ -746,7 +749,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
             ${renderText(item.label, cx + 152, y, { size: 15, color: "#263544", weight: 700, maxChars: 8 })}
             ${renderText(`${pct}%`, cx + 300, y, { anchor: "end", size: 15, color: "#7D7A73", weight: 700 })}`;
         }).join("");
-        return `${circles}<circle cx="${cx}" cy="${cy}" r="${r - 35}" fill="#fff"/>
+        return `${slices}<circle cx="${cx}" cy="${cy}" r="${r - 30}" fill="#fff"/>
           ${renderText("服務項目", cx, cy - 5, { anchor: "middle", size: 16, color: "#7D7A73", weight: 700 })}
           ${renderText(formatPdfMoney(total), cx, cy + 25, { anchor: "middle", size: 22, color: "#263A32", weight: 900 })}
           ${legend}`;
@@ -809,7 +812,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         <rect width="100%" height="100%" fill="#fff"/>
         <rect x="0" y="0" width="${svgWidth}" height="138" fill="#FFFDF8"/>
         <line x1="0" y1="138" x2="${svgWidth}" y2="138" stroke="#C8A46B" stroke-width="8"/>
-        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="62" y="22" width="315" height="92" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 68, 84, { size: 46, color: "#111" })}
+        ${renderText("Bing Cherry", 68, 84, { size: 50, color: "#111", weight: 300 })}
         ${renderText("Designer Monthly Statement", 1130, 62, { anchor: "end", size: 28, color: "#263A32", weight: 700 })}
         ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 1130, 98, { anchor: "end", size: 18, color: "#7D7A73", weight: 400 })}
         ${renderText(targetLabel, 62, 218, { size: 44, color: "#263A32", weight: 900 })}
@@ -896,7 +899,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.save("BC_報表_" + getExportLabel() + ".pdf");
       return;
     } catch(e) {
-      alert("PDF 導出失敗");
+      console.error("PDF export failed", e);
+      const message = e instanceof Error ? e.message : String(e);
+      alert(`PDF 導出失敗：${message || "請稍後再試"}`);
     }
   }
 
