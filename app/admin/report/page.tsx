@@ -522,6 +522,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       await applyChinesePdfFont(doc);
       const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map((designer) => normalizePdfText(getExportName(designer))).join("、");
       const logoDataUrl = await loadImageAsDataUrl("/logo.png");
+      const wordmarkDataUrl = await loadImageAsDataUrl("/report-wordmark.png");
       const coverDataUrl = await loadImageAsDataUrl("/report-cover-template.jpg");
       const reports = exportDesigners.map((designer) => ({ designer, report: calcDesignerReport(designer) }));
       const feeRows = reports.flatMap(({ designer, report }) => [
@@ -602,7 +603,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
       doc.setTextColor(0, 0, 0);
-      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 250, 22, 94, 94);
+      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 190, 34, 216, 74);
+      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 250, 22, 94, 94);
       doc.setFont("NotoSansTC", "bold");
       doc.setFontSize(22);
       doc.text("INVOICE", pageWidth / 2, 150, { align: "center" });
@@ -611,6 +613,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.text(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 330, 190);
       doc.text(`Date：${getPdfDateLabel(reportStartDate)}`, 330, 214);
 
+      doc.setDrawColor(52, 127, 194);
+      doc.setLineWidth(1.6);
+      doc.roundedRect(34, 244, pageWidth - 68, Math.max(54, 32 + feeRows.length * 23), 9, 9);
       autoTable(doc, {
         startY: 250,
         head: [["費用明細", "數量", "單價", "金額", "備註"]],
@@ -618,21 +623,25 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           ...feeRows,
           ["費用小計", "", "", feeTotal.toLocaleString(), ""],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 4, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.7 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [83, 150, 211], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
-        alternateRowStyles: { fillColor: [215, 230, 244] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 4.5, textColor: [18, 33, 48], lineColor: [255, 255, 255], lineWidth: 0.8 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [58, 139, 211], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
+        alternateRowStyles: { fillColor: [202, 224, 244] },
+        bodyStyles: { fillColor: [235, 244, 252] },
         columnStyles: { 0: { cellWidth: 205 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 130 } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
           if (data.row.index === feeRows.length) {
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [215, 230, 244];
+            data.cell.styles.fillColor = [202, 224, 244];
             data.cell.styles.lineColor = [35, 88, 140];
             data.cell.styles.lineWidth = 1.1;
           }
         },
       });
 
+      doc.setDrawColor(215, 91, 26);
+      doc.setLineWidth(1.6);
+      doc.roundedRect(34, (doc as any).lastAutoTable.finalY + 32, pageWidth - 68, Math.max(54, 32 + (productRows.length ? productRows.length : 1) * 23), 9, 9);
       autoTable(doc, {
         startY: (doc as any).lastAutoTable.finalY + 38,
         head: [["商品明細", "數量", "品名", "金額"]],
@@ -640,21 +649,25 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
           ["自領商品合計", "", "", productTotal.toLocaleString()],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 4, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.7 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [240, 165, 126], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
-        alternateRowStyles: { fillColor: [249, 225, 211] },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 4.5, textColor: [48, 28, 16], lineColor: [255, 255, 255], lineWidth: 0.8 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [235, 139, 88], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
+        alternateRowStyles: { fillColor: [248, 213, 195] },
+        bodyStyles: { fillColor: [253, 236, 226] },
         columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 270 }, 3: { cellWidth: 95, halign: "right" } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
           if (data.row.index === (productRows.length ? productRows.length : 1)) {
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [249, 225, 211];
+            data.cell.styles.fillColor = [248, 213, 195];
             data.cell.styles.lineColor = [195, 83, 21];
             data.cell.styles.lineWidth = 1.1;
           }
         },
       });
 
+      doc.setDrawColor(94, 190, 75);
+      doc.setLineWidth(1.8);
+      doc.roundedRect(34, (doc as any).lastAutoTable.finalY + 36, pageWidth - 68, 111, 10, 10);
       autoTable(doc, {
         startY: (doc as any).lastAutoTable.finalY + 42,
         head: [["本月應繳總額", ""]],
@@ -663,8 +676,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
           ["本月應繳總額", totalDue.toLocaleString()],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5, textColor: [0, 0, 0], lineColor: [139, 211, 112], lineWidth: 0.8 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [139, 211, 112], textColor: [255, 255, 255], fontSize: 16, halign: "center" },
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5.5, textColor: [20, 45, 20], lineColor: [94, 190, 75], lineWidth: 0.9 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [116, 205, 88], textColor: [255, 255, 255], fontSize: 16, halign: "center" },
+        bodyStyles: { fillColor: [245, 255, 241] },
         columnStyles: { 0: { cellWidth: 340, halign: "center" }, 1: { cellWidth: 175, halign: "right" } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
@@ -679,7 +693,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
-      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
+      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 202, 22, 190, 65);
+      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
       doc.setFont("NotoSansTC", "bold");
       doc.setFontSize(11);
       doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
@@ -690,8 +705,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         head: [["訂單號碼", "訂單時間", "分類", "品項", "總價", "折扣", "工作人員", "支付方式"]],
         body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", "", ""]],
         styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 7.2, cellPadding: 2.2, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [83, 150, 211], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
-        alternateRowStyles: { fillColor: [215, 230, 244] },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [58, 139, 211], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
+        alternateRowStyles: { fillColor: [202, 224, 244] },
+        bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: { 0: { cellWidth: 78 }, 1: { cellWidth: 72 }, 2: { cellWidth: 54 }, 3: { cellWidth: 150 }, 4: { cellWidth: 45, halign: "right" }, 5: { cellWidth: 38, halign: "right" }, 6: { cellWidth: 50 }, 7: { cellWidth: 68 } },
         margin: { left: 20, right: 20 },
         didParseCell: (data) => {
@@ -713,7 +729,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
-      if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
+      if (wordmarkDataUrl) doc.addImage(wordmarkDataUrl, "PNG", 202, 22, 190, 65);
+      else if (logoDataUrl) doc.addImage(logoDataUrl, "PNG", 252, 18, 90, 90);
       doc.setFont("NotoSansTC", "bold");
       doc.setFontSize(11);
       doc.text(`設計師 ${targetLabel}  ${getPdfMonthLabel()}服務業績`, pageWidth / 2, 126, { align: "center" });
@@ -724,7 +741,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         head: [["費用明細小計"]],
         body: [],
         styles: { font: "NotoSansTC", fontStyle: "bold", fontSize: 13, halign: "center", cellPadding: 5 },
-        headStyles: { fillColor: [83, 150, 211], textColor: [255, 255, 255] },
+        headStyles: { fillColor: [58, 139, 211], textColor: [255, 255, 255] },
         margin: { left: 175, right: 175 },
       });
       autoTable(doc, {
@@ -737,7 +754,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         ],
         styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9, cellPadding: 3, textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.6 },
         headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [215, 230, 244], textColor: [0, 0, 0], fontSize: 10, halign: "center" },
-        alternateRowStyles: { fillColor: [215, 230, 244] },
+        alternateRowStyles: { fillColor: [202, 224, 244] },
+        bodyStyles: { fillColor: [240, 247, 253] },
         columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 180 }, 2: { cellWidth: 80, halign: "right" } },
         margin: { left: 175, right: 175 },
       });
@@ -751,7 +769,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           ["本月應繳總額", totalDue.toLocaleString()],
         ],
         styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5, textColor: [0, 0, 0], lineColor: [139, 211, 112], lineWidth: 0.8 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [139, 211, 112], textColor: [0, 0, 0], fontSize: 15, halign: "center" },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [116, 205, 88], textColor: [0, 0, 0], fontSize: 15, halign: "center" },
         columnStyles: { 0: { cellWidth: 210, halign: "center" }, 1: { cellWidth: 130, halign: "right" } },
         margin: { left: 175, right: 175 },
       });
