@@ -602,6 +602,14 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         .filter(({ row }) => String(row[2]).startsWith("美髮-") || String(row[2]) === "商品")
         .sort((a, b) => a.orderTime.localeCompare(b.orderTime) || a.index - b.index)
         .map(({ row }) => row);
+      const dailySalesTotal = dailySalesRows.reduce((sum, row) => sum + Number(String(row[5] || "0").replace(/[^\d.-]/g, "")), 0);
+      const dailyDiscountTotal = dailySalesRows.reduce((sum, row) => sum + Number(String(row[6] || "0").replace(/[^\d.-]/g, "")), 0);
+      const dailyDetailBody = dailySalesRows.length
+        ? [
+            ...dailySalesRows.map((row) => [row[1], row[2], row[3], Number(String(row[5] || "0").replace(/[^\d.-]/g, "")).toLocaleString(), Number(String(row[6] || "0").replace(/[^\d.-]/g, "")).toLocaleString(), row[7], row[8]]),
+            ["總計", `${dailySalesRows.length.toLocaleString()} 筆`, "", dailySalesTotal.toLocaleString(), dailyDiscountTotal.toLocaleString(), "", ""],
+          ]
+        : [["此區間尚無每日明細", "", "", "", "", "", ""]];
       const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
         const category = normalizePdfText(row["分類"]);
         if (!category.startsWith("美髮-")) return map;
@@ -846,24 +854,30 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       autoTable(doc, {
         startY: 72,
         head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
-        body: dailySalesRows.length ? dailySalesRows.map((row) => [row[1], row[2], row[3], row[5], row[6] || "0", row[7], row[8]]) : [["此區間尚無服務或商品販售明細", "", "", "", "", "", ""]],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 11, cellPadding: { top: 4, right: 4, bottom: 4, left: 4 }, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45, minCellHeight: 21 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [23, 111, 159], textColor: [255, 255, 255], fontSize: 10.5, halign: "left", cellPadding: { top: 6, right: 4, bottom: 6, left: 4 } },
-        alternateRowStyles: { fillColor: [216, 231, 247] },
+        body: dailyDetailBody,
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.4, cellPadding: { top: 5, right: 3, bottom: 5, left: 3 }, overflow: "linebreak", textColor: [34, 48, 57], lineWidth: 0, minCellHeight: 23 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [255, 255, 255], textColor: [23, 111, 159], fontSize: 9.6, halign: "left", cellPadding: { top: 6, right: 3, bottom: 6, left: 3 }, lineColor: [23, 111, 159], lineWidth: { bottom: 1.2 } },
+        alternateRowStyles: { fillColor: [229, 240, 251] },
         bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: {
-          0: { cellWidth: 100 },
-          1: { cellWidth: 76 },
-          2: { cellWidth: 207 },
-          3: { cellWidth: 58, halign: "right" },
-          4: { cellWidth: 48, halign: "right" },
-          5: { cellWidth: 68 },
-          6: { cellWidth: 74 },
+          0: { cellWidth: 82, fontStyle: "bold", textColor: [28, 80, 142] },
+          1: { cellWidth: 70 },
+          2: { cellWidth: 205 },
+          3: { cellWidth: 55, halign: "right" },
+          4: { cellWidth: 42, halign: "right" },
+          5: { cellWidth: 55 },
+          6: { cellWidth: 66 },
         },
-        margin: { left: 8, right: 8 },
+        margin: { left: 10, right: 10 },
         didParseCell: (data) => {
           if (data.section !== "body") return;
           const raw = data.row.raw as string[];
+          if (String(raw?.[0] || "") === "總計") {
+            data.cell.styles.fillColor = [216, 231, 247];
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.textColor = [34, 48, 57];
+            data.cell.styles.cellPadding = { top: 9, right: 3, bottom: 9, left: 3 };
+          }
           if (String(raw?.[1] || "") === "商品") {
             data.cell.styles.textColor = [255, 0, 0];
           }
