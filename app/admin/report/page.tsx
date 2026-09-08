@@ -710,6 +710,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           const lineY = y + titleHeight + headerHeight + i * rowHeight;
           html += `<line x1="${x}" y1="${lineY}" x2="${x + width}" y2="${lineY}" stroke="${i === rows.length - 1 ? theme.main : theme.line}" stroke-width="${i === rows.length - 1 ? 2.4 : 1.3}"/>`;
         }
+        html += `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="15" fill="none" stroke="${theme.main}" stroke-width="3.2"/>`;
         html += `</g>`;
         return { html, endY: y + height };
       };
@@ -748,6 +749,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         <line x1="780" y1="${productY + 176}" x2="780" y2="${productY + 224}" stroke="#D96724" stroke-width="1.5"/>
         ${renderText("自領商品合計", 62, productY + 207, { size: 21, color: "#9A4318", weight: 900 })}
         ${renderText(productTotal.toLocaleString(), 1132, productY + 207, { anchor: "end", size: 21, color: "#9A4318", weight: 900 })}
+        <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="none" stroke="#D96724" stroke-width="3.2"/>
       </g>`;
       const totalSvg = renderInvoiceTable({
         y: productEndY + 92,
