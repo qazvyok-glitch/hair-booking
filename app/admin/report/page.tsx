@@ -2,6 +2,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
@@ -456,80 +458,59 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const exportTx = getExportTransactions();
       const orderRows = buildExportOrderRows(exportTx);
       const exportDesigners = getExportDesigners();
-      const escapeHtml = (value: any) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" }[char] || char));
       const formatPdfMoney = (amount: number) => `NT$${Number(amount || 0).toLocaleString()}`;
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      const title = reportMode === "shop" ? "店舖報表" : "設計師報表";
+      const targetLabel = exportDesigners.length === designers.length ? "全員" : exportDesigners.map(getExportName).join("、");
       const summaryRows = exportDesigners.map((designer) => {
         const report = calcDesignerReport(designer);
-        return `
-          <tr>
-            <td>${escapeHtml(getExportName(designer))}</td>
-            <td>${report.transactionCount}</td>
-            <td>${formatPdfMoney(report.serviceRevenue)}</td>
-            <td>${formatPdfMoney(report.serviceCommission)}</td>
-            <td>${formatPdfMoney(report.brandFee)}</td>
-            <td>${formatPdfMoney(report.totalCommission)}</td>
-          </tr>
-        `;
-      }).join("");
-      const detailRows = orderRows.map((row) => `
-        <tr>
-          <td>${escapeHtml(row["訂單時間"])}</td>
-          <td>${escapeHtml(row["工作人員"])}</td>
-          <td>${escapeHtml(row["分類"])}</td>
-          <td>${escapeHtml(row["品項"])}</td>
-          <td>${escapeHtml(row["數量"])}</td>
-          <td>${escapeHtml(row["總價"])}</td>
-          <td>${escapeHtml(row["支付方式"])}</td>
-        </tr>
-      `).join("");
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        alert("瀏覽器阻擋了 PDF 視窗，請允許彈出視窗後再試一次");
-        return;
-      }
-      printWindow.document.write(`
-        <!doctype html>
-        <html>
-          <head>
-            <title>BC_報表_${escapeHtml(getExportLabel())}</title>
-            <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif; color: #202124; padding: 28px; }
-              h1 { font-size: 24px; margin: 0 0 8px; }
-              .meta { color: #6b7280; margin-bottom: 22px; line-height: 1.7; }
-              h2 { font-size: 18px; margin: 24px 0 10px; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-              th, td { border: 1px solid #d8d5ca; padding: 9px 10px; text-align: left; font-size: 12px; vertical-align: top; }
-              th { background: #f3f0e8; color: #4b5563; }
-              tr:nth-child(even) td { background: #fbfaf7; }
-              @media print { body { padding: 12px; } button { display: none; } }
-            </style>
-          </head>
-          <body>
-            <h1>${reportMode === "shop" ? "店舖報表" : "設計師報表"}</h1>
-            <div class="meta">
-              結算區間：${escapeHtml(reportStartDate)} 至 ${escapeHtml(reportEndDate)}<br>
-              結算日：${escapeHtml(settlementDate)}<br>
-              導出對象：${escapeHtml(exportDesigners.length === designers.length ? "全員" : exportDesigners.map(getExportName).join("、"))}
-            </div>
-            <h2>設計師結算概覽</h2>
-            <table>
-              <thead><tr><th>設計師</th><th>筆數</th><th>服務業績</th><th>服務抽成</th><th>品牌共享費</th><th>應付抽成</th></tr></thead>
-              <tbody>${summaryRows || `<tr><td colspan="6">無資料</td></tr>`}</tbody>
-            </table>
-            <h2>明細</h2>
-            <table>
-              <thead><tr><th>訂單時間</th><th>設計師</th><th>分類</th><th>品項</th><th>數量</th><th>總價</th><th>支付方式</th></tr></thead>
-              <tbody>${detailRows || `<tr><td colspan="7">此區間尚無明細</td></tr>`}</tbody>
-            </table>
-            <script>
-              window.onload = function() {
-                window.print();
-              };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
+        return [
+          getExportName(designer),
+          report.transactionCount,
+          formatPdfMoney(report.serviceRevenue),
+          formatPdfMoney(report.serviceCommission),
+          formatPdfMoney(report.brandFee),
+          formatPdfMoney(report.totalCommission),
+        ];
+      });
+      const detailRows = orderRows.map((row) => [
+        row["訂單時間"],
+        row["工作人員"],
+        row["分類"],
+        row["品項"],
+        row["數量"],
+        row["總價"],
+        row["支付方式"],
+      ]);
+
+      doc.setFontSize(18);
+      doc.text(title, 40, 42);
+      doc.setFontSize(10);
+      doc.text(`結算區間：${reportStartDate} 至 ${reportEndDate}`, 40, 64);
+      doc.text(`結算日：${settlementDate}`, 40, 80);
+      doc.text(`導出對象：${targetLabel}`, 40, 96);
+
+      autoTable(doc, {
+        startY: 124,
+        head: [["設計師", "筆數", "服務業績", "服務抽成", "品牌共享費", "應付抽成"]],
+        body: summaryRows.length ? summaryRows : [["無資料", "", "", "", "", ""]],
+        styles: { fontSize: 9, cellPadding: 6, overflow: "linebreak" },
+        headStyles: { fillColor: [241, 239, 232], textColor: [44, 44, 42] },
+        alternateRowStyles: { fillColor: [251, 250, 247] },
+        margin: { left: 40, right: 40 },
+      });
+
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 28,
+        head: [["訂單時間", "設計師", "分類", "品項", "數量", "總價", "支付方式"]],
+        body: detailRows.length ? detailRows : [["此區間尚無明細", "", "", "", "", "", ""]],
+        styles: { fontSize: 8, cellPadding: 5, overflow: "linebreak" },
+        headStyles: { fillColor: [241, 239, 232], textColor: [44, 44, 42] },
+        alternateRowStyles: { fillColor: [251, 250, 247] },
+        margin: { left: 40, right: 40 },
+      });
+
+      doc.save("BC_報表_" + getExportLabel() + ".pdf");
     } catch(e) {
       alert("PDF 導出失敗");
     }
