@@ -101,10 +101,10 @@ export default function AdminBottomNav({ current }: { current: string }) {
       label: "服務與商品",
       icon: "🧰",
       children: [
-        { key: "services", label: "服務管理", icon: "✂️", path: "/admin/services" },
+        { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
         { key: "products", label: "商品管理", icon: "🛍️", path: "/admin/products" },
         { key: "inventory", label: "庫存 / 進貨 / 盤點", icon: "📦", path: "/admin/inventory" },
-        { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
+        { key: "services", label: "服務分類設定", icon: "🏷️", path: "/admin/services" },
       ],
     },
     {

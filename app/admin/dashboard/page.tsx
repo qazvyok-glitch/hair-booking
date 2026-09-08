@@ -128,7 +128,7 @@ export default function AdminDashboard() {
           {[
             { label: "查看所有預約", icon: "📅", path: "/admin/bookings" },
             { label: "設計師管理", icon: "💇", path: "/admin/designers" },
-            { label: "管理服務項目", icon: "✂️", path: "/admin/services" },
+            { label: "服務分類設定", icon: "🏷️", path: "/admin/services" },
             { label: "管理商品清單", icon: "🛍️", path: "/admin/products" },
             { label: "價目表管理", icon: "💴", path: "/admin/prices" },
             { label: "店資訊設定", icon: "🏪", path: "/admin/shop" },

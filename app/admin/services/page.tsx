@@ -101,13 +101,13 @@ export default function AdminServices() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>服務管理</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>服務分類設定</div>
         </div>
         <button onClick={activeTab === "services" ? openNew : () => { setEditingCat(null); setCatForm({ name: "", label: "", color: "#E1F5EE", text_color: "#085041", sort_order: 0 }); setShowCatForm(true); }} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
       </div>
 
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
-        {[{ key: "services", label: "服務項目" }, { key: "categories", label: "服務分類" }].map(t => (
+        {[{ key: "services", label: "基礎服務資料" }, { key: "categories", label: "服務分類" }].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key as "services" | "categories")} style={{ padding: "6px 16px", borderRadius: 20, border: "none", background: activeTab === t.key ? "#534AB7" : "#fff", color: activeTab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: activeTab === t.key ? 600 : 400, cursor: "pointer" }}>
             {t.label}
           </button>
