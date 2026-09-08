@@ -35,6 +35,8 @@ export function AdminDesignersContent() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Designer | null>(null);
+  const [actionDesigner, setActionDesigner] = useState<Designer | null>(null);
+  const [sortDesignerIndex, setSortDesignerIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "", display_name: "", nickname: "", initials: "", style: "", ig: "",
@@ -183,6 +185,21 @@ export function AdminDesignersContent() {
     }
   }
 
+  async function handleMoveDesigner(index: number, direction: -1 | 1) {
+    await moveDesigner(index, direction);
+    setSortDesignerIndex(null);
+  }
+
+  function handleEditFromMenu(d: Designer) {
+    setActionDesigner(null);
+    openEdit(d);
+  }
+
+  function handleOpenPricesFromMenu(d: Designer) {
+    setActionDesigner(null);
+    router.push(`/admin/designer-prices?designerId=${d.id}`);
+  }
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -206,8 +223,11 @@ export function AdminDesignersContent() {
         {designers.map((d, index) => (
           <div key={d.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", opacity: d.status === "active" ? 1 : 0.7 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, flexShrink: 0, overflow: "hidden" }}>
-                {d.avatar_url ? <img src={d.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
+              <div style={{ width: 70, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, overflow: "hidden" }}>
+                  {d.avatar_url ? <img src={d.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
+                </div>
+                <button onClick={() => setActionDesigner(d)} style={{ width: "100%", padding: "5px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>管理</button>
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -221,9 +241,12 @@ export function AdminDesignersContent() {
                     {d.nickname && <div style={{ fontSize: 11, color: "#7B6FD4" }}>{d.nickname}</div>}
                     <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{d.style}</div>
                   </div>
-                  <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 500 }}>
-                    {d.status === "active" ? "在職" : "離職"}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 500 }}>
+                      {d.status === "active" ? "在職" : "離職"}
+                    </span>
+                    <button onClick={() => setSortDesignerIndex(index)} aria-label={`${d.name} 排序`} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid #D3D1C7", background: "#fff", color: "#888780", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>☰</button>
+                  </div>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 8, marginTop: 10 }}>
@@ -264,26 +287,50 @@ export function AdminDesignersContent() {
                   {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
                   {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
                 </div>
-                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                  <button onClick={() => moveDesigner(index, -1)} disabled={index === 0} style={{ padding: "5px 10px", background: index === 0 ? "#F1EFE8" : "#fff", color: index === 0 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === 0 ? "default" : "pointer" }}>上移</button>
-                  <button onClick={() => moveDesigner(index, 1)} disabled={index === designers.length - 1} style={{ padding: "5px 10px", background: index === designers.length - 1 ? "#F1EFE8" : "#fff", color: index === designers.length - 1 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === designers.length - 1 ? "default" : "pointer" }}>下移</button>
-                  <button onClick={() => openEdit(d)} style={{ padding: "5px 10px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
-                  <button onClick={() => router.push(`/admin/designer-prices?designerId=${d.id}`)} style={{ padding: "5px 10px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>專屬價目表</button>
-                  <button onClick={() => toggleStatus(d)} style={{ padding: "5px 10px", background: d.status === "active" ? "#FCEBEB" : "#E1F5EE", color: d.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-                    {d.status === "active" ? "設為離職" : "恢復在職"}
-                  </button>
-                  <button onClick={() => toggleMemberAccess(d)} style={{ padding: "5px 10px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-                    {d.can_view_members ? "關閉會員查看" : "開啟會員查看"}
-                  </button>
-                  <button onClick={() => toggleManagerAccess(d)} style={{ padding: "5px 10px", background: d.is_manager ? "#FCEBEB" : "#EEEDFE", color: d.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                    {d.is_manager ? "取消店長" : "設為店長"}
-                  </button>
-                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {sortDesignerIndex !== null && designers[sortDesignerIndex] && (
+        <div onClick={() => setSortDesignerIndex(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 320, background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 18px 40px rgba(0,0,0,0.18)" }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: "#2C2C2A", marginBottom: 4 }}>調整排序</div>
+            <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>{designers[sortDesignerIndex].name}</div>
+            <button onClick={() => handleMoveDesigner(sortDesignerIndex, -1)} disabled={sortDesignerIndex === 0} style={{ width: "100%", padding: "12px 0", marginBottom: 8, background: sortDesignerIndex === 0 ? "#F1EFE8" : "#fff", color: sortDesignerIndex === 0 ? "#C0BDB5" : "#2C2C2A", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: sortDesignerIndex === 0 ? "default" : "pointer" }}>上移一格</button>
+            <button onClick={() => handleMoveDesigner(sortDesignerIndex, 1)} disabled={sortDesignerIndex === designers.length - 1} style={{ width: "100%", padding: "12px 0", marginBottom: 8, background: sortDesignerIndex === designers.length - 1 ? "#F1EFE8" : "#fff", color: sortDesignerIndex === designers.length - 1 ? "#C0BDB5" : "#2C2C2A", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: sortDesignerIndex === designers.length - 1 ? "default" : "pointer" }}>下移一格</button>
+            <button onClick={() => setSortDesignerIndex(null)} style={{ width: "100%", padding: "11px 0", background: "#F1EFE8", color: "#5F5E5A", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>取消</button>
+          </div>
+        </div>
+      )}
+
+      {actionDesigner && (
+        <div onClick={() => setActionDesigner(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 95, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px", boxShadow: "0 -16px 36px rgba(0,0,0,0.18)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#2C2C2A" }}>{actionDesigner.name}</div>
+                <div style={{ fontSize: 12, color: "#888780", marginTop: 2 }}>管理資料、價目表、職務與權限</div>
+              </div>
+              <button onClick={() => setActionDesigner(null)} style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#F1EFE8", color: "#5F5E5A", fontSize: 16, cursor: "pointer" }}>✕</button>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <button onClick={() => handleEditFromMenu(actionDesigner)} style={{ padding: "13px 14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>編輯資料與結算規則</button>
+              <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "13px 14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>專屬價目表</button>
+              <button onClick={() => { toggleStatus(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.status === "active" ? "#FCEBEB" : "#E1F5EE", color: actionDesigner.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {actionDesigner.status === "active" ? "設為離職" : "恢復在職"}
+              </button>
+              <button onClick={() => { toggleMemberAccess(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {actionDesigner.can_view_members ? "關閉會員查看" : "開啟會員查看"}
+              </button>
+              <button onClick={() => { toggleManagerAccess(actionDesigner); setActionDesigner(null); }} style={{ padding: "13px 14px", background: actionDesigner.is_manager ? "#FCEBEB" : "#EEEDFE", color: actionDesigner.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 12, textAlign: "left", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                {actionDesigner.is_manager ? "取消店長權限" : "設為店長"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 表單跳窗 */}
       {showForm && (
