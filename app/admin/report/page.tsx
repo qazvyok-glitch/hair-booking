@@ -816,7 +816,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         ${renderText("Designer Monthly Statement", 1130, 62, { anchor: "end", size: 28, color: "#263A32", weight: 700 })}
         ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 1130, 98, { anchor: "end", size: 18, color: "#7D7A73", weight: 400 })}
         ${renderText(targetLabel, 62, 218, { size: 44, color: "#263A32", weight: 900 })}
-        ${renderText(`月份：${getPdfMonthLabel()}　｜　結算日：${getPdfDateLabel(payDate)}`, 62, 260, { size: 21, color: "#7D7A73" })}
+        ${renderText(`月份：${getPdfMonthLabel()}　｜　結算日：${getPdfDateLabel(settlementDate)}`, 62, 260, { size: 21, color: "#7D7A73" })}
         <rect x="862" y="176" width="250" height="104" rx="20" fill="#E8F5FC"/>
         ${renderText("本月應繳總額", 987, 214, { anchor: "middle", size: 18, color: "#1674AE", weight: 800 })}
         ${renderText(formatPdfMoney(totalDue), 987, 256, { anchor: "middle", size: 38, color: "#1674AE", weight: 900 })}
