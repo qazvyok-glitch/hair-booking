@@ -44,7 +44,6 @@ export function AdminDesignersContent() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Designer | null>(null);
-  const [actionDesigner, setActionDesigner] = useState<Designer | null>(null);
   const [sortDesignerIndex, setSortDesignerIndex] = useState<number | null>(null);
   const [formSection, setFormSection] = useState<FormSection>("profile");
   const [saving, setSaving] = useState(false);
@@ -206,16 +205,6 @@ export function AdminDesignersContent() {
     setSortDesignerIndex(null);
   }
 
-  function handleEditFromMenu(d: Designer, section: FormSection = "profile") {
-    setActionDesigner(null);
-    openEdit(d, section);
-  }
-
-  function handleOpenPricesFromMenu(d: Designer) {
-    setActionDesigner(null);
-    router.push(`/admin/designer-prices?designerId=${d.id}`);
-  }
-
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -243,7 +232,7 @@ export function AdminDesignersContent() {
                 <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, overflow: "hidden" }}>
                   {d.avatar_url ? <img src={d.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
                 </div>
-                <button onClick={() => setActionDesigner(d)} style={{ width: "100%", padding: "5px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>管理</button>
+                <button onClick={() => openEdit(d)} style={{ width: "100%", padding: "5px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>管理</button>
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -316,42 +305,6 @@ export function AdminDesignersContent() {
             <button onClick={() => handleMoveDesigner(sortDesignerIndex, -1)} disabled={sortDesignerIndex === 0} style={{ width: "100%", padding: "12px 0", marginBottom: 8, background: sortDesignerIndex === 0 ? "#F1EFE8" : "#fff", color: sortDesignerIndex === 0 ? "#C0BDB5" : "#2C2C2A", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: sortDesignerIndex === 0 ? "default" : "pointer" }}>上移一格</button>
             <button onClick={() => handleMoveDesigner(sortDesignerIndex, 1)} disabled={sortDesignerIndex === designers.length - 1} style={{ width: "100%", padding: "12px 0", marginBottom: 8, background: sortDesignerIndex === designers.length - 1 ? "#F1EFE8" : "#fff", color: sortDesignerIndex === designers.length - 1 ? "#C0BDB5" : "#2C2C2A", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: sortDesignerIndex === designers.length - 1 ? "default" : "pointer" }}>下移一格</button>
             <button onClick={() => setSortDesignerIndex(null)} style={{ width: "100%", padding: "11px 0", background: "#F1EFE8", color: "#5F5E5A", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>取消</button>
-          </div>
-        </div>
-      )}
-
-      {actionDesigner && (
-        <div onClick={() => setActionDesigner(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 95, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: "20px 20px 0 0", padding: "18px 16px 28px", boxShadow: "0 -16px 36px rgba(0,0,0,0.18)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#2C2C2A" }}>{actionDesigner.name}</div>
-                <div style={{ fontSize: 12, color: "#888780", marginTop: 2 }}>管理資料、價目表、職務與權限</div>
-              </div>
-              <button onClick={() => setActionDesigner(null)} style={{ width: 34, height: 34, borderRadius: 999, border: "none", background: "#F1EFE8", color: "#5F5E5A", fontSize: 16, cursor: "pointer" }}>✕</button>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 10 }}>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "profile")} style={{ padding: "14px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>個人基本設定</div>
-                <div style={{ fontSize: 12, color: "#7B6FD4", marginTop: 4, lineHeight: 1.35 }}>顧客端顯示、姓名、暱稱、專長、頭像</div>
-              </button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "login")} style={{ padding: "14px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>登入帳號密碼</div>
-                <div style={{ fontSize: 12, color: "#888780", marginTop: 4, lineHeight: 1.35 }}>設定設計師端登入帳號與密碼</div>
-              </button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "settlement")} style={{ padding: "14px", background: "#E1F5EE", color: "#085041", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>結算規則</div>
-                <div style={{ fontSize: 12, color: "#08785E", marginTop: 4, lineHeight: 1.35 }}>服務抽成、商品抽成、品牌共享費</div>
-              </button>
-              <button onClick={() => handleEditFromMenu(actionDesigner, "permissions")} style={{ padding: "14px", background: "#FDF1DE", color: "#BA7517", border: "none", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>職務與權限</div>
-                <div style={{ fontSize: 12, color: "#BA7517", marginTop: 4, lineHeight: 1.35 }}>在職狀態、店長權限、會員資料權限</div>
-              </button>
-              <button onClick={() => handleOpenPricesFromMenu(actionDesigner)} style={{ padding: "14px", background: "#fff", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 14, textAlign: "left", cursor: "pointer" }}>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>專屬價目表</div>
-                <div style={{ fontSize: 12, color: "#888780", marginTop: 4, lineHeight: 1.35 }}>管理此設計師專屬服務與價格</div>
-              </button>
-            </div>
           </div>
         </div>
       )}
