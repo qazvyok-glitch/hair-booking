@@ -28,8 +28,9 @@ type Designer = {
 
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
 
-export default function AdminDesigners() {
+export function AdminDesignersContent({ mode = "designers" }: { mode?: "designers" | "permissions" }) {
   const router = useRouter();
+  const isPermissionView = mode === "permissions";
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -194,15 +195,19 @@ export default function AdminDesigners() {
       <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>設計師管理</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{isPermissionView ? "權限 / 職務" : "設計師管理"}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => router.push("/admin/prices")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>公版價目表</button>
+          {!isPermissionView && <button onClick={() => router.push("/admin/prices")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>公版價目表</button>}
           <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
         </div>
       </div>
 
       <div style={{ padding: 16 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <button onClick={() => router.push("/admin/designers")} style={{ padding: "8px 14px", borderRadius: 999, border: "none", background: !isPermissionView ? "#534AB7" : "#fff", color: !isPermissionView ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>設計師管理</button>
+          <button onClick={() => router.push("/admin/designers/permissions")} style={{ padding: "8px 14px", borderRadius: 999, border: "none", background: isPermissionView ? "#534AB7" : "#fff", color: isPermissionView ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>權限 / 職務</button>
+        </div>
         {designers.map((d, index) => (
           <div key={d.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", opacity: d.status === "active" ? 1 : 0.7 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -226,48 +231,69 @@ export default function AdminDesigners() {
                   </span>
                 </div>
 
-                <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 11, color: "#5F5E5A", flexWrap: "wrap" }}>
-                  <span style={{ background: "#EEEDFE", color: "#534AB7", padding: "2px 8px", borderRadius: 6 }}>
-                    服務抽成 {Math.round((d.commission_rate || 0) * 100)}%
-                    {(d as any).commission_base_deduction > 0 && ` (底扣 $${((d as any).commission_base_deduction || 0).toLocaleString()})`}
-                  </span>
-                  {(d as any).product_commission_rate > 0 && (
-                    <span style={{ background: "#E1F5EE", color: "#085041", padding: "2px 8px", borderRadius: 6 }}>
-                      商品抽成 {Math.round(((d as any).product_commission_rate || 0) * 100)}%
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "#888780" }}>
-                  {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
-                  {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
-                </div>
-
-                <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", color: d.can_view_members ? "#085041" : "#A32D2D" }}>
-                    {d.can_view_members ? "✓ 可查看會員" : "✕ 禁止查看會員"}
-                  </span>
-                  {d.is_manager && (
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 6, background: "#EEEDFE", color: "#534AB7", fontWeight: 600 }}>
-                      店長權限
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                  <button onClick={() => moveDesigner(index, -1)} disabled={index === 0} style={{ padding: "5px 10px", background: index === 0 ? "#F1EFE8" : "#fff", color: index === 0 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === 0 ? "default" : "pointer" }}>上移</button>
-                  <button onClick={() => moveDesigner(index, 1)} disabled={index === designers.length - 1} style={{ padding: "5px 10px", background: index === designers.length - 1 ? "#F1EFE8" : "#fff", color: index === designers.length - 1 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === designers.length - 1 ? "default" : "pointer" }}>下移</button>
-                  <button onClick={() => openEdit(d)} style={{ padding: "5px 10px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯</button>
-                  <button onClick={() => router.push(`/admin/designer-prices?designerId=${d.id}`)} style={{ padding: "5px 10px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>專屬價目表</button>
-                  <button onClick={() => toggleStatus(d)} style={{ padding: "5px 10px", background: d.status === "active" ? "#FCEBEB" : "#E1F5EE", color: d.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-                    {d.status === "active" ? "設為離職" : "恢復在職"}
-                  </button>
-                  <button onClick={() => toggleMemberAccess(d)} style={{ padding: "5px 10px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-                    {d.can_view_members ? "禁止查看會員" : "允許查看會員"}
-                  </button>
-                  <button onClick={() => toggleManagerAccess(d)} style={{ padding: "5px 10px", background: d.is_manager ? "#FCEBEB" : "#EEEDFE", color: d.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
-                    {d.is_manager ? "取消店長" : "設為店長"}
-                  </button>
-                </div>
+                {!isPermissionView ? (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 8, marginTop: 10 }}>
+                      <div style={{ background: "#EEEDFE", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: "#7B6FD4", fontWeight: 700 }}>服務業績抽成</div>
+                        <div style={{ fontSize: 16, color: "#534AB7", fontWeight: 800, marginTop: 2 }}>{Math.round((d.commission_rate || 0) * 100)}%</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>底扣 NT${((d as any).commission_base_deduction || 0).toLocaleString()}</div>
+                      </div>
+                      <div style={{ background: "#E1F5EE", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: "#08785E", fontWeight: 700 }}>商品販售抽成</div>
+                        <div style={{ fontSize: 16, color: "#085041", fontWeight: 800, marginTop: 2 }}>{Math.round(((d as any).product_commission_rate || 0) * 100)}%</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>商品銷售獨立計算</div>
+                      </div>
+                      <div style={{ background: "#F8F7F3", borderRadius: 10, padding: "10px 12px", border: "1px solid #E5E1D7" }}>
+                        <div style={{ fontSize: 11, color: "#BA7517", fontWeight: 700 }}>品牌共享費</div>
+                        <div style={{ fontSize: 16, color: "#BA7517", fontWeight: 800, marginTop: 2 }}>{Math.round(((d as any).brand_fee_rate || 0) * 100)}%</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>列入 BC 應收</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11, color: "#888780" }}>
+                      {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
+                      {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={() => moveDesigner(index, -1)} disabled={index === 0} style={{ padding: "5px 10px", background: index === 0 ? "#F1EFE8" : "#fff", color: index === 0 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === 0 ? "default" : "pointer" }}>上移</button>
+                      <button onClick={() => moveDesigner(index, 1)} disabled={index === designers.length - 1} style={{ padding: "5px 10px", background: index === designers.length - 1 ? "#F1EFE8" : "#fff", color: index === designers.length - 1 ? "#C0BDB5" : "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: index === designers.length - 1 ? "default" : "pointer" }}>下移</button>
+                      <button onClick={() => openEdit(d)} style={{ padding: "5px 10px", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>編輯結算 / 資料</button>
+                      <button onClick={() => router.push(`/admin/designer-prices?designerId=${d.id}`)} style={{ padding: "5px 10px", background: "#F8F7F3", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>專屬價目表</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 8, marginTop: 10 }}>
+                      <div style={{ background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: d.status === "active" ? "#08785E" : "#A32D2D", fontWeight: 700 }}>職務狀態</div>
+                        <div style={{ fontSize: 16, color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 800, marginTop: 2 }}>{d.status === "active" ? "在職" : "離職"}</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>{d.left_date ? `離職日 ${d.left_date.replace(/-/g, "/")}` : "可正常預約與登入"}</div>
+                      </div>
+                      <div style={{ background: d.is_manager ? "#EEEDFE" : "#F8F7F3", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 700 }}>店長權限</div>
+                        <div style={{ fontSize: 16, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 800, marginTop: 2 }}>{d.is_manager ? "已開啟" : "未開啟"}</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>可查看全員排程與待確認</div>
+                      </div>
+                      <div style={{ background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 11, color: d.can_view_members ? "#08785E" : "#A32D2D", fontWeight: 700 }}>會員資料</div>
+                        <div style={{ fontSize: 16, color: d.can_view_members ? "#085041" : "#A32D2D", fontWeight: 800, marginTop: 2 }}>{d.can_view_members ? "可查看" : "不可查看"}</div>
+                        <div style={{ fontSize: 10, color: "#888780", marginTop: 2 }}>控制設計師端顧客資料權限</div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={() => toggleStatus(d)} style={{ padding: "7px 12px", background: d.status === "active" ? "#FCEBEB" : "#E1F5EE", color: d.status === "active" ? "#A32D2D" : "#085041", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        {d.status === "active" ? "設為離職" : "恢復在職"}
+                      </button>
+                      <button onClick={() => toggleMemberAccess(d)} style={{ padding: "7px 12px", background: "#FAEEDA", color: "#BA7517", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        {d.can_view_members ? "關閉會員查看" : "開啟會員查看"}
+                      </button>
+                      <button onClick={() => toggleManagerAccess(d)} style={{ padding: "7px 12px", background: d.is_manager ? "#FCEBEB" : "#EEEDFE", color: d.is_manager ? "#A32D2D" : "#534AB7", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                        {d.is_manager ? "取消店長權限" : "設為店長"}
+                      </button>
+                      <button onClick={() => openEdit(d)} style={{ padding: "7px 12px", background: "#fff", color: "#5F5E5A", border: "1px solid #D3D1C7", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>進階編輯</button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -413,7 +439,11 @@ export default function AdminDesigners() {
         </div>
       )}
 
-      <AdminBottomNav current="designers" />
+      <AdminBottomNav current={isPermissionView ? "permissions" : "designers"} />
     </div>
   );
+}
+
+export default function AdminDesigners() {
+  return <AdminDesignersContent mode="designers" />;
 }
