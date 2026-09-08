@@ -109,6 +109,10 @@ function formatMoney(amount: number, negative = false) {
   return `${prefix}${Math.abs(amount).toLocaleString()}`;
 }
 
+function formatDateInput(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function getProductSaleRowsFromTransaction(transaction: Transaction): ReportDetailRow[] {
   const date = formatReportDate(transaction.created_at);
   const rows: ReportDetailRow[] = [];
@@ -192,6 +196,18 @@ export default function AdminReport() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   });
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => {
+    const now = new Date();
+    return formatDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  });
+  const [settlementDate, setSettlementDate] = useState(() => {
+    const now = new Date();
+    return formatDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 5));
+  });
   const [reportMode, setReportMode] = useState<"shop" | "designer">(() => {
     if (typeof window === "undefined") return "shop";
     return new URLSearchParams(window.location.search).get("mode") === "designer" ? "designer" : "shop";
@@ -199,6 +215,7 @@ export default function AdminReport() {
   const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
   const [activeDesignerDetail, setActiveDesignerDetail] = useState<DesignerDetailKey>("actualIncome");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
+  const [selectedShopDesignerId, setSelectedShopDesignerId] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
   const [nameMode, setNameMode] = useState<"english" | "chinese" | "both">("both");
 
@@ -230,6 +247,28 @@ export default function AdminReport() {
 
   function getCustomerNo(phone: string) {
     return (customers as any[])?.find((c: any) => c.phone === phone)?.customer_no || "-";
+  }
+
+  function setReportPeriodByMonth(year: number, monthIndex: number) {
+    const start = new Date(year, monthIndex, 1);
+    const end = new Date(year, monthIndex + 1, 0);
+    const pay = new Date(year, monthIndex + 1, 5);
+    const monthKey = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`;
+    setSelectedYear(start.getFullYear());
+    setSelectedMonth(monthKey);
+    setReportStartDate(`${monthKey}-01`);
+    setReportEndDate(formatDateInput(end));
+    setSettlementDate(formatDateInput(pay));
+  }
+
+  function setCurrentReportPeriod() {
+    const now = new Date();
+    setReportPeriodByMonth(now.getFullYear(), now.getMonth());
+  }
+
+  function shiftReportPeriod(monthOffset: number) {
+    const current = new Date(`${reportStartDate || selectedMonth + "-01"}T00:00:00`);
+    setReportPeriodByMonth(current.getFullYear(), current.getMonth() + monthOffset);
   }
 
   function getExportTransactions() {
@@ -532,19 +571,10 @@ export default function AdminReport() {
     fetchData();
   }, [router]);
 
-  const availableYears = (() => {
-    const years = new Set<number>();
-    transactions.forEach(t => {
-      const y = parseInt(t.created_at?.slice(0, 4) || "0");
-      if (y > 2020) years.add(y);
-    });
-    years.add(new Date().getFullYear());
-    return Array.from(years).sort((a, b) => b - a);
-  })();
-
   const monthlyTransactions = transactions.filter(t => {
-    const m = t.created_at?.slice(0, 7);
-    return m === selectedMonth;
+    const date = t.created_at?.slice(0, 10);
+    if (!date) return false;
+    return date >= reportStartDate && date <= reportEndDate;
   });
   if (typeof window !== "undefined") {
     console.log("selectedMonth:", selectedMonth, "total tx:", transactions.length, "monthly:", monthlyTransactions.length, "sample:", transactions.slice(0,2).map(t => t.created_at));
@@ -582,10 +612,16 @@ export default function AdminReport() {
     return Object.entries(months).sort((a, b) => a[0].localeCompare(b[0]));
   })();
 
-  const yearTotal = yearlyData.reduce((sum, [, v]) => sum + v, 0);
-  const maxMonthly = Math.max(...yearlyData.map(([, v]) => v), 1);
-  const monthlyProductUsages = productUsages.filter((usage) => usage.used_at?.slice(0, 7) === selectedMonth);
-  const monthlyShopUseRecords = stockRecords.filter((record) => record.created_at?.slice(0, 7) === selectedMonth && (record.note || "").startsWith("店用領料"));
+  const monthlyProductUsages = productUsages.filter((usage) => {
+    const date = usage.used_at?.slice(0, 10);
+    if (!date) return false;
+    return date >= reportStartDate && date <= reportEndDate;
+  });
+  const monthlyShopUseRecords = stockRecords.filter((record) => {
+    const date = record.created_at?.slice(0, 10);
+    if (!date) return false;
+    return date >= reportStartDate && date <= reportEndDate && (record.note || "").startsWith("店用領料");
+  });
   const shopTotals = getReportTotals(monthlyTransactions, monthlyProductUsages);
   const shopUseQuantity = monthlyShopUseRecords.reduce((sum, record) => sum + Math.abs(Number(record.quantity || 0)), 0);
   const activeReportDesigner = designers.find((designer) => designer.id === (reportDesignerId || designers[0]?.id));
@@ -674,17 +710,24 @@ export default function AdminReport() {
     ];
   });
   const actualIncomeRows = [...serviceDetailRows, ...productSaleRows].sort((a, b) => a.date.localeCompare(b.date));
+  const allShopDetailRows = [...serviceDetailRows, ...productSaleRows, ...selfUseRows, ...shopUseRows, ...discountRows].sort((a, b) => a.date.localeCompare(b.date));
   const shopDetailRowsByKey: Record<ShopDetailKey, ReportDetailRow[]> = {
-    actualIncome: actualIncomeRows,
+    actualIncome: allShopDetailRows,
     serviceRevenue: serviceDetailRows,
     productRevenue: productSaleRows,
     selfUse: selfUseRows,
     shopUse: shopUseRows,
     discount: discountRows,
   };
-  const activeShopDetailRows = shopDetailRowsByKey[activeShopDetail];
+  const selectedShopDesigner = designers.find((designer) => designer.id === selectedShopDesignerId) || null;
+  const selectedShopDesignerLabels = selectedShopDesigner
+    ? [getDesignerLabel(selectedShopDesigner), selectedShopDesigner.name, selectedShopDesigner.display_name].filter(Boolean)
+    : [];
+  const activeShopDetailRows = selectedShopDesigner
+    ? shopDetailRowsByKey[activeShopDetail].filter((row) => selectedShopDesignerLabels.includes(row.designerName))
+    : shopDetailRowsByKey[activeShopDetail];
   const activeShopDetailTitle: Record<ShopDetailKey, string> = {
-    actualIncome: "實際收入明細",
+    actualIncome: "全部明細",
     serviceRevenue: "服務業績明細",
     productRevenue: "商品銷售明細",
     selfUse: "自領材料明細",
@@ -709,6 +752,28 @@ export default function AdminReport() {
     selfUse: "設計師自領材料明細",
     discount: "設計師折扣明細",
   };
+  const designerSettlementRows = designers.map((designer) => {
+    const totals = getReportTotals(monthlyTransactions, monthlyProductUsages, designer.id);
+    return {
+      designer,
+      totals,
+      bcReceivable: totals.selfUse + totals.discount,
+    };
+  });
+  const shopUseDisplayAmount = monthlyShopUseRecords.reduce((sum, record) => sum + Math.abs(Number(record.quantity || 0)), 0);
+  const shopMetricCards = [
+    { label: "店舖總營業額", value: `NT$${shopTotals.totalRevenue.toLocaleString()}`, note: "本期全員完成交易", background: "#EEF8FF", border: "#D6EFFF", color: "#0877B5" },
+    { label: "BC 應收總額", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, note: "服務、商品扣除自領與折扣", background: "#EDFFF6", border: "#C9F7DF", color: "#087F5B" },
+    { label: "完成交易數", value: shopTotals.customerCount.toLocaleString(), note: "本期完成結帳", background: "#F4F0FF", border: "#E7DEFE", color: "#6D28D9" },
+  ];
+  const revenueCards = [
+    { key: "actualIncome" as ShopDetailKey, label: "全部", value: `NT$${shopTotals.totalRevenue.toLocaleString()}`, note: `${allShopDetailRows.length} 筆明細`, background: "#F7F5FF", border: "#DCD5FA", color: "#534AB7" },
+    { key: "serviceRevenue" as ShopDetailKey, label: "服務", value: `NT$${shopTotals.serviceRevenue.toLocaleString()}`, note: `${serviceDetailRows.length} 筆`, background: "#EEF8FF", border: "#D6EFFF", color: "#0877B5" },
+    { key: "productRevenue" as ShopDetailKey, label: "商品", value: `NT$${shopTotals.productRevenue.toLocaleString()}`, note: `${productSaleRows.length} 筆`, background: "#F4F0FF", border: "#E7DEFE", color: "#6D28D9" },
+    { key: "selfUse" as ShopDetailKey, label: "自領", value: `-NT$${shopTotals.selfUse.toLocaleString()}`, note: `${selfUseRows.length} 筆`, background: "#FFF1F2", border: "#FECDD3", color: "#BE123C" },
+    { key: "shopUse" as ShopDetailKey, label: "店用", value: `${shopUseDisplayAmount.toLocaleString()} 件`, note: `${shopUseRows.length} 筆`, background: "#EDFFF6", border: "#C9F7DF", color: "#087F5B" },
+    { key: "discount" as ShopDetailKey, label: "折扣", value: `-NT$${shopTotals.discount.toLocaleString()}`, note: `${discountRows.length} 筆`, background: "#FFF7ED", border: "#FED7AA", color: "#BA7517" },
+  ];
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -793,51 +858,126 @@ export default function AdminReport() {
           </div>
         )}
 
-        <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-            <button onClick={() => { setReportMode("shop"); router.replace("/admin/report?mode=shop"); }} style={{ border: "none", padding: "14px 0", background: reportMode === "shop" ? "#534AB7" : "#fff", color: reportMode === "shop" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>店鋪總報表</button>
-            <button onClick={() => { setReportMode("designer"); router.replace("/admin/report?mode=designer"); }} style={{ border: "none", padding: "14px 0", background: reportMode === "designer" ? "#534AB7" : "#fff", color: reportMode === "designer" ? "#fff" : "#2C2C2A", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>設計師月報表</button>
+        <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", padding: 16, marginBottom: 12, boxShadow: "0 10px 26px rgba(44,44,42,0.05)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#2C2C2A" }}>📅 結算區間</div>
+              <button onClick={() => { setReportMode("shop"); router.replace("/admin/report?mode=shop"); }} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: reportMode === "shop" ? "#534AB7" : "#F1EFE8", color: reportMode === "shop" ? "#fff" : "#5F5E5A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>店舖報表</button>
+              <button onClick={() => { setReportMode("designer"); router.replace("/admin/report?mode=designer"); }} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: reportMode === "designer" ? "#534AB7" : "#F1EFE8", color: reportMode === "designer" ? "#fff" : "#5F5E5A", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>設計師報表</button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => shiftReportPeriod(1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#D7F8E6", color: "#047857", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>下一期</button>
+              <button onClick={setCurrentReportPeriod} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#E2F2FF", color: "#0877B5", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>本期</button>
+              <button onClick={() => shiftReportPeriod(-1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#F1EFE8", color: "#5F5E5A", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>上一期</button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end", padding: 14, borderTop: "0.5px solid #F1EFE8" }}>
-            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#888780", fontWeight: 600 }}>
-              選擇月份
-              <input type="month" value={selectedMonth} onChange={(event) => { setSelectedMonth(event.target.value); setSelectedYear(Number(event.target.value.slice(0, 4))); }} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }} />
+          <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, minmax(150px, 1fr))" : "1fr", gap: 10, alignItems: "end" }}>
+            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#5F5E5A", fontWeight: 700 }}>
+              開始日期
+              <input type="date" value={reportStartDate} onChange={(event) => { setReportStartDate(event.target.value); setSelectedMonth(event.target.value.slice(0, 7)); setSelectedYear(Number(event.target.value.slice(0, 4))); }} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #D3D1C7", fontSize: 14, outline: "none" }} />
             </label>
-            {reportMode === "designer" && (
-              <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#888780", fontWeight: 600, minWidth: 180 }}>
-                選擇設計師
-                <select value={String(reportDesignerId || designers[0]?.id || "")} onChange={(event) => setReportDesignerId(Number(event.target.value))} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", background: "#fff" }}>
-                  {designers.map((designer) => <option key={designer.id} value={designer.id}>{getDesignerLabel(designer)}</option>)}
-                </select>
-              </label>
-            )}
+            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#5F5E5A", fontWeight: 700 }}>
+              結束日期
+              <input type="date" value={reportEndDate} onChange={(event) => setReportEndDate(event.target.value)} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #D3D1C7", fontSize: 14, outline: "none" }} />
+            </label>
+            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#5F5E5A", fontWeight: 700 }}>
+              結算日
+              <input type="date" value={settlementDate} onChange={(event) => setSettlementDate(event.target.value)} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #D3D1C7", fontSize: 14, outline: "none" }} />
+            </label>
+            <label style={{ display: "grid", gap: 5, fontSize: 11, color: "#5F5E5A", fontWeight: 700 }}>
+              設計師
+              <select value={reportMode === "designer" ? String(reportDesignerId || designers[0]?.id || "") : String(selectedShopDesignerId || "all")} onChange={(event) => {
+                if (reportMode === "designer") setReportDesignerId(Number(event.target.value));
+                else setSelectedShopDesignerId(event.target.value === "all" ? null : Number(event.target.value));
+              }} style={{ padding: "10px 12px", borderRadius: 12, border: "1px solid #D3D1C7", fontSize: 14, outline: "none", background: "#fff" }}>
+                {reportMode === "shop" && <option value="all">全員</option>}
+                {designers.map((designer) => <option key={designer.id} value={designer.id}>{getDesignerLabel(designer)}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <button onClick={() => window.location.reload()} style={{ background: "#D7F8E6", color: "#047857", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>重新整理</button>
+            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#E2F2FF", color: "#0877B5", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>CSV</button>
+            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>Excel</button>
+            <button onClick={() => setShowExportPanel(!showExportPanel)} style={{ background: "#0877B5", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>PDF（每位設計師）</button>
           </div>
         </div>
 
         {reportMode === "shop" && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
-              {[
-                { key: "serviceRevenue" as ShopDetailKey, label: "服務業績", value: `NT$${shopTotals.serviceRevenue.toLocaleString()}`, color: "#534AB7" },
-                { key: "productRevenue" as ShopDetailKey, label: "商品銷售", value: `NT$${shopTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
-                { key: "selfUse" as ShopDetailKey, label: "自領材料", value: `-NT$${shopTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
-                { key: "shopUse" as ShopDetailKey, label: "店用領料", value: `${shopUseQuantity.toLocaleString()} 件`, color: "#8A5A10" },
-                { key: "discount" as ShopDetailKey, label: "折扣金額", value: `-NT$${shopTotals.discount.toLocaleString()}`, color: "#E24B4A" },
-                { key: "actualIncome" as ShopDetailKey, label: "實際收入", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
-              ].map((card) => (
-                <button key={card.label} onClick={() => setActiveShopDetail(card.key)} style={{ background: activeShopDetail === card.key ? "#F7F5FF" : "#fff", borderRadius: 12, border: activeShopDetail === card.key ? "1.5px solid #534AB7" : "0.5px solid #D3D1C7", padding: 14, textAlign: "left", cursor: "pointer" }}>
-                  <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
-                  <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
-                </button>
-              ))}
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1.08fr" : "1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", padding: 14, overflow: "hidden" }}>
+                <div style={{ fontSize: 16, color: "#2C2C2A", fontWeight: 800, marginBottom: 4 }}>店舖報表總覽</div>
+                <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 12 }}>本期最重要的三個總數</div>
+                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "1fr", gap: 10 }}>
+                  {shopMetricCards.map((card) => (
+                    <div key={card.label} style={{ minHeight: 118, background: card.background, border: `1px solid ${card.border}`, borderRadius: 18, padding: 16 }}>
+                      <div style={{ fontSize: 28, color: card.color, fontWeight: 900, lineHeight: 1, marginBottom: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.value}</div>
+                      <div style={{ fontSize: 15, color: card.color, fontWeight: 800, lineHeight: 1.5 }}>{card.label}</div>
+                      <div style={{ fontSize: 12, color: card.color, fontWeight: 700, lineHeight: 1.5, opacity: 0.75 }}>{card.note}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", padding: 14, overflow: "hidden" }}>
+                <div style={{ fontSize: 16, color: "#2C2C2A", fontWeight: 800, marginBottom: 4 }}>營收總覽</div>
+                <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 12 }}>點選卡片，下方明細同步切換</div>
+                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "repeat(2, 1fr)", gap: 8 }}>
+                  {revenueCards.map((card) => (
+                    <button key={card.label} onClick={() => setActiveShopDetail(card.key)} style={{ minHeight: 78, background: activeShopDetail === card.key ? card.background : "#fff", border: activeShopDetail === card.key ? `1.5px solid ${card.color}` : `1px solid ${card.border}`, borderRadius: 16, padding: 12, textAlign: "left", cursor: "pointer" }}>
+                      <div style={{ fontSize: 17, color: card.color, fontWeight: 900, marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.value}</div>
+                      <div style={{ fontSize: 13, color: card.color, fontWeight: 800 }}>{card.label}</div>
+                      <div style={{ fontSize: 11, color: card.color, fontWeight: 700, opacity: 0.7 }}>{card.note}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+            <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "14px 16px", borderBottom: "0.5px solid #F1EFE8", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 18, color: "#2C2C2A", fontWeight: 800 }}>💰 設計師結算概覽</div>
+                  <div style={{ fontSize: 12, color: "#888780", marginTop: 4 }}>點選設計師後，下方只顯示該設計師明細；再點一次回到全員</div>
+                </div>
+                {selectedShopDesigner && (
+                  <button onClick={() => setSelectedShopDesignerId(null)} style={{ border: "none", borderRadius: 12, background: "#F1EFE8", color: "#5F5E5A", padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>清除設計師篩選</button>
+                )}
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#F8F7F3" }}>
+                      {["設計師", "筆數", "總營業額", "商品販售", "應付 BC", "設計師實收"].map((head, index) => (
+                        <th key={head} style={{ padding: "11px 14px", fontSize: 12, color: "#888780", fontWeight: 800, textAlign: index < 2 ? "left" : "right" }}>{head}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {designerSettlementRows.map(({ designer, totals, bcReceivable }) => {
+                      const selected = selectedShopDesignerId === designer.id;
+                      return (
+                        <tr key={designer.id} onClick={() => setSelectedShopDesignerId(selected ? null : designer.id)} style={{ borderTop: "0.5px solid #F1EFE8", background: selected ? "#F7F5FF" : "#fff", cursor: "pointer" }}>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#2C2C2A", fontWeight: 800 }}>{getDesignerLabel(designer)}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 13, color: "#5F5E5A", fontWeight: 700 }}>{totals.customerCount}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#0877B5", fontWeight: 900, textAlign: "right" }}>NT${totals.totalRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#6D28D9", fontWeight: 900, textAlign: "right" }}>NT${totals.productRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#087F5B", fontWeight: 900, textAlign: "right" }}>NT${bcReceivable.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#534AB7", fontWeight: 900, textAlign: "right" }}>NT${totals.actualIncome.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
               <div style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{activeShopDetailTitle[activeShopDetail]}</div>
+                  <div style={{ fontSize: 16, color: "#2C2C2A", fontWeight: 800 }}>{selectedShopDesigner ? `${getDesignerLabel(selectedShopDesigner)} ${activeShopDetailTitle[activeShopDetail]}` : `全員 ${activeShopDetailTitle[activeShopDetail]}`}</div>
                   <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>
-                    {activeShopDetail === "actualIncome" ? "服務與商品依日期整合排列" : "點上方統計框可切換不同明細"}
+                    {selectedShopDesigner ? "目前只顯示選取設計師資料" : "未點選設計師時，依日期顯示全部所有明細"}
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#888780", fontWeight: 600 }}>共 {activeShopDetailRows.length} 筆</div>
@@ -955,37 +1095,6 @@ export default function AdminReport() {
           </>
         )}
 
-        {reportMode === "shop" && (
-        <>
-
-        {/* 年度選擇 */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          {availableYears.map(y => (
-            <button key={y} onClick={() => { setSelectedYear(y); setSelectedMonth(`${y}-${selectedMonth.slice(5)}`); }} style={{ padding: "5px 14px", borderRadius: 20, border: "none", background: selectedYear === y ? "#534AB7" : "#fff", color: selectedYear === y ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: selectedYear === y ? 600 : 400, cursor: "pointer" }}>
-              {y}
-            </button>
-          ))}
-        </div>
-
-        {/* 年度長條圖 */}
-        <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #D3D1C7" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 12 }}>{selectedYear} 年度總覽</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 100, marginBottom: 8 }}>
-            {yearlyData.map(([month, amount]) => (
-              <div key={month} onClick={() => setSelectedMonth(month)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer" }}>
-                <div style={{ width: "100%", background: selectedMonth === month ? "#534AB7" : "#AFA9EC", borderRadius: "4px 4px 0 0", height: `${Math.max((amount / maxMonthly) * 85, 2)}px`, transition: "height 0.3s" }} />
-                <div style={{ fontSize: 8, color: selectedMonth === month ? "#534AB7" : "#888780", fontWeight: selectedMonth === month ? 700 : 400 }}>{month.slice(5)}月</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderTop: "0.5px solid #F1EFE8" }}>
-            <span style={{ fontSize: 12, color: "#888780" }}>年度總業績</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: "#534AB7" }}>${yearTotal.toLocaleString()}</span>
-          </div>
-        </div>
-
-        </>
-        )}
       </div>
 
       <AdminBottomNav current={reportMode === "designer" ? "report-designer" : "report-shop"} />
