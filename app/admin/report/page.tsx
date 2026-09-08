@@ -178,6 +178,24 @@ function getReportTotals(transactions: Transaction[], productUsages: ProductUsag
   };
 }
 
+function getDesignerSettlement(designer: Designer, transactions: Transaction[], productUsages: ProductUsage[]) {
+  const totals = getReportTotals(transactions, productUsages, designer.id);
+  const serviceBase = Math.max(0, totals.serviceRevenue - Number((designer as any).commission_base_deduction || 0));
+  const serviceCommission = Math.round(serviceBase * Number(designer.commission_rate || 0));
+  const brandFee = Math.round(totals.serviceRevenue * Number((designer as any).brand_fee_rate || 0));
+  const productCommission = Math.round(totals.productRevenue * Number((designer as any).product_commission_rate || 0));
+  const designerIncome = Math.max(0, serviceCommission + productCommission - brandFee - totals.selfUse - totals.discount);
+  const bcReceivable = Math.max(0, totals.totalRevenue - designerIncome);
+  return {
+    totals,
+    serviceCommission,
+    brandFee,
+    productCommission,
+    designerIncome,
+    bcReceivable,
+  };
+}
+
 type AdminReportProps = {
   initialMode?: "shop" | "designer";
 };
@@ -633,6 +651,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   const shopUseQuantity = monthlyShopUseRecords.reduce((sum, record) => sum + Math.abs(Number(record.quantity || 0)), 0);
   const activeReportDesigner = designers.find((designer) => designer.id === (reportDesignerId || designers[0]?.id));
   const designerTotals = activeReportDesigner ? getReportTotals(monthlyTransactions, monthlyProductUsages, activeReportDesigner.id) : getReportTotals([], []);
+  const activeDesignerSettlement = activeReportDesigner ? getDesignerSettlement(activeReportDesigner, monthlyTransactions, monthlyProductUsages) : null;
   const getDesignerNameById = (designerId: number) => {
     const designer = designers.find((item) => item.id === designerId);
     return designer ? getDesignerLabel(designer) : "-";
@@ -759,18 +778,15 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     selfUse: "設計師自領材料明細",
     discount: "設計師折扣明細",
   };
-  const designerSettlementRows = designers.map((designer) => {
-    const totals = getReportTotals(monthlyTransactions, monthlyProductUsages, designer.id);
-    return {
-      designer,
-      totals,
-      bcReceivable: totals.selfUse + totals.discount,
-    };
-  });
+  const designerSettlementRows = designers.map((designer) => ({
+    designer,
+    settlement: getDesignerSettlement(designer, monthlyTransactions, monthlyProductUsages),
+  }));
+  const totalBcReceivable = designerSettlementRows.reduce((sum, row) => sum + row.settlement.bcReceivable, 0);
   const shopUseDisplayAmount = monthlyShopUseRecords.reduce((sum, record) => sum + Math.abs(Number(record.quantity || 0)), 0);
   const shopMetricCards = [
     { label: "店舖總營業額", value: `NT$${shopTotals.totalRevenue.toLocaleString()}`, note: "本期全員完成交易", background: "#EEF8FF", border: "#D6EFFF", color: "#0877B5" },
-    { label: "BC 應收總額", value: `NT$${shopTotals.actualIncome.toLocaleString()}`, note: "服務、商品扣除自領與折扣", background: "#EDFFF6", border: "#C9F7DF", color: "#087F5B" },
+    { label: "BC 應收總額", value: `NT$${totalBcReceivable.toLocaleString()}`, note: "依每位設計師結算規則", background: "#EDFFF6", border: "#C9F7DF", color: "#087F5B" },
     { label: "完成交易數", value: shopTotals.customerCount.toLocaleString(), note: "本期完成結帳", background: "#F4F0FF", border: "#E7DEFE", color: "#6D28D9" },
   ];
   const revenueCards = [
@@ -954,22 +970,23 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
                 <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#F8F7F3" }}>
-                      {["設計師", "筆數", "總營業額", "商品販售", "應付 BC", "設計師實收"].map((head, index) => (
+                      {["設計師", "筆數", "總營業額", "服務抽成", "商品抽成", "應付 BC", "設計師實收"].map((head, index) => (
                         <th key={head} style={{ padding: "11px 14px", fontSize: 12, color: "#888780", fontWeight: 800, textAlign: index < 2 ? "left" : "right" }}>{head}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {designerSettlementRows.map(({ designer, totals, bcReceivable }) => {
+                    {designerSettlementRows.map(({ designer, settlement }) => {
                       const selected = selectedShopDesignerId === designer.id;
                       return (
                         <tr key={designer.id} onClick={() => setSelectedShopDesignerId(selected ? null : designer.id)} style={{ borderTop: "0.5px solid #F1EFE8", background: selected ? "#F7F5FF" : "#fff", cursor: "pointer" }}>
                           <td style={{ padding: "12px 14px", fontSize: 15, color: "#2C2C2A", fontWeight: 800 }}>{getDesignerLabel(designer)}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 13, color: "#5F5E5A", fontWeight: 700 }}>{totals.customerCount}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#0877B5", fontWeight: 900, textAlign: "right" }}>NT${totals.totalRevenue.toLocaleString()}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#6D28D9", fontWeight: 900, textAlign: "right" }}>NT${totals.productRevenue.toLocaleString()}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#087F5B", fontWeight: 900, textAlign: "right" }}>NT${bcReceivable.toLocaleString()}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#534AB7", fontWeight: 900, textAlign: "right" }}>NT${totals.actualIncome.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 13, color: "#5F5E5A", fontWeight: 700 }}>{settlement.totals.customerCount}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#0877B5", fontWeight: 900, textAlign: "right" }}>NT${settlement.totals.totalRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#087F5B", fontWeight: 900, textAlign: "right" }}>NT${settlement.serviceCommission.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#6D28D9", fontWeight: 900, textAlign: "right" }}>NT${settlement.productCommission.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#BA7517", fontWeight: 900, textAlign: "right" }}>NT${settlement.bcReceivable.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#534AB7", fontWeight: 900, textAlign: "right" }}>NT${settlement.designerIncome.toLocaleString()}</td>
                         </tr>
                       );
                     })}
@@ -1028,7 +1045,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           <>
             <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
               {[
-                { key: "actualIncome" as DesignerDetailKey, label: "實際收入", value: `NT$${designerTotals.actualIncome.toLocaleString()}`, color: "#1D9E75" },
+                { key: "actualIncome" as DesignerDetailKey, label: "設計師實收", value: `NT$${(activeDesignerSettlement?.designerIncome || 0).toLocaleString()}`, color: "#1D9E75" },
                 { key: "serviceRevenue" as DesignerDetailKey, label: "服務業績", value: `NT$${designerTotals.serviceRevenue.toLocaleString()}`, color: "#534AB7" },
                 { key: "productRevenue" as DesignerDetailKey, label: "商品銷售", value: `NT$${designerTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
                 { key: "selfUse" as DesignerDetailKey, label: "自領材料", value: `-NT$${designerTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
@@ -1046,10 +1063,14 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
                 <div style={{ padding: "12px 14px", fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{getDesignerLabel(activeReportDesigner)} 月報摘要</div>
                 {[
                   ["服務業績", designerTotals.serviceRevenue, false],
+                  ["服務抽成", activeDesignerSettlement?.serviceCommission || 0, false],
                   ["商品銷售", designerTotals.productRevenue, false],
+                  ["商品抽成", activeDesignerSettlement?.productCommission || 0, false],
+                  ["品牌共享費", activeDesignerSettlement?.brandFee || 0, true],
                   ["自領材料", designerTotals.selfUse, true],
                   ["折扣", designerTotals.discount, true],
-                  ["實際收入", designerTotals.actualIncome, false],
+                  ["設計師實收", activeDesignerSettlement?.designerIncome || 0, false],
+                  ["應付 BC", activeDesignerSettlement?.bcReceivable || 0, false],
                 ].map(([label, value, negative]) => (
                   <div key={String(label)} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderTop: "0.5px solid #F1EFE8", fontSize: 13, color: label === "實際收入" ? "#534AB7" : "#2C2C2A", fontWeight: label === "實際收入" ? 800 : 500 }}>
                     <span>{label}</span>

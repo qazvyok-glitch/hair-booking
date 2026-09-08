@@ -314,8 +314,9 @@ export default function AdminDesigners() {
               </div>
             </div>
 
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>服務業績抽成</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>結算規則</div>
             <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>服務業績抽成</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
                 計算方式：(業績 - 底扣) × 抽成%<br/>
                 例：業績 10萬，底扣 5萬，抽 20% → (10萬-5萬)×20% = 1萬
@@ -333,6 +334,33 @@ export default function AdminDesigners() {
               </div>
               <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#534AB7" }}>
                 預覽：業績 $100,000 → 抽成 ${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}
+              </div>
+            </div>
+
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>品牌社群資源共享費</div>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
+                計算方式：總服務業績 × %，會從設計師抽成中扣除並列入 BC 應收。
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input value={Math.round((form.brand_fee_rate || 0) * 100) || ""} onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
+              </div>
+            </div>
+
+            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>商品販售抽成</div>
+              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
+                計算方式：商品銷售額 × %，報表會獨立顯示商品業績與商品抽成。
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  value={Math.round((form.product_commission_rate || 0) * 100) || ""}
+                  onChange={(e) => setForm({ ...form, product_commission_rate: (parseInt(e.target.value) || 0) / 100 })}
+                  type="number" min="0" max="100" placeholder="0"
+                  style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
 
@@ -364,33 +392,6 @@ export default function AdminDesigners() {
               </div>
               <div onClick={() => setForm({ ...form, is_manager: !form.is_manager })} style={{ width: 44, height: 24, borderRadius: 12, background: form.is_manager ? "#534AB7" : "#D3D1C7", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
                 <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, left: form.is_manager ? 22 : 2, transition: "left 0.2s" }} />
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>品牌社群資源共享費</div>
-            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
-                計算方式：總服務業績 × %<br/>從抽成中扣除
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input value={Math.round((form.brand_fee_rate || 0) * 100) || ""} onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8 }}>商品抽成</div>
-            <div style={{ background: "#F1EFE8", borderRadius: 10, padding: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
-                計算方式：商品銷售額 × %
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  value={Math.round((form.product_commission_rate || 0) * 100) || ""}
-                  onChange={(e) => setForm({ ...form, product_commission_rate: (parseInt(e.target.value) || 0) / 100 })}
-                  type="number" min="0" max="100" placeholder="0"
-                  style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                />
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
               </div>
             </div>
 
