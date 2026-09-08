@@ -418,25 +418,13 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   }
 
   async function applyChinesePdfFont(doc: jsPDF) {
-    const fontCandidates = [
-      { file: "NotoSansCJKsc-Medium.otf", family: "NotoSansCJKMedium" },
-      { file: "NotoSansTC.ttf", family: "NotoSansTC" },
-    ];
-    for (const font of fontCandidates) {
-      try {
-        const response = await fetch(`/fonts/${font.file}`);
-        if (!response.ok) continue;
-        const fontBase64 = arrayBufferToBase64(await response.arrayBuffer());
-        doc.addFileToVFS(font.file, fontBase64);
-        doc.addFont(font.file, font.family, "normal");
-        doc.addFont(font.file, font.family, "bold");
-        doc.setFont(font.family, "normal");
-        return;
-      } catch (error) {
-        console.warn("PDF font load fallback", font.file, error);
-      }
-    }
-    throw new Error("中文字型載入失敗");
+    const response = await fetch("/fonts/NotoSansTC.ttf");
+    if (!response.ok) throw new Error("中文字型載入失敗");
+    const fontBase64 = arrayBufferToBase64(await response.arrayBuffer());
+    doc.addFileToVFS("NotoSansTC.ttf", fontBase64);
+    doc.addFont("NotoSansTC.ttf", "NotoSansTC", "normal");
+    doc.addFont("NotoSansTC.ttf", "NotoSansTC", "bold");
+    doc.setFont("NotoSansTC", "normal");
   }
 
   async function loadImageAsDataUrl(path: string) {
