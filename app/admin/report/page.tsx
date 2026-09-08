@@ -842,14 +842,13 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "bold");
       doc.setFontSize(18);
-      doc.text("每日服務與商品販售明細", 30, 52);
-      doc.setFont("NotoSansTC", "normal");
-      doc.setFontSize(9);
-      doc.text(`${targetLabel}｜${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}｜依日期排列`, 30, 72);
+      doc.text("每日明細", 30, 52);
       autoTable(doc, {
-        startY: 86,
+        startY: 72,
+        head: [["訂單日期", "分類", "品項", "金額", "折扣", "設計師", "支付方式"]],
         body: dailySalesRows.length ? dailySalesRows.map((row) => [row[1], row[2], row[3], row[5], row[6] || "0", row[7], row[8]]) : [["此區間尚無服務或商品販售明細", "", "", "", "", "", ""]],
         styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 11, cellPadding: { top: 4, right: 4, bottom: 4, left: 4 }, overflow: "linebreak", textColor: [0, 0, 0], lineColor: [255, 255, 255], lineWidth: 0.45, minCellHeight: 21 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [23, 111, 159], textColor: [255, 255, 255], fontSize: 10.5, halign: "left", cellPadding: { top: 6, right: 4, bottom: 6, left: 4 } },
         alternateRowStyles: { fillColor: [216, 231, 247] },
         bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: {
