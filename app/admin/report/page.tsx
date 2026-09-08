@@ -553,7 +553,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         ]);
       const productTotal = productRows.reduce((sum, row) => sum + Number(String(row[3] || "0").replace(/[^\d.-]/g, "")), 0);
       const serviceTotal = reports.reduce((sum, item) => sum + item.report.serviceRevenue, 0);
-      const totalDue = feeTotal;
+      const totalDue = feeTotal + productTotal;
       const detailRows = orderRows.map((row) => [
         row["訂單號碼"],
         row["訂單時間"],
@@ -689,7 +689,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         showHead: "never",
         body: [
           ["費用小計", feeTotal.toLocaleString()],
-          ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
+          ["自領商品小計", productTotal.toLocaleString()],
           ["本月應繳總額", formatPdfMoney(totalDue)],
         ],
         theme: "grid",
