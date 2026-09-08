@@ -717,19 +717,20 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
       const productUsageCount = productRows.reduce((sum, row) => sum + Number(row[1] || 0), 0);
       const feeSvg = renderInvoiceTable({
-        y: 405,
+        y: 470,
         title: "費用明細",
         columns: [
           { label: "費用項目", width: 440, maxChars: 24 },
           { label: "數量", width: 115, align: "right" },
           { label: "單價", width: 115, align: "right" },
           { label: "金額", width: 150, align: "right" },
-          { label: "備註", width: 294, maxChars: 22 },
+          { label: "備註", width: 294, maxChars: 18 },
         ],
         rows: feeInvoiceRows,
+        rowHeight: 56,
         theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
       });
-      const productY = feeSvg.endY + 85;
+      const productY = feeSvg.endY + 56;
       const productHeight = 58 + 118 + 48;
       const productEndY = productY + productHeight;
       const productSvg = `<g>
@@ -752,7 +753,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="none" stroke="#D96724" stroke-width="3.2"/>
       </g>`;
       const totalSvg = renderInvoiceTable({
-        y: productEndY + 92,
+        y: productEndY + 66,
         title: "本月應繳總額",
         columns: [
           { label: "", width: 610, align: "center" },
