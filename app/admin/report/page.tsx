@@ -855,15 +855,15 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         const width = 1114;
         const headerY = 152;
         const headerHeight = 70;
-        const rowHeight = 78;
+        const rowHeight = 74;
         const columns = [
-          { label: "訂單日期", x: 0, width: 164, align: "start" as const },
-          { label: "分類", x: 164, width: 136, align: "start" as const },
-          { label: "品項", x: 300, width: 414, align: "start" as const },
-          { label: "金額", x: 714, width: 110, align: "end" as const },
-          { label: "折扣", x: 824, width: 80, align: "end" as const },
-          { label: "設計師", x: 904, width: 104, align: "start" as const },
-          { label: "支付方式", x: 1008, width: 106, align: "start" as const },
+          { label: "訂單日期", x: 0, width: 188, align: "start" as const },
+          { label: "分類", x: 188, width: 126, align: "start" as const },
+          { label: "品項", x: 314, width: 376, align: "start" as const },
+          { label: "金額", x: 690, width: 108, align: "end" as const },
+          { label: "折扣", x: 798, width: 80, align: "end" as const },
+          { label: "設計師", x: 878, width: 108, align: "start" as const },
+          { label: "支付方式", x: 986, width: 128, align: "start" as const },
         ];
         const rowsSvg = items.map((item, index) => {
           const rowY = headerY + headerHeight + index * rowHeight;
@@ -872,13 +872,13 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           const color = isProduct ? "#E02A1F" : "#20262C";
           return `<g>
             <rect x="${x}" y="${rowY}" width="${width}" height="${rowHeight}" fill="${fill}"/>
-            ${renderText(item.date, x + 12, rowY + 31, { size: 19, color: isProduct ? "#E02A1F" : "#164F94", weight: 800, maxChars: 18 })}
-            ${renderText(item.category, x + 176, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 600, maxChars: 9 })}
-            ${renderText(item.item, x + 312, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 24, lineHeight: 24 })}
-            ${renderText(item.amount.toLocaleString(), x + 812, rowY + 31, { anchor: "end", size: 19, color, weight: 700 })}
-            ${renderText(item.discount.toLocaleString(), x + 892, rowY + 31, { anchor: "end", size: 19, color, weight: 700 })}
-            ${renderText(item.designer, x + 916, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 8 })}
-            ${renderText(item.payment, x + 1020, rowY + 31, { size: 19, color, weight: isProduct ? 800 : 500, maxChars: 11 })}
+            ${renderText(item.date, x + 12, rowY + 30, { size: 16, color: isProduct ? "#D7231A" : "#164F94", weight: 700, maxChars: 18 })}
+            ${renderText(item.category, x + 200, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 600, maxChars: 9 })}
+            ${renderText(item.item, x + 326, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 24, lineHeight: 22 })}
+            ${renderText(item.amount.toLocaleString(), x + 786, rowY + 30, { anchor: "end", size: 16, color, weight: 700 })}
+            ${renderText(item.discount.toLocaleString(), x + 866, rowY + 30, { anchor: "end", size: 16, color, weight: 700 })}
+            ${renderText(item.designer, x + 890, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 8 })}
+            ${renderText(item.payment, x + 998, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 12 })}
           </g>`;
         }).join("");
         const totalY = headerY + headerHeight + items.length * rowHeight + 16;
@@ -891,10 +891,11 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         </g>` : "";
         const emptySvg = !items.length ? renderText("此區間尚無每日明細", x + 12, headerY + headerHeight + 52, { size: 22, color: "#59636D", weight: 700 }) : "";
         return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+          <style>text{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;dominant-baseline:alphabetic;}</style>
           <rect width="100%" height="100%" fill="#fff"/>
           ${renderText("每日明細", 38, 86, { size: 42, color: "#20262C", weight: 900 })}
           <rect x="${x}" y="${headerY}" width="${width}" height="${headerHeight}" fill="#009799"/>
-          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 44, { size: 24, color: "#fff", weight: 900 })).join("")}
+          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 44, { size: 22, color: "#fff", weight: 800 })).join("")}
           ${rowsSvg}
           ${emptySvg}
           ${totalSvg}
