@@ -613,83 +613,104 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       doc.text(`Invoice：${reportStartDate.replace(/-/g, "").slice(2)}BC${String(exportDesigners[0]?.id || 0).padStart(2, "0")}`, 330, 190);
       doc.text(`Date：${getPdfDateLabel(reportStartDate)}`, 330, 214);
 
-      doc.setDrawColor(52, 127, 194);
-      doc.setLineWidth(1.6);
-      doc.roundedRect(34, 244, pageWidth - 68, Math.max(54, 32 + feeRows.length * 23), 9, 9);
+      const drawPdfSectionTitle = (title: string, y: number, color: [number, number, number]) => {
+        doc.setFillColor(...color);
+        doc.roundedRect(34, y, pageWidth - 68, 30, 8, 8, "F");
+        doc.setFillColor(...color);
+        doc.rect(34, y + 15, pageWidth - 68, 15, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("NotoSansTC", "bold");
+        doc.setFontSize(16);
+        doc.text(title, pageWidth / 2, y + 20, { align: "center" });
+      };
+
+      const feeStartY = 244;
+      drawPdfSectionTitle("費用明細", feeStartY, [24, 111, 174]);
       autoTable(doc, {
-        startY: 250,
-        head: [["費用明細", "數量", "單價", "金額", "備註"]],
+        startY: feeStartY + 30,
+        head: [["費用項目", "數量", "單價", "金額", "備註"]],
         body: [
           ...feeRows,
           ["費用小計", "", "", feeTotal.toLocaleString(), ""],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 4.5, textColor: [18, 33, 48], lineColor: [255, 255, 255], lineWidth: 0.8 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [58, 139, 211], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
-        alternateRowStyles: { fillColor: [202, 224, 244] },
-        bodyStyles: { fillColor: [235, 244, 252] },
+        theme: "grid",
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 5, textColor: [22, 33, 43], lineColor: [207, 225, 240], lineWidth: 0.6 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [232, 244, 255], textColor: [35, 74, 106], fontSize: 10.5, halign: "center", lineColor: [207, 225, 240], lineWidth: 0.7 },
+        alternateRowStyles: { fillColor: [242, 248, 254] },
+        bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: { 0: { cellWidth: 205 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 55, halign: "right" }, 3: { cellWidth: 70, halign: "right" }, 4: { cellWidth: 130 } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
           if (data.row.index === feeRows.length) {
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [202, 224, 244];
-            data.cell.styles.lineColor = [35, 88, 140];
+            data.cell.styles.fillColor = [215, 235, 250];
+            data.cell.styles.lineColor = [24, 111, 174];
             data.cell.styles.lineWidth = 1.1;
           }
         },
       });
+      doc.setDrawColor(24, 111, 174);
+      doc.setLineWidth(1.4);
+      doc.roundedRect(34, feeStartY, pageWidth - 68, (doc as any).lastAutoTable.finalY - feeStartY, 8, 8);
 
-      doc.setDrawColor(215, 91, 26);
-      doc.setLineWidth(1.6);
-      doc.roundedRect(34, (doc as any).lastAutoTable.finalY + 32, pageWidth - 68, Math.max(54, 32 + (productRows.length ? productRows.length : 1) * 23), 9, 9);
+      const productStartY = (doc as any).lastAutoTable.finalY + 34;
+      drawPdfSectionTitle("商品明細", productStartY, [219, 103, 36]);
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 38,
-        head: [["商品明細", "數量", "品名", "金額"]],
+        startY: productStartY + 30,
+        head: [["日期", "數量", "品名", "金額"]],
         body: [
           ...(productRows.length ? productRows : [["", "", "本期無自領商品", "0"]]),
           ["自領商品合計", "", "", productTotal.toLocaleString()],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 4.5, textColor: [48, 28, 16], lineColor: [255, 255, 255], lineWidth: 0.8 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [235, 139, 88], textColor: [255, 255, 255], fontSize: 14, halign: "center" },
-        alternateRowStyles: { fillColor: [248, 213, 195] },
-        bodyStyles: { fillColor: [253, 236, 226] },
+        theme: "grid",
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 9.5, cellPadding: 5, textColor: [52, 34, 24], lineColor: [242, 204, 181], lineWidth: 0.6 },
+        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [255, 236, 224], textColor: [139, 70, 32], fontSize: 10.5, halign: "center", lineColor: [242, 204, 181], lineWidth: 0.7 },
+        alternateRowStyles: { fillColor: [255, 244, 238] },
+        bodyStyles: { fillColor: [255, 255, 255] },
         columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 55, halign: "right" }, 2: { cellWidth: 270 }, 3: { cellWidth: 95, halign: "right" } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
           if (data.row.index === (productRows.length ? productRows.length : 1)) {
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fillColor = [248, 213, 195];
-            data.cell.styles.lineColor = [195, 83, 21];
+            data.cell.styles.fillColor = [250, 221, 204];
+            data.cell.styles.lineColor = [219, 103, 36];
             data.cell.styles.lineWidth = 1.1;
           }
         },
       });
+      doc.setDrawColor(219, 103, 36);
+      doc.setLineWidth(1.4);
+      doc.roundedRect(34, productStartY, pageWidth - 68, (doc as any).lastAutoTable.finalY - productStartY, 8, 8);
 
-      doc.setDrawColor(94, 190, 75);
-      doc.setLineWidth(1.8);
-      doc.roundedRect(34, (doc as any).lastAutoTable.finalY + 36, pageWidth - 68, 111, 10, 10);
+      const totalStartY = (doc as any).lastAutoTable.finalY + 38;
+      drawPdfSectionTitle("本月應繳總額", totalStartY, [69, 174, 73]);
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable.finalY + 42,
-        head: [["本月應繳總額", ""]],
+        startY: totalStartY + 30,
+        showHead: "never",
         body: [
           ["費用小計", feeTotal.toLocaleString()],
           ["自領商品小計", productTotal ? productTotal.toLocaleString() : "-"],
-          ["本月應繳總額", totalDue.toLocaleString()],
+          ["本月應繳總額", formatPdfMoney(totalDue)],
         ],
-        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 12, cellPadding: 5.5, textColor: [20, 45, 20], lineColor: [94, 190, 75], lineWidth: 0.9 },
-        headStyles: { font: "NotoSansTC", fontStyle: "bold", fillColor: [116, 205, 88], textColor: [255, 255, 255], fontSize: 16, halign: "center" },
-        bodyStyles: { fillColor: [245, 255, 241] },
+        theme: "grid",
+        styles: { font: "NotoSansTC", fontStyle: "normal", fontSize: 13, cellPadding: 8, textColor: [22, 60, 30], lineColor: [111, 197, 109], lineWidth: 0.75 },
+        bodyStyles: { fillColor: [249, 255, 247] },
         columnStyles: { 0: { cellWidth: 340, halign: "center" }, 1: { cellWidth: 175, halign: "right" } },
         margin: { left: 40, right: 40 },
         didParseCell: (data) => {
           if (data.row.index === 2) {
             data.cell.styles.fontStyle = "bold";
-            data.cell.styles.fontSize = 14;
-            data.cell.styles.lineColor = [105, 190, 75];
+            data.cell.styles.fontSize = 15;
+            data.cell.styles.textColor = [36, 135, 73];
+            data.cell.styles.fillColor = [235, 252, 238];
+            data.cell.styles.lineColor = [69, 174, 73];
             data.cell.styles.lineWidth = 1.2;
           }
         },
       });
+      doc.setDrawColor(69, 174, 73);
+      doc.setLineWidth(1.5);
+      doc.roundedRect(34, totalStartY, pageWidth - 68, (doc as any).lastAutoTable.finalY - totalStartY, 8, 8);
 
       doc.addPage("a4", "portrait");
       doc.setFont("NotoSansTC", "normal");
