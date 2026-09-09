@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+import { appRoutes } from "../../lib/appRoutes";
 
 type Announcement = {
   id: number;
@@ -102,8 +103,8 @@ export default function NewsPage() {
       {/* 底部導覽 */}
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", display: "flex", zIndex: 50 }}>
         {[
-          { icon: "🏠", label: "首頁", path: "/" },
-          { icon: "✂️", label: "預約", path: "/booking/step/1" },
+          { icon: "🏠", label: "首頁", path: appRoutes.customer.home },
+          { icon: "✂️", label: "預約", path: appRoutes.customer.bookingStart },
           { icon: "📢", label: "消息", path: "/news", active: true },
           { icon: "👤", label: "會員", path: "/member/profile" },
           { icon: "ℹ️", label: "關於", path: "/about" },

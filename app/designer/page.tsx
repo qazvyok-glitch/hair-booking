@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
+import { appRoutes } from "../../lib/appRoutes";
 
 export default function DesignerEntryPage() {
-  redirect("/designer/dashboard");
+  redirect(appRoutes.designer.home);
 }

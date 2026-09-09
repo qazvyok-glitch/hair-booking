@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { appRoutes } from "../../../../lib/appRoutes";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
 import { useLanguageStore, type Language } from "../../../../store/languageStore";
@@ -223,7 +224,7 @@ export default function Step2() {
   const isEnglish = language === "en";
 
   useEffect(() => {
-    if (!designer) { router.push("/booking/step/1"); return; }
+    if (!designer) { router.push(appRoutes.customer.bookingStart); return; }
     Promise.all([
       supabase.from("service_categories").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("services").select("*").eq("is_active", true).order("sort_order"),
@@ -274,7 +275,7 @@ export default function Step2() {
   return (
     <div style={{ padding: "20px 16px 120px" }}>
       <button
-        onClick={() => router.push("/booking/step/1")}
+        onClick={() => router.push(appRoutes.customer.bookingStart)}
         style={{
           background: "transparent",
           border: "none",
@@ -472,7 +473,7 @@ export default function Step2() {
         gap: 10,
       }}>
         <button
-          onClick={() => { if (serviceIds.length > 0) router.push("/booking/step/3"); }}
+          onClick={() => { if (serviceIds.length > 0) router.push(appRoutes.customer.bookingStep3); }}
           disabled={serviceIds.length === 0}
           style={{
             flex: 1,

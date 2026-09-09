@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { appRoutes } from "../../../lib/appRoutes";
 
 export default function MemberSetup() {
   const router = useRouter();
@@ -24,7 +25,7 @@ export default function MemberSetup() {
         if (data.phone) setPhone(data.phone);
         if (data.referrer) setReferrer(data.referrer);
         if (data.name && data.phone) {
-          router.push("/booking/step/1");
+          router.push(appRoutes.customer.bookingStart);
           return;
         }
       }
@@ -50,7 +51,7 @@ export default function MemberSetup() {
       customer_no: existing?.customer_no || undefined,
     });
     await supabase.auth.updateUser({ data: { full_name: name, phone } });
-    router.push("/booking/step/1");
+    router.push(appRoutes.customer.bookingStart);
   }
 
   if (loading) return (

@@ -1,14 +1,15 @@
 "use client";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { appRoutes } from "../../lib/appRoutes";
 import { useSettingsStore, fontSizes } from "../../store/settingsStore";
 import { useLanguageStore } from "../../store/languageStore";
 
 const steps = [
-  { label: { zh: "設計師", en: "Stylist" }, path: "/booking/step/1" },
-  { label: { zh: "服務", en: "Service" }, path: "/booking/step/2" },
-  { label: { zh: "時間", en: "Time" }, path: "/booking/step/3" },
-  { label: { zh: "確認", en: "Confirm" }, path: "/booking/step/4" },
+  { label: { zh: "設計師", en: "Stylist" }, path: appRoutes.customer.bookingStart },
+  { label: { zh: "服務", en: "Service" }, path: appRoutes.customer.bookingStep2 },
+  { label: { zh: "時間", en: "Time" }, path: appRoutes.customer.bookingStep3 },
+  { label: { zh: "確認", en: "Confirm" }, path: appRoutes.customer.bookingStep4 },
 ];
 
 export default function BookingLayout({ children }: { children: React.ReactNode }) {

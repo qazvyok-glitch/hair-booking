@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
+import { appRoutes } from "../../../../lib/appRoutes";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
 import { useLanguageStore } from "../../../../store/languageStore";
@@ -167,7 +168,7 @@ export default function Step4() {
       <div style={{ padding: 24, textAlign: "center" }}>
         <div style={{ color: "#888780", fontSize: 14, marginBottom: 16 }}>{isEnglish ? "Please start your booking from step 1." : "請從第一步開始預約"}</div>
         <button
-          onClick={() => router.push("/booking/step/1")}
+          onClick={() => router.push(appRoutes.customer.bookingStart)}
           style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 10, padding: "10px 24px", fontSize: 14, cursor: "pointer" }}
         >
           {isEnglish ? "Start Over" : "重新開始"}
@@ -223,14 +224,14 @@ export default function Step4() {
       date,
       time,
     }));
-    router.push("/booking/success");
+    router.push(appRoutes.customer.bookingSuccess);
     setTimeout(() => reset(), 1000);
   }
 
   return (
     <div style={{ padding: "20px 16px 120px" }}>
       <button
-        onClick={() => router.push("/booking/step/3")}
+        onClick={() => router.push(appRoutes.customer.bookingStep3)}
         style={{
           background: "transparent",
           border: "none",

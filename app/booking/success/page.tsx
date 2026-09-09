@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { appRoutes } from "../../../lib/appRoutes";
 import { useSettingsStore, fontSizes } from "../../../store/settingsStore";
 import { useLanguageStore } from "../../../store/languageStore";
 
@@ -161,14 +162,14 @@ export default function BookingSuccess() {
         </div>
 
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push(appRoutes.customer.home)}
           style={{ width: "100%", padding: "14px 0", background: "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" }}
         >
           {isEnglish ? "Back to Home" : "回到首頁"}
         </button>
 
         <button
-          onClick={() => router.push("/booking/my-bookings")}
+          onClick={() => router.push(appRoutes.customer.myBookings)}
           style={{ width: "100%", padding: "14px 0", background: "transparent", color: "#534AB7", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 8 }}
         >
           {isEnglish ? "View My Bookings →" : "查看我的預約 →"}

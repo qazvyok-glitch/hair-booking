@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { appRoutes } from "../../../lib/appRoutes";
 
 type Booking = {
   id: number;
@@ -60,7 +61,7 @@ export default function MemberProfile() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    router.push("/");
+    router.push(appRoutes.customer.home);
   }
 
   function getDesignerName(id: number) {
@@ -177,7 +178,7 @@ export default function MemberProfile() {
         )}
 
         <div style={{ textAlign: "center", marginTop: 16, paddingBottom: 32 }}>
-          <a href="/booking/step/1" style={{ display: "inline-block", padding: "12px 32px", background: "#534AB7", color: "#fff", borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+          <a href={appRoutes.customer.bookingStart} style={{ display: "inline-block", padding: "12px 32px", background: "#534AB7", color: "#fff", borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
             ＋ 新增預約
           </a>
         </div>

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { appRoutes } from "../../../lib/appRoutes";
 
 export default function DesignerLogin() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function DesignerLogin() {
       nickname: data.designers.nickname,
       is_manager: data.designers.is_manager || false,
     }));
-    router.push("/designer/dashboard");
+    router.push(appRoutes.designer.home);
   }
 
   return (

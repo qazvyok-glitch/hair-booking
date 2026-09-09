@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import { appRoutes } from "../lib/appRoutes";
 import { useBookingStore } from "../store/bookingStore";
 import { useLanguageStore } from "../store/languageStore";
 
@@ -41,7 +42,7 @@ export default function Home() {
 
     setCustomerName(customer?.name || booking?.customer_name || "");
     setLoading(false);
-    router.push("/booking/step/1");
+    router.push(appRoutes.customer.bookingStart);
   }
 
   return (
@@ -124,7 +125,7 @@ export default function Home() {
             {loading ? (isEnglish ? "Checking..." : "查詢中...") : (isEnglish ? "Book Now" : "立即預約")}
           </button>
           <button
-            onClick={() => router.push("/booking/my-bookings")}
+            onClick={() => router.push(appRoutes.customer.myBookings)}
             style={{ background: "transparent", color: "#fff", border: "none", padding: "2px 0 0", fontSize: 14, fontWeight: 800, cursor: "pointer" }}
           >
             {isEnglish ? "👤 View my profile and bookings →" : "👤 查看我的個人資料及預約 →"}

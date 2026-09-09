@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { appRoutes } from "../../../../lib/appRoutes";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
 import { useLanguageStore } from "../../../../store/languageStore";
@@ -238,7 +239,7 @@ export default function Step1() {
 
       <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fff", borderTop: "0.5px solid #D3D1C7", padding: "12px 16px 24px" }}>
         <button
-          onClick={() => { if (canContinue) router.push("/booking/step/2"); }}
+          onClick={() => { if (canContinue) router.push(appRoutes.customer.bookingStep2); }}
           disabled={!canContinue}
           style={{
             width: "100%", padding: "13px 0",

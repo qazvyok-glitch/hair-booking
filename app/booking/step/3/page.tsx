@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { appRoutes } from "../../../../lib/appRoutes";
 import { supabase } from "../../../../lib/supabase";
 import { useBookingStore } from "../../../../store/bookingStore";
 import { useLanguageStore } from "../../../../store/languageStore";
@@ -76,7 +77,7 @@ export default function Step3() {
   const isEnglish = language === "en";
 
   useEffect(() => {
-    if (!designer) { router.push("/booking/step/1"); return; }
+    if (!designer) { router.push(appRoutes.customer.bookingStart); return; }
     Promise.all([
       supabase.from("designer_off_days").select("*"),
       supabase.from("designer_off_slots").select("*"),
@@ -150,7 +151,7 @@ export default function Step3() {
   return (
     <div style={{ padding: "20px 16px 120px" }}>
       <button
-        onClick={() => router.push("/booking/step/2")}
+        onClick={() => router.push(appRoutes.customer.bookingStep2)}
         style={{
           background: "transparent",
           border: "none",
@@ -250,7 +251,7 @@ export default function Step3() {
         display: "flex", gap: 10,
       }}>
         <button
-          onClick={() => { if (date && time) router.push("/booking/step/4"); }}
+          onClick={() => { if (date && time) router.push(appRoutes.customer.bookingStep4); }}
           disabled={!date || !time}
           style={{
             flex: 1, padding: "13px 0",
