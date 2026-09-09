@@ -41,7 +41,19 @@ Add these environment variables on Vercel to enable LINE push notifications afte
 
 ```bash
 LINE_CHANNEL_ACCESS_TOKEN=your_line_messaging_api_channel_access_token
-LINE_BOOKING_NOTIFY_TO=target_user_group_or_room_id
+LINE_CHANNEL_SECRET=your_line_messaging_api_channel_secret
 ```
 
-`LINE_BOOKING_NOTIFY_TO` can be a LINE user ID, group ID, or room ID.
+Set the LINE Developers webhook URL to:
+
+```text
+https://hair-booking-v2-public.vercel.app/api/line/webhook
+```
+
+After the bot is added to the target chat or group, send this text in LINE:
+
+```text
+綁定預約通知
+```
+
+The app will save that chat or group as the booking notification target. You can still set `LINE_BOOKING_NOTIFY_TO` manually if you prefer a fixed user, group, or room ID.

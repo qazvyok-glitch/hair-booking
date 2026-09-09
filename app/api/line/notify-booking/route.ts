@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pushLineText, getLineBookingTargetId, hasLinePushConfig } from "../../../../lib/line";
+import { pushLineText, getLineEnvTargetId, hasLineTokenConfig } from "../../../../lib/line";
 import { supabase } from "../../../../lib/supabase";
 
 type BookingRow = {
@@ -31,6 +31,19 @@ function extractCustomerNote(note?: string | null) {
     .trim();
 }
 
+async function getLineBookingTargetId() {
+  const envTargetId = getLineEnvTargetId();
+  if (envTargetId) return envTargetId;
+
+  const { data } = await supabase
+    .from("shop_info")
+    .select("value")
+    .eq("key", "line_booking_notify_to")
+    .eq("is_active", true)
+    .maybeSingle();
+  return data?.value || "";
+}
+
 export async function POST(request: NextRequest) {
   let bookingId: number | null = null;
 
@@ -45,9 +58,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Missing bookingId" }, { status: 400 });
   }
 
-  if (!hasLinePushConfig()) {
-    console.info("LINE_BOOKING_NOTIFY_SKIPPED", { reason: "LINE config missing", bookingId });
-    return NextResponse.json({ ok: true, skipped: true, reason: "LINE config missing" });
+  if (!hasLineTokenConfig()) {
+    console.info("LINE_BOOKING_NOTIFY_SKIPPED", { reason: "LINE token missing", bookingId });
+    return NextResponse.json({ ok: true, skipped: true, reason: "LINE token missing" });
+  }
+
+  const lineTargetId = await getLineBookingTargetId();
+  if (!lineTargetId) {
+    console.info("LINE_BOOKING_NOTIFY_SKIPPED", { reason: "LINE target missing", bookingId });
+    return NextResponse.json({ ok: true, skipped: true, reason: "LINE target missing" });
   }
 
   const { data: booking, error: bookingError } = await supabase
@@ -94,7 +113,7 @@ export async function POST(request: NextRequest) {
   ].filter(Boolean);
 
   try {
-    await pushLineText(getLineBookingTargetId(), lines.join("\n"));
+    await pushLineText(lineTargetId, lines.join("\n"));
   } catch (error) {
     console.error("LINE_BOOKING_NOTIFY_FAILED", error);
     return NextResponse.json({ ok: false, error: "LINE push failed" }, { status: 502 });
@@ -102,4 +121,3 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-
