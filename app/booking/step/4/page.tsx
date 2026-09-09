@@ -190,7 +190,7 @@ export default function Step4() {
       return;
     }
 
-    const { error } = await supabase.from("bookings").insert({
+    const { data: booking, error } = await supabase.from("bookings").insert({
       designer_id: designer!.id === 0 ? null : designer!.id,
       service_ids: serviceIds,
       booking_date: date,
@@ -202,11 +202,20 @@ export default function Step4() {
       duration_minutes: getSelectedDurationMinutes(selectedServices),
       reference_image_url: referenceImageUrl,
       user_id: session?.user?.id || null,
-    });
+    }).select("id").single();
     if (error) {
       alert(isEnglish ? "Booking failed. Please try again." : "預約失敗，請再試一次");
       setSubmitting(false);
       return;
+    }
+    if (booking?.id) {
+      fetch("/api/line/notify-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: booking.id }),
+      }).catch((notifyError) => {
+        console.warn("LINE booking notification failed", notifyError);
+      });
     }
     sessionStorage.setItem("lastBooking", JSON.stringify({
       designerName: designer!.name,

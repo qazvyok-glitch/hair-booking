@@ -34,3 +34,14 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## LINE booking notification
+
+Add these environment variables on Vercel to enable LINE push notifications after a customer submits a booking:
+
+```bash
+LINE_CHANNEL_ACCESS_TOKEN=your_line_messaging_api_channel_access_token
+LINE_BOOKING_NOTIFY_TO=target_user_group_or_room_id
+```
+
+`LINE_BOOKING_NOTIFY_TO` can be a LINE user ID, group ID, or room ID.
