@@ -8,6 +8,7 @@ type Booking = {
   id: number;
   customer_name: string;
   customer_phone: string;
+  customer_email?: string | null;
   booking_date: string;
   booking_time: string;
   service_ids: number[];
@@ -16,6 +17,7 @@ type Booking = {
   reference_image_url?: string;
   designer_id: number;
   user_id: string;
+  duration_minutes?: number | null;
   is_test_data: boolean;
   locked_at?: string | null;
 };
@@ -30,13 +32,14 @@ type ViewMode = "calendar" | "list";
 type AuditLog = {
   id: number;
   booking_id: number;
-  action: "created" | "updated" | "status_changed" | "deleted";
+  action: "created" | "updated" | "status_changed" | "deleted" | "unlocked" | "relocked";
   before_data: Record<string, unknown> | null;
   after_data: Record<string, unknown> | null;
   actor_username: string;
   actor_role: string;
   is_test_data: boolean;
   created_at: string;
+  reason?: string | null;
 };
 type ScheduleRow =
   | { type: "booking"; id: number; booking: Booking; date: string; time: string; designer_id: number; status: string }
@@ -129,6 +132,8 @@ function getAuditActionLabel(action: AuditLog["action"]) {
   if (action === "created") return "建立預約";
   if (action === "status_changed") return "變更狀態";
   if (action === "deleted") return "刪除預約";
+  if (action === "unlocked") return "解除鎖定";
+  if (action === "relocked") return "完成更正並鎖定";
   return "修改資料";
 }
 
@@ -147,6 +152,7 @@ function formatAuditValue(key: string, value: unknown, designers: Designer[], se
 }
 
 function getAuditChanges(log: AuditLog) {
+  if (log.action === "unlocked" || log.action === "relocked") return [];
   const before = log.before_data || {};
   const after = log.after_data || {};
   const source = log.action === "deleted" ? before : after;
@@ -202,6 +208,14 @@ export default function AdminBookings() {
   const [auditBooking, setAuditBooking] = useState<Booking | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [isOwner] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return JSON.parse(sessionStorage.getItem("adminSession") || "{}").role !== "manager"; } catch { return false; }
+  });
+  const [unlockReason, setUnlockReason] = useState("");
+  const [correctionSummary, setCorrectionSummary] = useState("");
+  const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [correctionDraft, setCorrectionDraft] = useState({ customer_name: "", customer_phone: "", customer_email: "", designer_id: "", booking_date: "", booking_time: "", duration_minutes: "60", service_ids: [] as number[], note: "" });
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -213,7 +227,6 @@ export default function AdminBookings() {
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
-
     async function fetchData() {
       const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }, { data: offDayData }, { data: offSlotData }, { data: configData }] = await Promise.all([
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
@@ -273,11 +286,24 @@ export default function AdminBookings() {
 
   async function openAuditLog(booking: Booking) {
     setAuditBooking(booking);
+    setUnlockReason("");
+    setCorrectionSummary("");
+    setCorrectionDraft({
+      customer_name: booking.customer_name || "",
+      customer_phone: booking.customer_phone || "",
+      customer_email: booking.customer_email || "",
+      designer_id: booking.designer_id ? String(booking.designer_id) : "",
+      booking_date: booking.booking_date,
+      booking_time: booking.booking_time,
+      duration_minutes: String(booking.duration_minutes || 60),
+      service_ids: booking.service_ids || [],
+      note: booking.note || "",
+    });
     setAuditLogs([]);
     setAuditLoading(true);
     const { data, error } = await supabase
       .from("booking_audit_logs")
-      .select("id, booking_id, action, before_data, after_data, actor_username, actor_role, is_test_data, created_at")
+      .select("id, booking_id, action, before_data, after_data, actor_username, actor_role, is_test_data, created_at, reason")
       .eq("booking_id", booking.id)
       .order("created_at", { ascending: false });
     if (error) {
@@ -286,6 +312,77 @@ export default function AdminBookings() {
       setAuditLogs((data || []) as AuditLog[]);
     }
     setAuditLoading(false);
+  }
+
+  async function unlockForCorrection() {
+    if (!auditBooking || unlockReason.trim().length < 4) {
+      alert("請填寫至少 4 個字的解除原因。");
+      return;
+    }
+    if (!confirm("解除後僅限最高管理員更正，所有操作都會留下紀錄。確定繼續？")) return;
+    setCorrectionBusy(true);
+    const { data, error } = await supabase.rpc("unlock_booking_for_correction", { p_booking_id: auditBooking.id, p_reason: unlockReason.trim() });
+    setCorrectionBusy(false);
+    if (error) {
+      alert(error.message.includes("permission denied") ? "僅最高管理員可解除鎖定。" : "解除鎖定失敗，請重新登入後再試。");
+      return;
+    }
+    const unlocked = (Array.isArray(data) ? data[0] : data) as Booking;
+    setAuditBooking(unlocked);
+    setBookings((items) => items.map((item) => item.id === unlocked.id ? unlocked : item));
+    await openAuditLog(unlocked);
+    setCorrectionSummary(unlockReason.trim());
+  }
+
+  async function finishCorrection() {
+    if (!auditBooking || correctionSummary.trim().length < 4) {
+      alert("請填寫至少 4 個字的更正說明。");
+      return;
+    }
+    if (!correctionDraft.customer_name.trim() || !correctionDraft.booking_date || !correctionDraft.booking_time) {
+      alert("請完整填寫客戶姓名、日期與時間。");
+      return;
+    }
+    setCorrectionBusy(true);
+    const payload = {
+      customer_name: correctionDraft.customer_name.trim(),
+      customer_phone: correctionDraft.customer_phone.trim(),
+      customer_email: correctionDraft.customer_email.trim() || null,
+      designer_id: correctionDraft.designer_id ? Number(correctionDraft.designer_id) : null,
+      booking_date: correctionDraft.booking_date,
+      booking_time: correctionDraft.booking_time,
+      duration_minutes: Math.max(15, Number(correctionDraft.duration_minutes) || 60),
+      service_ids: correctionDraft.service_ids,
+      note: correctionDraft.note,
+    };
+    const { data: updated, error: updateError } = await supabase.from("bookings").update(payload).eq("id", auditBooking.id).select("*").single();
+    if (updateError) {
+      setCorrectionBusy(false);
+      alert(updateError.message.includes("BOOKING_TIME_CONFLICT") ? "更正後的時段與其他預約重疊，請調整日期或時間。" : "更正儲存失敗，資料仍維持解除鎖定，請修正後再試。");
+      return;
+    }
+    const { data: relockedData, error: relockError } = await supabase.rpc("relock_booking_after_correction", { p_booking_id: auditBooking.id, p_reason: correctionSummary.trim() });
+    setCorrectionBusy(false);
+    if (relockError) {
+      alert("資料已修改，但重新鎖定失敗。請勿離開此頁，並再次按下完成更正。");
+      setAuditBooking(updated as Booking);
+      return;
+    }
+    const relocked = (Array.isArray(relockedData) ? relockedData[0] : relockedData) as Booking;
+    setBookings((items) => items.map((item) => item.id === relocked.id ? relocked : item));
+    await openAuditLog(relocked);
+    alert("更正已儲存，預約已重新鎖定。");
+  }
+
+  async function cancelCorrection() {
+    if (!auditBooking || !confirm("確定取消更正並重新鎖定？尚未儲存的內容會消失。")) return;
+    setCorrectionBusy(true);
+    const { data, error } = await supabase.rpc("relock_booking_after_correction", { p_booking_id: auditBooking.id, p_reason: "取消更正，未修改資料" });
+    setCorrectionBusy(false);
+    if (error) { alert("重新鎖定失敗，請稍後再試。"); return; }
+    const relocked = (Array.isArray(data) ? data[0] : data) as Booking;
+    setBookings((items) => items.map((item) => item.id === relocked.id ? relocked : item));
+    await openAuditLog(relocked);
   }
 
   const scheduleRows = buildScheduleRows(bookings, offDays, offSlots);
@@ -635,6 +732,31 @@ export default function AdminBookings() {
               <div style={{ padding: "10px 12px", borderRadius: 10, background: auditBooking.is_test_data ? "#FFF3D6" : auditBooking.locked_at ? "#EAF8F3" : "#EEEDFE", color: auditBooking.is_test_data ? "#7A4D00" : "#3C3489", fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
                 {auditBooking.is_test_data ? "測試資料：不套用正式鎖定，可於上線前清除。" : auditBooking.locked_at ? "正式資料：已完成並鎖定。" : "正式資料：尚未鎖定。"}
               </div>
+              {!auditBooking.is_test_data && auditBooking.status === "completed" && isOwner && auditBooking.locked_at && (
+                <div style={{ background: "#fff", border: "1px solid #E3E0D6", borderRadius: 12, padding: 13, marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#2C2C2A", marginBottom: 7 }}>需要更正這筆預約？</div>
+                  <textarea value={unlockReason} onChange={(event) => setUnlockReason(event.target.value)} placeholder="請填寫解除鎖定原因，例如：服務項目登錄錯誤" rows={2} style={{ width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #D3D1C7", borderRadius: 9, padding: 9, fontSize: 12 }} />
+                  <button disabled={correctionBusy} onClick={unlockForCorrection} style={{ marginTop: 8, width: "100%", border: "none", borderRadius: 9, padding: 9, background: "#A85600", color: "#fff", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: correctionBusy ? 0.6 : 1 }}>解除鎖定並開始更正</button>
+                </div>
+              )}
+              {!auditBooking.is_test_data && auditBooking.status === "completed" && isOwner && !auditBooking.locked_at && (
+                <div style={{ background: "#fff", border: "2px solid #A85600", borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "#7A4D00", marginBottom: 10 }}>更正中：完成後請重新鎖定</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 9 }}>
+                    <input value={correctionDraft.customer_name} onChange={(event) => setCorrectionDraft({ ...correctionDraft, customer_name: event.target.value })} placeholder="客戶姓名" style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8 }} />
+                    <input value={correctionDraft.customer_phone} onChange={(event) => setCorrectionDraft({ ...correctionDraft, customer_phone: event.target.value })} placeholder="客戶電話" style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8 }} />
+                    <input type="date" value={correctionDraft.booking_date} onChange={(event) => setCorrectionDraft({ ...correctionDraft, booking_date: event.target.value })} style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8 }} />
+                    <input type="time" value={correctionDraft.booking_time} onChange={(event) => setCorrectionDraft({ ...correctionDraft, booking_time: event.target.value })} style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8 }} />
+                    <select value={correctionDraft.designer_id} onChange={(event) => setCorrectionDraft({ ...correctionDraft, designer_id: event.target.value })} style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8, background: "#fff" }}><option value="">不指定設計師</option>{designers.map((designer) => <option key={designer.id} value={designer.id}>{designer.name}</option>)}</select>
+                    <input type="number" min="15" step="15" value={correctionDraft.duration_minutes} onChange={(event) => setCorrectionDraft({ ...correctionDraft, duration_minutes: event.target.value })} placeholder="服務分鐘" style={{ padding: 9, border: "1px solid #D3D1C7", borderRadius: 8 }} />
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 11, fontWeight: 800, color: "#5F5E5A" }}>服務項目</div>
+                  <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>{services.map((service) => { const checked = correctionDraft.service_ids.includes(service.id); return <button type="button" key={service.id} onClick={() => setCorrectionDraft({ ...correctionDraft, service_ids: checked ? correctionDraft.service_ids.filter((id) => id !== service.id) : [...correctionDraft.service_ids, service.id] })} style={{ border: `1px solid ${checked ? "#534AB7" : "#D3D1C7"}`, background: checked ? "#EEEDFE" : "#fff", color: checked ? "#3C3489" : "#5F5E5A", borderRadius: 999, padding: "5px 9px", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>{checked ? "✓ " : ""}{service.name}</button>; })}</div>
+                  <textarea value={correctionDraft.note} onChange={(event) => setCorrectionDraft({ ...correctionDraft, note: event.target.value })} placeholder="預約備註" rows={3} style={{ marginTop: 10, width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #D3D1C7", borderRadius: 9, padding: 9, fontSize: 12 }} />
+                  <textarea value={correctionSummary} onChange={(event) => setCorrectionSummary(event.target.value)} placeholder="更正說明（會保存於修改紀錄）" rows={2} style={{ marginTop: 8, width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #E8C46A", background: "#FFF9E9", borderRadius: 9, padding: 9, fontSize: 12 }} />
+                  <div style={{ marginTop: 9, display: "flex", gap: 7 }}><button disabled={correctionBusy} onClick={cancelCorrection} style={{ flex: 1, border: "1px solid #D3D1C7", borderRadius: 9, padding: 9, background: "#fff", color: "#5F5E5A", fontWeight: 800, cursor: "pointer" }}>取消並鎖定</button><button disabled={correctionBusy} onClick={finishCorrection} style={{ flex: 2, border: "none", borderRadius: 9, padding: 9, background: "#0B6E5A", color: "#fff", fontWeight: 800, cursor: "pointer" }}>儲存更正並重新鎖定</button></div>
+                </div>
+              )}
               {auditLoading ? (
                 <div style={{ padding: 30, textAlign: "center", color: "#888780", fontSize: 13 }}>讀取紀錄中...</div>
               ) : auditLogs.length === 0 ? (
@@ -647,6 +769,7 @@ export default function AdminBookings() {
                       <div><span style={{ fontSize: 13, fontWeight: 800, color: "#2C2C2A" }}>{getAuditActionLabel(log.action)}</span><span style={{ marginLeft: 7, fontSize: 10, color: "#888780" }}>{log.is_test_data ? "測試資料" : "正式資料"}</span></div>
                       <div style={{ textAlign: "right", fontSize: 10, color: "#888780", lineHeight: 1.5 }}>{new Date(log.created_at).toLocaleString("zh-TW")}<br />{log.actor_username} · {log.actor_role}</div>
                     </div>
+                    {log.reason && <div style={{ marginBottom: 8, padding: "7px 9px", borderRadius: 8, background: "#FFF7DF", color: "#7A4D00", fontSize: 11, lineHeight: 1.5 }}>原因：{log.reason}</div>}
                     {changes.map((change) => (
                       <div key={change.key} style={{ display: "grid", gridTemplateColumns: "90px minmax(0, 1fr)", gap: 10, padding: "7px 0", borderTop: "1px solid #F1EFE8", fontSize: 11 }}>
                         <div style={{ color: "#888780", fontWeight: 700 }}>{auditFieldLabels[change.key]}</div>
