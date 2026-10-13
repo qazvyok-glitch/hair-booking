@@ -22,6 +22,16 @@ type Designer = {
   sort_order?: number | null;
 };
 
+type PriceItem = {
+  id: number;
+  designer_id?: number | null;
+  category: string;
+  name: string;
+  price_range: string;
+  sort_order?: number | null;
+  is_active?: boolean | null;
+};
+
 const DESIGNER_NICKNAME_EN: Record<string, string> = {
   扁頭救星: "Flat Head Specialist",
   米拉夫人: "Madame Mira",
@@ -54,17 +64,44 @@ function portfolioUrl(designer: Designer) {
   return `https://www.instagram.com/${handle}`;
 }
 
+function phoneLookupCandidates(value: string) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return Array.from(new Set([trimmed, digits].filter(Boolean)));
+}
+
+function pickExistingCustomer(customers?: { id?: string | null; name?: string | null; phone?: string | null; official_line_user_id?: string | null }[] | null) {
+  if (!customers?.length) return null;
+  return customers.find((customer) => customer.official_line_user_id) || customers[0];
+}
+
+function groupedPriceItems(items: PriceItem[]) {
+  return items.reduce<Record<string, PriceItem[]>>((groups, item) => {
+    const category = item.category || "其他服務";
+    groups[category] = [...(groups[category] || []), item].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id));
+    return groups;
+  }, {});
+}
+
+function displayPriceItemPrice(priceRange: string) {
+  return priceRange ? priceRange.replace(/\$/g, "$") : "現場確認";
+}
+
 export default function Step1() {
   const router = useRouter();
   const { designer: selected, setDesigner, customerName, contactValue, setCustomerName, setContact } = useBookingStore();
   const { language } = useLanguageStore();
   const [designers, setDesigners] = useState<Designer[]>([]);
+  const [designerPriceItems, setDesignerPriceItems] = useState<PriceItem[]>([]);
+  const [publicPriceItems, setPublicPriceItems] = useState<PriceItem[]>([]);
+  const [priceDesigner, setPriceDesigner] = useState<Designer | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileName, setProfileName] = useState(customerName || "");
   const [profilePhone, setProfilePhone] = useState(contactValue || "");
   const [profileEmail, setProfileEmail] = useState("");
   const [profileReferrer, setProfileReferrer] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(Boolean(contactValue && !customerName));
   const canContinue = selected !== null && selected.id !== 0;
   const isEnglish = language === "en";
   const needsProfile = !customerName;
@@ -82,17 +119,74 @@ export default function Step1() {
   }
 
   useEffect(() => {
-    supabase
-      .from("designers")
-      .select("*")
-      .eq("is_active", true)
-      .order("sort_order", { nullsFirst: false })
-      .order("id")
-      .then(({ data }) => {
-        if (data) setDesigners(data);
+    Promise.all([
+      supabase
+        .from("designers")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { nullsFirst: false })
+        .order("id"),
+      supabase
+        .from("designer_price_items")
+        .select("id, designer_id, category, name, price_range, sort_order, is_active")
+        .eq("is_active", true)
+        .order("category")
+        .order("sort_order"),
+      supabase
+        .from("price_items")
+        .select("id, category, name, price_range, sort_order")
+        .order("category")
+        .order("sort_order"),
+    ]).then(([{ data: designerData }, { data: designerPrices }, { data: publicPrices }]) => {
+        if (designerData) setDesigners(designerData);
+        setDesignerPriceItems((designerPrices || []) as PriceItem[]);
+        setPublicPriceItems((publicPrices || []) as PriceItem[]);
         setLoading(false);
       });
   }, []);
+
+  function getDesignerPriceItems(designer: Designer) {
+    const specificItems = designerPriceItems.filter((item) => item.designer_id === designer.id && item.is_active !== false);
+    return specificItems.length > 0 ? specificItems : publicPriceItems;
+  }
+
+  useEffect(() => {
+    if (!contactValue || customerName) {
+      setCheckingProfile(false);
+      return;
+    }
+
+    const phoneCandidates = phoneLookupCandidates(contactValue);
+    if (phoneCandidates.length === 0) {
+      setCheckingProfile(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingProfile(true);
+
+    supabase
+      .from("customers")
+      .select("id, name, phone, official_line_user_id")
+      .in("phone", phoneCandidates)
+      .order("updated_at", { ascending: false })
+      .limit(5)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const customer = pickExistingCustomer(data);
+        if (customer?.name) {
+          setCustomerName(customer.name);
+          setContact("phone", customer.phone || contactValue);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contactValue, customerName, setContact, setCustomerName]);
 
   async function handleSaveProfile() {
     if (!profileName.trim() || !profilePhone.trim()) {
@@ -100,19 +194,43 @@ export default function Step1() {
       return;
     }
     setSavingProfile(true);
-    await supabase.from("customers").insert({
-      id: crypto.randomUUID(),
+    const phoneCandidates = phoneLookupCandidates(profilePhone);
+    const { data: existingCustomers } = await supabase
+      .from("customers")
+      .select("id, name, phone, official_line_user_id")
+      .in("phone", phoneCandidates)
+      .order("updated_at", { ascending: false })
+      .limit(5);
+
+    const existingCustomer = pickExistingCustomer(existingCustomers);
+    if (existingCustomer?.name) {
+      setCustomerName(existingCustomer.name);
+      setContact("phone", existingCustomer.phone || profilePhone.trim());
+      alert(isEnglish ? "We found an existing profile for this phone number and loaded it for you." : "此手機號碼已有會員資料，已為您直接帶入。");
+      setSavingProfile(false);
+      return;
+    }
+
+    const payload = {
       name: profileName.trim(),
       phone: profilePhone.trim(),
       email: profileEmail.trim() || null,
       referrer: profileReferrer.trim() || null,
-    });
+    };
+    if (existingCustomer?.id) {
+      await supabase.from("customers").update(payload).eq("id", existingCustomer.id);
+    } else {
+      await supabase.from("customers").insert({
+        id: crypto.randomUUID(),
+        ...payload,
+      });
+    }
     setCustomerName(profileName.trim());
     setContact("phone", profilePhone.trim());
     setSavingProfile(false);
   }
 
-  if (loading) {
+  if (loading || checkingProfile) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: 300 }}>
         <div style={{ color: "#534AB7", fontSize: 14 }}>{isEnglish ? "Loading" : "載入中"}</div>
@@ -155,11 +273,13 @@ export default function Step1() {
         </>
       ) : (
         <div style={{ background: "#EEEDFE", border: "0.5px solid #AFA9EC", borderRadius: 16, padding: "14px 16px", marginBottom: 18 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#2C2C2A", marginBottom: 4 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#2C2C2A", marginBottom: 10 }}>
             {isEnglish ? `Hello, ${customerName}! 👋` : `您好，${customerName}！👋`}
           </div>
-          <div style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.6 }}>
-            {isEnglish ? "Welcome back. Please choose the stylist you would like to book with." : "歡迎回來，請選擇這次想預約的設計師。"}
+          <div style={{ borderTop: "0.5px solid rgba(83,74,183,0.22)", paddingTop: 10, fontSize: 12, color: "#4B466E", lineHeight: 1.7, fontWeight: 600 }}>
+            {isEnglish
+              ? "Each stylist has independent services and pricing. Prices vary depending on the stylist you choose. Please select a stylist to view their dedicated price list."
+              : "每位設計師皆有獨立的服務項目與收費標準，價格依指定設計師而有所不同，請點選設計師查看各設計師專屬價目表。"}
           </div>
         </div>
       )}
@@ -219,13 +339,35 @@ export default function Step1() {
               <div style={{ fontSize: 14, fontWeight: 600, color: "#2C2C2A" }}>{d.name}</div>
               {getDesignerNickname(d) ? <div style={{ fontSize: 11, color: "#7B6FD4", margin: "3px 0" }}>{getDesignerNickname(d)}</div> : null}
               <div style={{ fontSize: 11, color: "#888780", lineHeight: 1.5, margin: "4px 0 8px" }}>{getDesignerStyle(d)}</div>
-              <div style={{ minHeight: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 6 }}>
+              <div style={{ minHeight: 28, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                 {portfolio ? (
-                  <a href={portfolio} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                  <a href={portfolio} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none", padding: "5px 7px", borderRadius: 999, background: "#fff7fb", border: "0.5px solid #f3c4d5" }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" fill="#E1306C" /><circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none" /><circle cx="17.5" cy="6.5" r="1.2" fill="white" /></svg>
-                    <span style={{ fontSize: 11, color: "#888780" }}>{isEnglish ? "Portfolio" : "作品集"}</span>
+                    <span style={{ fontSize: 11, color: "#8C5C6D", fontWeight: 700 }}>{isEnglish ? "Portfolio" : "作品集"}</span>
                   </a>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPriceDesigner(d);
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "5px 7px",
+                    borderRadius: 999,
+                    border: "0.5px solid #e7d4cc",
+                    background: "#fffaf7",
+                    color: "#7a1f1f",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {isEnglish ? "Prices" : "價目表"}
+                </button>
               </div>
             </div>
           );
@@ -252,8 +394,128 @@ export default function Step1() {
           {canContinue ? (isEnglish ? "Next: Choose Service" : "下一步：選擇服務") : (isEnglish ? "Please choose a stylist first" : "請先選擇設計師")}
         </button>
       </div>
+      {priceDesigner ? (
+        <PriceSheet
+          designer={priceDesigner}
+          items={getDesignerPriceItems(priceDesigner)}
+          isEnglish={isEnglish}
+          isSelected={selected?.id === priceDesigner.id}
+          onClose={() => setPriceDesigner(null)}
+          onSelect={() => {
+            setDesigner(priceDesigner);
+            setPriceDesigner(null);
+          }}
+        />
+      ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function PriceSheet({
+  designer,
+  items,
+  isEnglish,
+  isSelected,
+  onClose,
+  onSelect,
+}: {
+  designer: Designer;
+  items: PriceItem[];
+  isEnglish: boolean;
+  isSelected: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const groupedItems = groupedPriceItems(items);
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(0,0,0,0.42)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 390,
+          maxHeight: "82vh",
+          overflow: "hidden",
+          background: "#fffaf7",
+          borderRadius: "24px 24px 0 0",
+          boxShadow: "0 -12px 40px rgba(0,0,0,0.18)",
+          border: "0.5px solid #eaded6",
+        }}
+      >
+        <div style={{ width: 46, height: 5, borderRadius: 999, background: "#d8cec6", margin: "10px auto 8px" }} />
+        <div style={{ padding: "0 18px 12px", borderBottom: "0.5px solid #eaded6", position: "relative" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={isEnglish ? "Close" : "關閉"}
+            style={{
+              position: "absolute",
+              right: 14,
+              top: 0,
+              width: 34,
+              height: 34,
+              borderRadius: 999,
+              border: "none",
+              background: "#f2e8e6",
+              color: "#7a1f1f",
+              fontSize: 20,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+          <div style={{ fontSize: 21, fontWeight: 800, color: "#2C2C2A", textAlign: "center", padding: "8px 36px 4px" }}>
+            {isEnglish ? `${designer.name}'s Prices` : `${designer.name} 專屬價目表`}
+          </div>
+          <div style={{ fontSize: 12, color: "#6d625b", lineHeight: 1.7, textAlign: "center" }}>
+            {isEnglish ? "Prices vary by stylist. Final pricing will be confirmed in person." : "每位設計師收費不同，實際金額以現場確認為主。"}
+          </div>
+        </div>
+        <div style={{ maxHeight: "calc(82vh - 148px)", overflowY: "auto", padding: "14px 16px 92px" }}>
+          {Object.keys(groupedItems).length > 0 ? (
+            Object.entries(groupedItems).map(([category, categoryItems]) => (
+              <section key={category} style={{ background: "#fff", border: "0.5px solid #eaded6", borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#2C2C2A", marginBottom: 10 }}>
+                  {category}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {categoryItems.map((item) => (
+                    <div key={`${item.designer_id || "public"}-${item.id}`} style={{ background: "#fbf6f1", borderRadius: 12, padding: "10px 12px" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A", lineHeight: 1.45 }}>{item.name}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: "#7a1f1f", lineHeight: 1.45, marginTop: 5 }}>{displayPriceItemPrice(item.price_range)}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))
+          ) : (
+            <div style={{ background: "#fff", border: "0.5px solid #eaded6", borderRadius: 16, padding: "24px 16px", textAlign: "center", color: "#888780", fontSize: 13 }}>
+              {isEnglish ? "No price list is available yet." : "尚未設定價目表。"}
+            </div>
+          )}
+        </div>
+        <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#fffaf7", borderTop: "0.5px solid #eaded6", padding: "12px 16px 24px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, boxSizing: "border-box" }}>
+          <button type="button" onClick={onClose} style={{ padding: "12px 0", borderRadius: 12, border: "1px solid #d9b8b0", background: "#fffaf7", color: "#7a1f1f", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            {isEnglish ? "Close" : "關閉"}
+          </button>
+          <button type="button" onClick={onSelect} style={{ padding: "12px 0", borderRadius: 12, border: "none", background: "#7a1f1f", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+            {isSelected ? (isEnglish ? "Selected" : "已選擇") : isEnglish ? `Choose ${designer.name}` : `選擇 ${designer.name}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

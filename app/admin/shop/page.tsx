@@ -6,12 +6,22 @@ import AdminBottomNav from "../components/BottomNav";
 
 type ShopInfo = { id: number; key: string; label: string; value: string; sort_order: number; is_active: boolean };
 
+function isInternalSetting(key: string) {
+  return key === "price_category_order"
+    || key.startsWith("designer_price_category_order_")
+    || key.startsWith("designer_contract_")
+    || key.startsWith("admin_role_")
+    || key.startsWith("admin_permissions_")
+    || key.startsWith("monthly_settlement_");
+}
+
 export default function AdminShop() {
   const router = useRouter();
   const [items, setItems] = useState<ShopInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [saving, setSaving] = useState<number | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
   const [edited, setEdited] = useState<Record<number, string>>({});
   const [hairLengthPending, setHairLengthPending] = useState<{ item: ShopInfo; image: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -34,12 +44,19 @@ export default function AdminShop() {
     });
   }, [router]);
 
-  async function handleSave(item: ShopInfo) {
-    setSaving(item.id);
-    const newValue = edited[item.id] ?? item.value;
-    await supabase.from("shop_info").update({ value: newValue }).eq("id", item.id);
-    setItems(items.map(i => i.id === item.id ? { ...i, value: newValue } : i));
-    setSaving(null);
+  async function handleSaveAll() {
+    const changes = Object.entries(edited);
+    if (changes.length === 0 || savingAll) return;
+    setSavingAll(true);
+    const results = await Promise.all(changes.map(([id, value]) => supabase.from("shop_info").update({ value }).eq("id", Number(id))));
+    const failed = results.find((result) => result.error)?.error;
+    if (failed) {
+      alert(`儲存失敗：${failed.message}`);
+    } else {
+      setItems((current) => current.map((item) => edited[item.id] !== undefined ? { ...item, value: edited[item.id] } : item));
+      setEdited({});
+    }
+    setSavingAll(false);
   }
 
   async function toggleActive(item: ShopInfo) {
@@ -89,29 +106,59 @@ export default function AdminShop() {
     </div>
   );
 
+  const visibleItems = items.filter((item) => !isInternalSetting(item.key));
+  const sectionDefinitions = [
+    { title: "基本與聯絡資訊", description: "顧客可見的店名、地址與聯絡方式", keys: ["name", "address", "phone", "maps_url", "website"] },
+    { title: "社群與外部連結", description: "官方社群、LINE 與其他對外連結", keys: ["line", "line_url", "facebook", "ig", "instagram", "threads", "youtube"] },
+    { title: "營業時間與預約須知", description: "顧客端顯示的營業時間、提醒文字與說明圖片", keys: ["hours_weekday", "hours_closed", "business_hours", "notice_1", "notice_2", "notice_3", "notice_4", "booking_notice", "hair_length_image_url"] },
+  ];
+  const assignedKeys = new Set(sectionDefinitions.flatMap((section) => section.keys));
+  const sections = [
+    ...sectionDefinitions.map((section) => ({ ...section, items: visibleItems.filter((item) => section.keys.includes(item.key)) })),
+    { title: "其他店家資訊", description: "自行新增並供顧客端使用的欄位", keys: [], items: visibleItems.filter((item) => !assignedKeys.has(item.key)) },
+  ].filter((section) => section.items.length > 0);
+  const dirtyCount = Object.keys(edited).length;
+
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>店資訊設定</div>
         </div>
-        <button onClick={() => setShowForm(true)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
       </div>
 
-      <div style={{ padding: 16 }}>
-        <div style={{ background: "#FAEEDA", border: "0.5px solid #FAC775", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#633806" }}>
-          修改後點「儲存」即時更新到顧客端與相關頁面
+      <div style={{ padding: isDesktop ? 22 : 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#2C2C2A" }}>店家資訊</div>
+            <div style={{ marginTop: 4, fontSize: 12, color: "#888780" }}>集中管理顧客端顯示的店家資料與連結</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setShowForm(true)} style={{ background: "#fff", color: "#534AB7", border: "1px solid #CFC8F5", borderRadius: 10, padding: "9px 14px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>＋ 新增欄位</button>
+            <button onClick={handleSaveAll} disabled={dirtyCount === 0 || savingAll} style={{ background: dirtyCount === 0 ? "#D8D5CD" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 12, fontWeight: 800, cursor: dirtyCount === 0 ? "default" : "pointer" }}>{savingAll ? "儲存中..." : dirtyCount > 0 ? `儲存變更（${dirtyCount}）` : "已全部儲存"}</button>
+          </div>
         </div>
 
-        {items.map((item) => (
-          <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: "14px", marginBottom: 8, border: "0.5px solid #D3D1C7", opacity: item.is_active ? 1 : 0.6 }}>
+        <div style={{ background: "#EAF7F2", border: "1px solid #BDE7D7", borderRadius: 12, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#17634A" }}>
+          儲存後會同步更新顧客端；「已隱藏」欄位不會對外顯示。
+        </div>
+
+        <div style={{ background: "#F7F5EE", border: "1px solid #DDD9D0", borderRadius: 12, padding: "10px 14px", marginBottom: 18, fontSize: 11, color: "#77736A" }}>
+          設計師合約與月結請至「人員管理」維護；價目排序與後台權限也由各自的管理頁設定。
+        </div>
+
+        {sections.map((section) => <section key={section.title} style={{ marginBottom: 18 }}>
+          <div style={{ marginBottom: 9 }}><div style={{ fontSize: 15, fontWeight: 900, color: "#2C2C2A" }}>{section.title}</div><div style={{ marginTop: 2, fontSize: 11, color: "#888780" }}>{section.description}</div></div>
+          <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(2, minmax(0, 1fr))" : "1fr", gap: 10 }}>
+          {section.items.map((item) => (
+          <div key={item.id} style={{ background: item.is_active ? "#fff" : "#F7F6F2", borderRadius: 14, padding: "14px", border: `1px solid ${edited[item.id] !== undefined ? "#AFA7F2" : "#DDD9D0"}`, opacity: item.is_active ? 1 : 0.72, boxShadow: edited[item.id] !== undefined ? "0 0 0 2px rgba(83,74,183,.08)" : "none" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>{item.label}</span>
-                <span style={{ fontSize: 10, color: "#888780", marginLeft: 6 }}>({item.key})</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#2C2C2A" }}>{item.label}</span>
+                <span style={{ display: "block", marginTop: 2, fontSize: 9, color: "#AAA49B" }}>{item.key}</span>
               </div>
-              <button onClick={() => toggleActive(item)} style={{ padding: "3px 8px", background: item.is_active ? "#E1F5EE" : "#F1EFE8", color: item.is_active ? "#085041" : "#888780", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
+              <button onClick={() => toggleActive(item)} style={{ padding: "5px 9px", background: item.is_active ? "#E1F5EE" : "#EEECE6", color: item.is_active ? "#085041" : "#77736A", border: "none", borderRadius: 999, fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
                 {item.is_active ? "顯示中" : "已隱藏"}
               </button>
             </div>
@@ -129,23 +176,18 @@ export default function AdminShop() {
               </div>
             )}
             {item.key !== "hair_length_image_url" && (
-              <div style={{ display: "flex", gap: 8 }}>
+              <div>
                 <input
                   value={edited[item.id] ?? item.value}
                   onChange={(e) => setEdited({ ...edited, [item.id]: e.target.value })}
-                  style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none" }}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 9, border: `1px solid ${edited[item.id] !== undefined ? "#8D85DD" : "#D3D1C7"}`, fontSize: 13, outline: "none", background: item.is_active ? "#fff" : "#F1EFE8" }}
                 />
-                <button
-                  onClick={() => handleSave(item)}
-                  disabled={saving === item.id}
-                  style={{ padding: "8px 14px", background: saving === item.id ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, cursor: saving === item.id ? "default" : "pointer", whiteSpace: "nowrap" }}
-                >
-                  {saving === item.id ? "..." : "儲存"}
-                </button>
               </div>
             )}
           </div>
-        ))}
+          ))}
+          </div>
+        </section>)}
       </div>
 
       {showForm && (
@@ -187,7 +229,7 @@ export default function AdminShop() {
         </div>
       )}
 
-      <AdminBottomNav current="dashboard" />
+      <AdminBottomNav current="shop" />
     </div>
   );
 }

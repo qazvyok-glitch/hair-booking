@@ -6,6 +6,7 @@ import AdminBottomNav from "../components/BottomNav";
 
 type PriceItem = { id: number; category: string; name: string; price_range: string; duration?: string | null; sort_order: number };
 type ShopInfo = { id: number; key: string; label: string; value: string; is_active: boolean };
+type Designer = { id: number; name: string; display_name?: string; nickname?: string };
 
 const publicCategoryOrderKey = "price_category_order";
 const hairLengthImageKey = "hair_length_image_url";
@@ -74,10 +75,13 @@ export default function AdminPrices() {
   const [savingHairLength, setSavingHairLength] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [designers, setDesigners] = useState<Designer[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<PriceItem | null>(null);
   const [filterCategory, setFilterCategory] = useState("all");
   const [form, setForm] = useState({ category: "", name: "", price_range: "", duration: "", sort_order: 0 });
+  const [syncDesignerIds, setSyncDesignerIds] = useState<number[]>([]);
+  const [syncExpanded, setSyncExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -94,11 +98,13 @@ export default function AdminPrices() {
   }, [router]);
 
   async function fetchData() {
-    const [{ data }, { data: categorySetting }, { data: hairLengthSetting }] = await Promise.all([
+    const [{ data }, { data: categorySetting }, { data: hairLengthSetting }, { data: designerData }] = await Promise.all([
       supabase.from("price_items").select("*").order("category").order("sort_order"),
       supabase.from("shop_info").select("id, value").eq("key", publicCategoryOrderKey).maybeSingle(),
       supabase.from("shop_info").select("id, key, label, value, is_active").eq("key", hairLengthImageKey).maybeSingle(),
+      supabase.from("designers").select("id, name, display_name, nickname").order("sort_order", { nullsFirst: false }).order("id"),
     ]);
+    setDesigners(designerData || []);
     if (hairLengthSetting) {
       setHairLengthImage(hairLengthSetting);
       setHairLengthDraft(hairLengthSetting.value || "");
@@ -169,13 +175,21 @@ export default function AdminPrices() {
     const defaultCategory = categories[0] || "";
     const nextSortOrder = items.filter((item) => item.category === defaultCategory).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
     setForm({ category: defaultCategory, name: "", price_range: "", duration: "", sort_order: nextSortOrder });
+    setSyncDesignerIds([]);
+    setSyncExpanded(false);
     setShowForm(true);
   }
 
   function openEdit(p: PriceItem) {
     setEditing(p);
     setForm({ category: p.category, name: p.name, price_range: p.price_range, duration: p.duration || "", sort_order: p.sort_order || 0 });
+    setSyncDesignerIds([]);
+    setSyncExpanded(false);
     setShowForm(true);
+  }
+
+  function toggleSyncDesigner(designerId: number) {
+    setSyncDesignerIds((current) => current.includes(designerId) ? current.filter((id) => id !== designerId) : [...current, designerId]);
   }
 
   async function handleSave() {
@@ -189,16 +203,11 @@ export default function AdminPrices() {
         setSaving(false);
         return;
       }
-      const { error: syncError } = await supabase
-        .from("designer_price_items")
-        .update({ duration: payload.duration, updated_at: new Date().toISOString() })
-        .eq("price_item_id", editing.id);
-      if (syncError) {
-        alert(`公版已儲存，但設計師專屬時長同步失敗：${syncError.message}`);
-      }
       const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set(items.map(p => p.id === editing.id ? form.category : p.category))].filter(Boolean));
+      const updatedPrice = { ...editing, ...payload };
       setCategoryOrder(nextCategories);
-      setItems(sortPriceItems(items.map(p => p.id === editing.id ? { ...p, ...payload } : p), nextCategories));
+      setItems(sortPriceItems(items.map(p => p.id === editing.id ? updatedPrice : p), nextCategories));
+      await syncPriceToDesigners(updatedPrice);
     } else {
       const nextSortOrder = items.filter((item) => item.category === form.category).reduce((max, item) => Math.max(max, item.sort_order || 0), 0) + 1;
       const { data, error } = await supabase.from("price_items").insert({ ...payload, sort_order: nextSortOrder }).select().single();
@@ -211,10 +220,59 @@ export default function AdminPrices() {
         const nextCategories = mergeCategoryOrder(categoryOrder, [...new Set([...items.map((item) => item.category), data.category])].filter(Boolean));
         setCategoryOrder(nextCategories);
         setItems(sortPriceItems([...items, data], nextCategories));
+        await syncPriceToDesigners(data);
       }
     }
     setSaving(false);
     setShowForm(false);
+  }
+
+  async function syncPriceToDesigners(priceItem: PriceItem) {
+    const targetDesignerIds = syncDesignerIds;
+    if (targetDesignerIds.length === 0) return;
+
+    const { data: existingRows, error: findError } = await supabase
+      .from("designer_price_items")
+      .select("designer_id")
+      .eq("price_item_id", priceItem.id)
+      .in("designer_id", targetDesignerIds);
+    if (findError) {
+      alert(`公版已儲存，但讀取設計師專屬價目失敗：${findError.message}`);
+      return;
+    }
+
+    const syncPayload = {
+      category: priceItem.category,
+      name: priceItem.name,
+      price_range: priceItem.price_range,
+      duration: priceItem.duration || null,
+      sort_order: priceItem.sort_order || 0,
+      updated_at: new Date().toISOString(),
+    };
+    const existingDesignerIds = new Set((existingRows || []).map((row) => Number(row.designer_id)));
+    const { error: updateError } = await supabase
+      .from("designer_price_items")
+      .update(syncPayload)
+      .eq("price_item_id", priceItem.id)
+      .in("designer_id", targetDesignerIds);
+    if (updateError) {
+      alert(`公版已儲存，但同步更新設計師專屬價目失敗：${updateError.message}`);
+      return;
+    }
+
+    const missingDesignerIds = targetDesignerIds.filter((designerId) => !existingDesignerIds.has(designerId));
+    if (missingDesignerIds.length === 0) return;
+    const { error: insertError } = await supabase.from("designer_price_items").insert(
+      missingDesignerIds.map((designerId) => ({
+        designer_id: designerId,
+        price_item_id: priceItem.id,
+        ...syncPayload,
+        is_active: true,
+      }))
+    );
+    if (insertError) {
+      alert(`公版已儲存，但同步新增設計師專屬價目失敗：${insertError.message}`);
+    }
   }
 
   async function handleDelete(id: number) {
@@ -287,12 +345,11 @@ export default function AdminPrices() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>店公版價目表</div>
         </div>
-        <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
@@ -330,6 +387,11 @@ export default function AdminPrices() {
               {cat}<span style={{ fontSize: 12, opacity: 0.75 }}>☰</span>
             </button>
           ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>價目表</div>
+          <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>＋ 新增</button>
         </div>
 
         {isDesktop ? (
@@ -396,8 +458,8 @@ export default function AdminPrices() {
 
       {/* 表單跳窗 */}
       {showForm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center", overflowY: "auto", paddingTop: 24 }}>
+          <div style={{ width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", background: "#fff", borderRadius: "20px 20px 0 0", padding: "20px 16px 32px", boxSizing: "border-box" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{editing ? "編輯價格" : "新增價格"}</div>
               <button onClick={() => setShowForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>✕</button>
@@ -441,6 +503,41 @@ export default function AdminPrices() {
                 ))}
                 <button onClick={() => setForm({ ...form, duration: "" })} type="button" style={{ padding: "6px 10px", borderRadius: 999, border: "1px solid #E7C9C9", background: "#FFF7F7", color: "#A32D2D", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>清除</button>
               </div>
+            </div>
+            <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, background: "#F8F7F3", border: "1px solid #E8E5D8" }}>
+              <button type="button" onClick={() => setSyncExpanded(!syncExpanded)} style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: 0, background: "transparent", border: "none", textAlign: "left", cursor: "pointer" }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "#5F5E5A", fontWeight: 700 }}>
+                    {editing ? "同步本次變更到設計師專屬價目表" : "同步到設計師專屬價目表"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 3, lineHeight: 1.5 }}>
+                    {syncDesignerIds.length === 0 ? "目前不同步，僅儲存公版價目表。" : syncDesignerIds.length === designers.length ? `已選全部 ${syncDesignerIds.length} 位設計師。` : `已選 ${syncDesignerIds.length} 位設計師。`}
+                  </div>
+                </div>
+                <span style={{ flex: "0 0 auto", padding: "4px 10px", borderRadius: 999, border: "1px solid #D3D1C7", background: "#fff", color: "#534AB7", fontSize: 11, fontWeight: 700 }}>{syncExpanded ? "收合" : "展開"}</span>
+              </button>
+              {syncExpanded && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", marginBottom: 8 }}>
+                    <button type="button" onClick={() => setSyncDesignerIds(designers.map((designer) => designer.id))} style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #D3D1C7", background: "#fff", color: "#534AB7", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>全選</button>
+                    <button type="button" onClick={() => setSyncDesignerIds([])} style={{ padding: "4px 8px", borderRadius: 999, border: "1px solid #E7C9C9", background: "#FFF7F7", color: "#A32D2D", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>清除</button>
+                  </div>
+                  <div style={{ display: "grid", gap: 6, maxHeight: 220, overflowY: "auto", paddingRight: 2 }}>
+                    {designers.map((designer) => {
+                      const checked = syncDesignerIds.includes(designer.id);
+                      return (
+                        <label key={designer.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 10, border: `1px solid ${checked ? "#BEB8F5" : "#E8E5D8"}`, background: checked ? "#EEEDFE" : "#fff", color: "#2C2C2A", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                          <input type="checkbox" checked={checked} onChange={() => toggleSyncDesigner(designer.id)} />
+                          <span>{designer.display_name || designer.name || designer.nickname || `設計師 ${designer.id}`}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888780", lineHeight: 1.5, marginTop: 6 }}>
+                    {syncDesignerIds.length === 0 ? (editing ? "未勾選時，只更新公版價目表。" : "未勾選時，只新增公版價目表。") : `${editing ? "儲存後會同步分類、名稱、價格、時長；若沒有此項目，會自動補新增。" : "儲存後會同步新增到設計師專屬價目表。"}`}
+                  </div>
+                </div>
+              )}
             </div>
             <button onClick={handleSave} disabled={saving} style={{ width: "100%", padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}

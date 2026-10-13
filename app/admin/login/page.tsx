@@ -14,18 +14,17 @@ export default function AdminLogin() {
     if (!username || !password) { setError("請填寫帳號與密碼"); return; }
     setLoading(true);
     setError("");
-    const { data, error: dbError } = await supabase
-      .from("admin_auth")
-      .select("*")
-      .eq("username", username)
-      .eq("password_hash", password)
-      .single();
-    if (dbError || !data) {
+    const { data: migration, error: migrationError } = await supabase.functions.invoke("admin-login", { body: { username: username.trim(), password } });
+    if (migrationError || !migration?.email) {
       setError("帳號或密碼錯誤");
       setLoading(false);
       return;
     }
-    sessionStorage.setItem("adminSession", JSON.stringify({ username }));
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: migration.email, password });
+    if (signInError) { setError("登入失敗，請稍後再試"); setLoading(false); return; }
+    const { data: profileData } = await supabase.rpc("current_admin_profile");
+    const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+    sessionStorage.setItem("adminSession", JSON.stringify({ username: profile.username, role: profile.role, role_name: profile.role_name, permissions: profile.permissions }));
     router.push("/admin/dashboard");
   }
 

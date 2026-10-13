@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
-import { replyLineText } from "../../../../lib/line";
+import { getLineMessagingChannelSecret, replyLineText } from "../../../../lib/line";
+import { isLineBindingCode, maskLineId, normalizeLineBindingCode } from "../../../../lib/lineBinding";
 import { supabase } from "../../../../lib/supabase";
 
 type LineWebhookEvent = {
@@ -19,7 +20,7 @@ type LineWebhookEvent = {
 };
 
 function isValidLineSignature(rawBody: string, signature: string | null) {
-  const secret = process.env.LINE_CHANNEL_SECRET;
+  const secret = getLineMessagingChannelSecret();
   if (!secret) return true;
   if (!signature) return false;
 
@@ -59,6 +60,35 @@ async function safeReply(replyToken: string | undefined, text: string) {
   }
 }
 
+async function bindCustomerLineUser(codeText: string, officialLineUserId: string) {
+  const code = normalizeLineBindingCode(codeText);
+  const now = new Date().toISOString();
+  const { data: customers, error: lookupError } = await supabase
+    .from("customers")
+    .select("id, name, phone, line_binding_expires_at")
+    .eq("line_binding_code", code)
+    .gt("line_binding_expires_at", now)
+    .limit(1);
+
+  if (lookupError) throw lookupError;
+  const customer = customers?.[0];
+  if (!customer?.id) return null;
+
+  const { error: updateError } = await supabase
+    .from("customers")
+    .update({
+      official_line_user_id: officialLineUserId,
+      line_bound_at: now,
+      line_binding_code: null,
+      line_binding_expires_at: null,
+      updated_at: now,
+    })
+    .eq("id", customer.id);
+
+  if (updateError) throw updateError;
+  return customer;
+}
+
 export async function GET() {
   return NextResponse.json({ ok: true, service: "line-webhook" });
 }
@@ -79,16 +109,44 @@ export async function POST(request: NextRequest) {
     for (const event of events) {
       const source = event.source || {};
       const lineTargetId = source.groupId || source.roomId || source.userId || "";
+      const messageText = event.message?.text || "";
 
       console.info("LINE_WEBHOOK_EVENT", {
         eventType: event.type || "",
         sourceType: source.type || "",
-        targetId: lineTargetId,
+        targetId: maskLineId(lineTargetId),
         messageType: event.message?.type || "",
-        text: event.message?.text || "",
+        text: isLineBindingCode(messageText) ? normalizeLineBindingCode(messageText) : "",
       });
 
-      if (event.message?.type === "text" && shouldBindBookingNotification(event.message.text)) {
+      if (event.message?.type === "text" && isLineBindingCode(messageText)) {
+        if (!source.userId) {
+          await safeReply(event.replyToken, "綁定失敗：請使用個人 LINE 帳號傳送綁定碼。");
+          continue;
+        }
+
+        try {
+          const customer = await bindCustomerLineUser(messageText, source.userId);
+          if (!customer) {
+            await safeReply(event.replyToken, "綁定碼無效或已過期，請重新送出預約取得新的綁定碼。");
+            continue;
+          }
+
+          await safeReply(event.replyToken, "已完成 Bing Cherry Salon LINE 預約通知綁定。之後預約狀態會傳送到這裡。");
+          console.info("LINE_CUSTOMER_BIND_SUCCEEDED", {
+            customerId: customer.id,
+            lineUserId: maskLineId(source.userId),
+          });
+        } catch (error) {
+          console.error("LINE_CUSTOMER_BIND_FAILED", {
+            message: error instanceof Error ? error.message : "Unknown LINE binding error",
+          });
+          await safeReply(event.replyToken, "綁定失敗，請稍後再試。");
+        }
+        continue;
+      }
+
+      if (event.message?.type === "text" && shouldBindBookingNotification(messageText)) {
         if (!lineTargetId) {
           await safeReply(event.replyToken, "綁定失敗：找不到這個聊天室的 LINE ID。");
           continue;

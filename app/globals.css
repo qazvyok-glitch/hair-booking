@@ -18,3 +18,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Keep page-level actions clear of the fixed admin logout button. */
+.admin-topbar {
+  padding-right: 96px !important;
+}
+
+@media (max-width: 767px) {
+  .admin-topbar {
+    padding-right: 80px !important;
+  }
+}

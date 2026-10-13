@@ -1,6 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { readAdminSession } from "../../../lib/adminSession";
+import { allAdminPermissions, hasPermission, permissionsForRole, type AdminPermission } from "../../../lib/adminPermissions";
+import { supabase } from "../../../lib/supabase";
 
 type NavItem = {
   key: string;
@@ -22,33 +25,43 @@ type NavSection =
 export default function AdminBottomNav({ current }: { current: string }) {
   const router = useRouter();
   const [isDesktop, setIsDesktop] = useState(false);
+  const [permissions, setPermissions] = useState<AdminPermission[]>(allAdminPermissions);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     reports: current === "report" || current.startsWith("report-"),
     work: current === "bookings",
-    people: current === "designers",
+    people: current === "designers" || current === "admin-accounts",
     catalog: ["services", "products", "inventory", "prices"].includes(current),
   });
 
   function logout() {
+    void supabase.auth.signOut();
     sessionStorage.removeItem("adminSession");
     router.push("/admin/login");
   }
 
 
   useEffect(() => {
+    queueMicrotask(() => {
+      const session = readAdminSession();
+      const role = session?.role || "owner";
+      setPermissions(permissionsForRole(role, session).permissions);
+    });
     const check = () => setIsDesktop(window.innerWidth >= 768);
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  const can = (permission: AdminPermission) => hasPermission(permission, permissions);
+
+  const mobileReportPath = can("report_shop") ? "/admin/report" : "/admin/report/designer";
   const mobileItems = [
     { key: "dashboard", label: "總覽", icon: "📊", path: "/admin/dashboard" },
     { key: "bookings", label: "工作", icon: "📋", path: "/admin/bookings" },
-    { key: "report", label: "報表", icon: "📈", path: "/admin/report" },
+    { key: "report", label: "帳務", icon: "📈", path: mobileReportPath },
     { key: "members", label: "會員", icon: "👥", path: "/admin/members" },
     { key: "products", label: "商品", icon: "🛍️", path: "/admin/products" },
-  ];
+  ].filter((item) => item.key === "report" ? can("report_shop") || can("report_designer") : can(item.key as AdminPermission));
 
   const sidebarSections: NavSection[] = [
     {
@@ -61,11 +74,12 @@ export default function AdminBottomNav({ current }: { current: string }) {
     {
       type: "group",
       key: "reports",
-      label: "報表",
+      label: "帳務管理",
       icon: "📈",
       children: [
-        { key: "report-shop", label: "店舖報表", icon: "🏪", path: "/admin/report/shop" },
-        { key: "report-designer", label: "設計師報表", icon: "🧾", path: "/admin/report/designer" },
+        ...(can("report_shop") ? [{ key: "report-shop", label: "店舖帳務報表", icon: "🏪", path: "/admin/report/shop" }] : []),
+        ...(can("report_designer") ? [{ key: "report-designer", label: "設計師月結", icon: "🧾", path: "/admin/report/designer" }] : []),
+        ...(can("admin_accounts") ? [{ key: "report-import", label: "資料匯入與修正", icon: "📥", path: "/admin/report/import" }] : []),
       ],
     },
     {
@@ -74,8 +88,8 @@ export default function AdminBottomNav({ current }: { current: string }) {
       label: "工作管理",
       icon: "📋",
       children: [
-        { key: "bookings", label: "預約總覽、管理", icon: "🗓️", path: "/admin/bookings?view=list" },
-        { key: "schedule", label: "排班 / 公休", icon: "🕒", path: "/admin/bookings?view=calendar" },
+        ...(can("bookings") ? [{ key: "bookings", label: "預約總覽、管理", icon: "🗓️", path: "/admin/bookings?view=list" }] : []),
+        ...(can("schedule") ? [{ key: "schedule", label: "排班 / 公休", icon: "🕒", path: "/admin/bookings?view=calendar" }] : []),
       ],
     },
     {
@@ -84,7 +98,8 @@ export default function AdminBottomNav({ current }: { current: string }) {
       label: "人員管理",
       icon: "🧑‍💼",
       children: [
-        { key: "designers", label: "設計師管理", icon: "💇", path: "/admin/designers" },
+        ...(can("designers") ? [{ key: "designers", label: "設計師管理", icon: "💇", path: "/admin/designers" }] : []),
+        ...(can("admin_accounts") ? [{ key: "admin-accounts", label: "後台帳號權限", icon: "🔐", path: "/admin/accounts" }] : []),
       ],
     },
     {
@@ -100,11 +115,18 @@ export default function AdminBottomNav({ current }: { current: string }) {
       label: "服務與商品",
       icon: "🧰",
       children: [
-        { key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" },
-        { key: "products", label: "商品管理", icon: "🛍️", path: "/admin/products" },
-        { key: "inventory", label: "庫存 / 進貨 / 盤點", icon: "📦", path: "/admin/inventory" },
-        { key: "services", label: "服務分類設定", icon: "🏷️", path: "/admin/services" },
+        ...(can("prices") ? [{ key: "prices", label: "價目表", icon: "💴", path: "/admin/prices" }] : []),
+        ...(can("products") ? [{ key: "products", label: "商品管理", icon: "🛍️", path: "/admin/products" }] : []),
+        ...(can("inventory") ? [{ key: "inventory", label: "庫存 / 進貨 / 盤點", icon: "📦", path: "/admin/inventory" }] : []),
+        ...(can("services") ? [{ key: "services", label: "服務分類設定", icon: "🏷️", path: "/admin/services" }] : []),
       ],
+    },
+    {
+      type: "single",
+      key: "shop",
+      label: "店家資訊",
+      icon: "🏠",
+      path: "/admin/shop",
     },
     {
       type: "single",
@@ -114,6 +136,18 @@ export default function AdminBottomNav({ current }: { current: string }) {
       path: "/admin/announcements",
     },
   ];
+
+  const visibleSidebarSections = sidebarSections.filter((section) => {
+    if (section.type === "group") return section.children.length > 0;
+    const permissionByKey: Partial<Record<string, AdminPermission>> = {
+      dashboard: "dashboard",
+      members: "members",
+      shop: "shop",
+      announcements: "announcements",
+    };
+    const permission = permissionByKey[section.key];
+    return permission ? can(permission) : true;
+  });
 
   const isChildActive = (key: string) => {
     if (key === "report-shop") return current === "report" || current === "report-shop";
@@ -138,6 +172,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
 
   if (isDesktop) {
     return (
+      <>
       <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: 220, background: "#1A1A1A", display: "flex", flexDirection: "column", padding: "24px 0", zIndex: 50, borderRight: "0.5px solid #333" }}>
         <div style={{ padding: "0 20px 24px", borderBottom: "0.5px solid #333", marginBottom: 16 }}>
           <img src="/logo.png" alt="logo" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", marginBottom: 10 }} />
@@ -145,7 +180,7 @@ export default function AdminBottomNav({ current }: { current: string }) {
           <div style={{ fontSize: 11, color: "#888780" }}>Bing Cherry Hair Salon</div>
         </div>
         <div style={{ overflowY: "auto", paddingBottom: 10 }}>
-          {sidebarSections.map((section) => {
+          {visibleSidebarSections.map((section) => {
             const active = isSectionActive(section);
             if (section.type === "single") {
               return (
@@ -180,15 +215,15 @@ export default function AdminBottomNav({ current }: { current: string }) {
           })}
         </div>
         <div style={{ flex: 1 }} />
-        <button onClick={logout} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", background: "none", border: "none", cursor: "pointer", borderLeft: "3px solid transparent", textAlign: "left", width: "100%" }}>
-          <span style={{ fontSize: 20 }}>⏏</span>
-          <span style={{ fontSize: 13, color: "#888780" }}>登出</span>
-        </button>
       </div>
+      <button onClick={logout} style={{ position: "fixed", top: 10, right: 16, zIndex: 80, background: "#333", color: "#B8B5AE", border: "1px solid #4A4A48", borderRadius: 8, padding: "7px 14px", fontSize: 12, cursor: "pointer", fontWeight: 700 }}>登出</button>
+      </>
     );
   }
 
   return (
+    <>
+    <button onClick={logout} style={{ position: "fixed", top: 10, right: 12, zIndex: 80, background: "#333", color: "#B8B5AE", border: "1px solid #4A4A48", borderRadius: 8, padding: "7px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>登出</button>
     <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 390, background: "#1A1A1A", borderTop: "0.5px solid #333", display: "flex", zIndex: 50 }}>
       {mobileItems.map((item) => (
         <button key={item.key} onClick={() => router.push(item.path)} style={{ flex: 1, padding: "10px 0", background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
@@ -197,5 +232,6 @@ export default function AdminBottomNav({ current }: { current: string }) {
         </button>
       ))}
     </div>
+    </>
   );
 }

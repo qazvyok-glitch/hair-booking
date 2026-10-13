@@ -3,6 +3,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { appRoutes } from "../../../lib/appRoutes";
+import { getLineUserIdFromAuthUser } from "../../../lib/lineIdentity";
+
+function phoneLookupCandidates(value: string) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return Array.from(new Set([trimmed, digits].filter(Boolean)));
+}
 
 export default function MemberSetup() {
   const router = useRouter();
@@ -18,9 +25,24 @@ export default function MemberSetup() {
       if (!session) { router.push("/member/login"); return; }
       setUser(session.user);
       setName(session.user.user_metadata?.full_name || "");
+      const lineUserId = getLineUserIdFromAuthUser(session.user);
 
-      const { data } = await supabase.from("customers").select("*").eq("id", session.user.id).single();
+      const { data: customerById } = await supabase.from("customers").select("*").eq("id", session.user.id).maybeSingle();
+      let data = customerById;
+      const metadataPhone = session.user.user_metadata?.phone || "";
+      if (!data && metadataPhone) {
+        const { data: customerByPhone } = await supabase
+          .from("customers")
+          .select("*")
+          .in("phone", phoneLookupCandidates(metadataPhone))
+          .limit(1)
+          .maybeSingle();
+        data = customerByPhone;
+      }
       if (data) {
+        if (lineUserId && data.line_user_id !== lineUserId) {
+          await supabase.from("customers").update({ line_user_id: lineUserId }).eq("id", data.id);
+        }
         if (data.name) setName(data.name);
         if (data.phone) setPhone(data.phone);
         if (data.referrer) setReferrer(data.referrer);
@@ -36,19 +58,29 @@ export default function MemberSetup() {
   async function handleSave() {
     if (!name || !phone) { alert("請填寫姓名與手機號碼"); return; }
     setSaving(true);
+    const phoneCandidates = phoneLookupCandidates(phone);
+    const { data: phoneMatches } = await supabase
+      .from("customers")
+      .select("id, customer_no")
+      .in("phone", phoneCandidates)
+      .limit(5);
+    const matchedByPhone = phoneMatches?.find((customer) => customer.id !== user.id);
     const { data: existing } = await supabase
       .from("customers")
       .select("customer_no")
       .eq("id", user.id)
       .single();
+    const lineUserId = getLineUserIdFromAuthUser(user);
 
+    const customerId = matchedByPhone?.id || user.id;
     await supabase.from("customers").upsert({
-      id: user.id,
+      id: customerId,
       name,
       phone,
       email: user.email,
       referrer: referrer.trim() || null,
-      customer_no: existing?.customer_no || undefined,
+      customer_no: matchedByPhone?.customer_no || existing?.customer_no || undefined,
+      ...(lineUserId ? { line_user_id: lineUserId } : {}),
     });
     await supabase.auth.updateUser({ data: { full_name: name, phone } });
     router.push(appRoutes.customer.bookingStart);

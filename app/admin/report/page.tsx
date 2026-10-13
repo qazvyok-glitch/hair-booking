@@ -7,6 +7,7 @@ import autoTable from "jspdf-autotable";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
+import SettlementPreviewPage from "./settlement/page";
 
 type Designer = {
   id: number;
@@ -68,6 +69,58 @@ type ReportDetailRow = {
   quantity: string;
   amount: string;
   isNegative?: boolean;
+  sourceType?: "service" | "product" | "selfUse" | "discount" | "legacy";
+  sourceId?: number;
+  sourceIndex?: number;
+};
+
+type AdjustmentAuditLog = {
+  id: string;
+  changedAt: string;
+  username: string;
+  roleName: string;
+  designerName: string;
+  itemName: string;
+  category: string;
+  beforeName?: string;
+  afterName?: string;
+  beforeAmount: number;
+  afterAmount: number;
+  reason: string;
+  eventType?: string;
+};
+
+type ImportPreviewOrder = {
+  orderNo: string;
+  orderTime: string;
+  designerName: string;
+  month: string;
+  itemCount: number;
+  totalAmount: number;
+  error: string;
+  txData: Record<string, any> | null;
+};
+
+type ImportPreview = {
+  fileName: string;
+  orders: ImportPreviewOrder[];
+};
+
+type ImportBatch = {
+  id: string;
+  file_name: string;
+  admin_username: string;
+  status: "completed" | "partial" | "reverted";
+  total_count: number;
+  success_count: number;
+  skipped_count: number;
+  error_count: number;
+  months: string[];
+  transaction_ids: number[];
+  error_messages: string[];
+  created_at: string;
+  reverted_at?: string | null;
+  reverted_by?: string | null;
 };
 
 // 舊系統中文名 → 新系統設計師 id 對應（透過 display_name 比對，不寫死）
@@ -128,6 +181,9 @@ function getProductSaleRowsFromTransaction(transaction: Transaction): ReportDeta
       itemName: item.name.replace("[商品] ", ""),
       quantity: "1",
       amount: formatMoney(Number(item.amount || 0)),
+      sourceType: "service",
+      sourceId: transaction.id,
+      sourceIndex: index,
     });
   });
   (transaction.product_items || []).forEach((item: any, index) => {
@@ -141,6 +197,9 @@ function getProductSaleRowsFromTransaction(transaction: Transaction): ReportDeta
       itemName: item.name || "商品銷售",
       quantity: String(quantity),
       amount: formatMoney(amount),
+      sourceType: "product",
+      sourceId: transaction.id,
+      sourceIndex: index,
     });
   });
   const productLine = (transaction.note || "").split("客人購買商品：")[1]?.split("\n")[0] || "";
@@ -156,6 +215,8 @@ function getProductSaleRowsFromTransaction(transaction: Transaction): ReportDeta
         itemName: match[1].trim(),
         quantity: match[2],
         amount: formatMoney(Number(match[3].replace(/,/g, ""))),
+        sourceType: "legacy",
+        sourceId: transaction.id,
       });
     });
   }
@@ -185,14 +246,12 @@ function getDesignerSettlement(designer: Designer, transactions: Transaction[], 
   const serviceBase = Math.max(0, totals.serviceRevenue - Number((designer as any).commission_base_deduction || 0));
   const serviceCommission = Math.round(serviceBase * Number(designer.commission_rate || 0));
   const brandFee = Math.round(totals.serviceRevenue * Number((designer as any).brand_fee_rate || 0));
-  const productCommission = Math.round(totals.productRevenue * Number((designer as any).product_commission_rate || 0));
-  const designerIncome = Math.max(0, serviceCommission + productCommission - brandFee - totals.selfUse - totals.discount);
-  const bcReceivable = Math.max(0, totals.totalRevenue - designerIncome);
+  const designerIncome = Math.max(0, totals.serviceRevenue - serviceCommission - brandFee - totals.selfUse - totals.discount);
+  const bcReceivable = Math.max(0, serviceCommission + brandFee + totals.selfUse);
   return {
     totals,
     serviceCommission,
     brandFee,
-    productCommission,
     designerIncome,
     bcReceivable,
   };
@@ -200,9 +259,10 @@ function getDesignerSettlement(designer: Designer, transactions: Transaction[], 
 
 type AdminReportProps = {
   initialMode?: "shop" | "designer";
+  importOnly?: boolean;
 };
 
-export default function AdminReport({ initialMode = "shop" }: AdminReportProps = {}) {
+export default function AdminReport({ initialMode = "shop", importOnly = false }: AdminReportProps = {}) {
   const router = useRouter();
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -230,16 +290,27 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   });
   const [reportMode, setReportMode] = useState<"shop" | "designer">(initialMode);
   const [activeShopDetail, setActiveShopDetail] = useState<ShopDetailKey>("actualIncome");
-  const [activeDesignerDetail, setActiveDesignerDetail] = useState<DesignerDetailKey>("actualIncome");
+  const [activeDesignerDetail, setActiveDesignerDetail] = useState<DesignerDetailKey>("serviceRevenue");
   const [reportDesignerId, setReportDesignerId] = useState<number | null>(null);
   const [selectedShopDesignerId, setSelectedShopDesignerId] = useState<number | null>(null);
   // 名字顯示模式：english = 英文名, chinese = 中文名, both = 英文（中文）
   const [nameMode, setNameMode] = useState<"english" | "chinese" | "both">("both");
+  const [editingDetail, setEditingDetail] = useState<ReportDetailRow | null>(null);
+  const [editAmount, setEditAmount] = useState(0);
+  const [editItemName, setEditItemName] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [savingDetail, setSavingDetail] = useState(false);
+  const [isHistoricalCorrection, setIsHistoricalCorrection] = useState(false);
+  const [settlementLocked, setSettlementLocked] = useState(false);
+  const [adjustmentAuditLogs, setAdjustmentAuditLogs] = useState<AdjustmentAuditLog[]>([]);
+  const [auditRefresh, setAuditRefresh] = useState(0);
 
   // 匯入歷史資料
-  const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string>("");
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+  const [revertingBatchId, setRevertingBatchId] = useState<string | null>(null);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -250,9 +321,37 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("mode") === "designer") {
-      setReportMode("designer");
+      queueMicrotask(() => setReportMode("designer"));
     }
   }, []);
+
+  useEffect(() => {
+    const month = reportStartDate.slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) return;
+    async function loadSettlementControl() {
+      const [{ data: snapshotData }, { data: auditData }] = await Promise.all([
+        supabase.from("shop_info").select("value").eq("key", `monthly_settlement_${month}`).maybeSingle(),
+        supabase.from("settlement_audit_logs").select("*").eq("settlement_month", month).order("created_at", { ascending: false }),
+      ]);
+      setSettlementLocked(Boolean(snapshotData?.value));
+      setAdjustmentAuditLogs((auditData || []).map((log: any) => ({
+        id: String(log.id),
+        changedAt: log.created_at,
+        username: log.admin_username,
+        roleName: log.admin_role_name,
+        designerName: log.designer_name,
+        itemName: log.item_name,
+        category: log.category,
+        beforeName: log.before_name,
+        afterName: log.after_name,
+        beforeAmount: Number(log.before_amount || 0),
+        afterAmount: Number(log.after_amount || 0),
+        reason: log.reason,
+        eventType: log.event_type,
+      })));
+    }
+    void loadSettlementControl();
+  }, [reportStartDate, auditRefresh]);
 
   // 依設定顯示設計師名字
   function getDesignerLabel(d: Designer) {
@@ -309,6 +408,132 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     const selectedDesigner = selectedDesignerId ? designers.find((d) => d.id === selectedDesignerId) : null;
     const dateLabel = reportStartDate === reportEndDate ? reportStartDate : `${reportStartDate}_${reportEndDate}`;
     return selectedDesigner ? `${dateLabel}_${getExportName(selectedDesigner)}` : dateLabel;
+  }
+
+  function openDetailEditor(row: ReportDetailRow, historicalCorrection = false) {
+    setEditingDetail(row);
+    setEditAmount(Number(row.amount.replace(/[^0-9.-]/g, "")) || 0);
+    setEditItemName(row.itemName.split("｜").pop() || row.itemName);
+    setEditReason("");
+    setIsHistoricalCorrection(historicalCorrection);
+  }
+
+  function isDetailEditable(row: ReportDetailRow) {
+    if (!row.sourceType || row.sourceType === "legacy" || settlementLocked) return false;
+    const recordMonth = row.date.slice(0, 7).replace("/", "-");
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonth = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, "0")}`;
+    if (recordMonth >= currentMonth) return true;
+    return recordMonth === previousMonth && now.getDate() <= 10;
+  }
+
+  function detailLockLabel(row: ReportDetailRow) {
+    if (row.sourceType === "legacy") return "歷史匯入・已鎖定";
+    if (settlementLocked) return "帳單已確認・已鎖定";
+    return "已逾修改期限";
+  }
+
+  async function appendAdjustmentAudit(log: AdjustmentAuditLog, month: string) {
+    const { data, error } = await supabase.from("settlement_audit_logs").insert({
+      settlement_month: month,
+      designer_id: activeReportDesigner?.id || null,
+      designer_name: log.designerName,
+      event_type: log.eventType || (isHistoricalCorrection ? "historical_correction" : "detail_update"),
+      category: log.category,
+      item_name: log.itemName,
+      before_name: log.beforeName || null,
+      after_name: log.afterName || null,
+      before_amount: log.beforeAmount,
+      after_amount: log.afterAmount,
+      reason: log.reason,
+      admin_username: log.username,
+      admin_role_name: log.roleName,
+      created_at: log.changedAt,
+    }).select("id").single();
+    if (error) throw error;
+    if (month === reportStartDate.slice(0, 7)) setAdjustmentAuditLogs((logs) => [{ ...log, id: String(data.id) }, ...logs]);
+  }
+
+  async function saveDetailCorrection() {
+    if (!editingDetail?.sourceType || !editingDetail.sourceId || editingDetail.sourceType === "legacy") return;
+    if (!isHistoricalCorrection && !isDetailEditable(editingDetail)) {
+      alert("這筆資料已鎖定，不能修改");
+      setEditingDetail(null);
+      return;
+    }
+    if (!editReason.trim()) {
+      alert("請填寫修改原因");
+      return;
+    }
+    setSavingDetail(true);
+    try {
+      const recordMonth = editingDetail.date.slice(0, 7).replace("/", "-");
+      if (!isHistoricalCorrection) {
+        const { data: latestSnapshot, error: lockCheckError } = await supabase.from("shop_info").select("id").eq("key", `monthly_settlement_${recordMonth}`).maybeSingle();
+        if (lockCheckError) throw lockCheckError;
+        if (latestSnapshot) {
+          setSettlementLocked(true);
+          throw new Error("本月帳單已由其他管理員確認，資料已鎖定");
+        }
+      }
+      const beforeAmount = Number(editingDetail.amount.replace(/[^0-9.-]/g, "")) || 0;
+      if (editingDetail.sourceType === "selfUse") {
+        const usage = productUsages.find((item) => item.id === editingDetail.sourceId);
+        if (!usage) throw new Error("找不到自領資料");
+        const quantity = Number(usage.quantity || 1);
+        const nextUsage = { ...usage, product_name: editItemName.trim() || usage.product_name, total_cost: editAmount, unit_price: quantity > 0 ? Math.round(editAmount / quantity) : editAmount };
+        const { error } = await supabase.from("product_usage").update({ product_name: nextUsage.product_name, total_cost: nextUsage.total_cost, unit_price: nextUsage.unit_price }).eq("id", usage.id);
+        if (error) throw error;
+        setProductUsages((items) => items.map((item) => item.id === usage.id ? nextUsage : item));
+      } else {
+        const transaction = transactions.find((item) => item.id === editingDetail.sourceId);
+        if (!transaction) throw new Error("找不到交易資料");
+        const serviceItems = [...(transaction.service_items || [])];
+        const productItems = [...(transaction.product_items || [])];
+        const index = editingDetail.sourceIndex ?? -1;
+        let totalAmount = Number(transaction.total_amount || 0);
+        if (editingDetail.sourceType === "service") {
+          const oldAmount = Number(serviceItems[index]?.amount || 0);
+          serviceItems[index] = { ...serviceItems[index], name: editItemName.trim() || serviceItems[index]?.name, amount: editAmount };
+          totalAmount += editAmount - oldAmount;
+        } else if (editingDetail.sourceType === "product") {
+          const quantity = Number(productItems[index]?.quantity || 1);
+          const oldAmount = Number(productItems[index]?.amount || 0);
+          productItems[index] = { ...productItems[index], name: editItemName.trim() || productItems[index]?.name, amount: editAmount / quantity };
+          totalAmount += editAmount - oldAmount * quantity;
+        } else if (editingDetail.sourceType === "discount") {
+          serviceItems[index] = { ...serviceItems[index], name: editItemName.trim() || serviceItems[index]?.name, discount: editAmount };
+        }
+        const correctionNote = `[${isHistoricalCorrection ? "歷史更正" : "後台更正"} ${new Date().toLocaleString("zh-TW")}] ${editingDetail.itemName} → ${editItemName.trim() || editingDetail.itemName}；${editReason.trim()}`;
+        const note = [transaction.note, correctionNote].filter(Boolean).join("\n");
+        const { error } = await supabase.from("transactions").update({ service_items: serviceItems, product_items: productItems, total_amount: totalAmount, note }).eq("id", transaction.id);
+        if (error) throw error;
+        setTransactions((items) => items.map((item) => item.id === transaction.id ? { ...item, service_items: serviceItems, product_items: productItems, total_amount: totalAmount, note } : item));
+      }
+      const session = JSON.parse(sessionStorage.getItem("adminSession") || "{}");
+      const changedAt = new Date().toISOString();
+      await appendAdjustmentAudit({
+        id: `${changedAt}-${editingDetail.sourceType}-${editingDetail.sourceId}`,
+        changedAt,
+        username: session.username || "admin",
+        roleName: session.role_name || (session.role === "manager" ? "店長管理員" : "最高管理員"),
+        designerName: editingDetail.designerName || (activeReportDesigner ? getDesignerLabel(activeReportDesigner) : "-"),
+        itemName: editingDetail.itemName,
+        category: isHistoricalCorrection ? `歷史更正・${editingDetail.kind}` : editingDetail.kind,
+        beforeName: editingDetail.itemName,
+        afterName: editItemName.trim() || editingDetail.itemName,
+        beforeAmount,
+        afterAmount: editAmount,
+        reason: editReason.trim(),
+      }, recordMonth);
+      setEditingDetail(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "修改失敗，請再試一次");
+    } finally {
+      setSavingDetail(false);
+    }
   }
 
   function getExportDesigners() {
@@ -394,17 +619,6 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       });
     });
     return rows;
-  }
-
-  function downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   }
 
   function arrayBufferToBase64(buffer: ArrayBuffer) {
@@ -530,16 +744,6 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     }
   }
 
-  function exportCsv() {
-    try {
-      const rows = buildExportOrderRows(getExportTransactions());
-      const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(rows));
-      downloadBlob(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }), "BC_報表_" + getExportLabel() + ".csv");
-    } catch(e) {
-      alert("CSV 導出失敗");
-    }
-  }
-
   async function exportPdf() {
     try {
       const exportTx = getExportTransactions();
@@ -559,14 +763,14 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           "1",
           "",
           report.serviceCommission.toLocaleString(),
-          `(${formatPdfMoney(report.serviceRevenue)} - ${formatPdfMoney(report.baseDeduction)}) x ${Math.round(Number(designer.commission_rate || 0) * 100)}%`,
+          `服務業績 ${formatPdfMoney(report.serviceRevenue)}`,
         ],
         [
           getRocMonthLabel(reportStartDate) + " - 品牌社群資源共享費",
           "1",
           "",
           report.brandFee.toLocaleString(),
-          `${formatPdfMoney(report.serviceRevenue)} x ${Math.round(Number(report.brandFeeRate || 0) * 100)}%`,
+          `服務業績 ${formatPdfMoney(report.serviceRevenue)}`,
         ],
       ]);
       const feeTotal = reports.reduce((sum, item) => sum + item.report.serviceCommission + item.report.brandFee, 0);
@@ -611,7 +815,12 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         designer: String(row[7] || ""),
         payment: String(row[8] || ""),
       }));
-      const dailySalesTotal = dailyDetailItems.reduce((sum, item) => sum + item.amount, 0);
+      const dailyServiceTotal = dailyDetailItems
+        .filter((item) => item.category.startsWith("美髮-"))
+        .reduce((sum, item) => sum + item.amount, 0);
+      const dailyProductTotal = dailyDetailItems
+        .filter((item) => item.category === "商品")
+        .reduce((sum, item) => sum + item.amount, 0);
       const dailyDiscountTotal = dailyDetailItems.reduce((sum, item) => sum + item.discount, 0);
       const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
         const category = normalizePdfText(row["分類"]);
@@ -764,88 +973,67 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           return `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${colors[index % colors.length]}"/>`;
         }).join("");
         const legend = items.slice(0, 5).map((item, index) => {
-          const y = cy - 72 + index * 30;
-          const pct = Math.round((item.amount / total) * 100);
-          return `<rect x="${cx + 128}" y="${y - 14}" width="16" height="16" rx="4" fill="${colors[index % colors.length]}"/>
-            ${renderText(item.label, cx + 152, y, { size: 15, color: "#263544", weight: 700, maxChars: 8 })}
-            ${renderText(`${pct}%`, cx + 300, y, { anchor: "end", size: 15, color: "#7D7A73", weight: 700 })}`;
+          const y = cy - 80 + index * 40;
+          return `<rect x="${cx + 200}" y="${y - 17}" width="20" height="20" rx="5" fill="${colors[index % colors.length]}"/>
+            ${renderText(item.label, cx + 234, y, { size: 19, color: "#263544", weight: 800, maxChars: 8 })}
+            ${renderText(formatPdfMoney(item.amount), cx + 500, y, { anchor: "end", size: 19, color: "#52606D", weight: 800 })}`;
         }).join("");
         return `${slices}<circle cx="${cx}" cy="${cy}" r="${r - 30}" fill="#fff"/>
           ${renderText("服務項目", cx, cy - 5, { anchor: "middle", size: 16, color: "#7D7A73", weight: 700 })}
           ${renderText(formatPdfMoney(total), cx, cy + 25, { anchor: "middle", size: 22, color: "#263A32", weight: 900 })}
           ${legend}`;
       };
-      const feeInvoiceRows = [...feeRows, ["費用小計", "", "", feeTotal.toLocaleString(), ""]];
       const productUsageCount = productRows.reduce((sum, row) => sum + Number(row[1] || 0), 0);
-      const feeSvg = renderInvoiceTable({
-        y: 760,
-        title: "費用明細",
-        columns: [
-          { label: "費用項目", width: 430, maxChars: 22 },
-          { label: "數量", width: 100, align: "right" },
-          { label: "單價", width: 100, align: "right" },
-          { label: "金額", width: 140, align: "right" },
-          { label: "備註", width: 344, maxChars: 22 },
-        ],
-        rows: feeInvoiceRows,
-        rowHeight: 48,
-        theme: { main: "#1674AE", header: "#E5F4FF", stripe: "#EEF7FF", subtotal: "#D3E9F9", line: "#B9DEF6", text: "#334B61", headerText: "#4B79A0" },
-      });
-      const productY = feeSvg.endY + 34;
-      const productHeight = 58 + 104 + 46;
-      const productEndY = productY + productHeight;
-      const productSvg = `<g>
-        <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="#fff" stroke="#D96724" stroke-width="3"/>
-        <path d="M 53 ${productY} H 1137 Q 1152 ${productY} 1152 ${productY + 15} V ${productY + 58} H 38 V ${productY + 15} Q 38 ${productY} 53 ${productY}" fill="#D96724"/>
-        ${renderText("自領商品", 595, productY + 38, { anchor: "middle", size: 30, color: "#fff", weight: 700 })}
-        <line x1="409" y1="${productY + 58}" x2="409" y2="${productY + 162}" stroke="#F3C2A4" stroke-width="1.3"/>
-        <line x1="780" y1="${productY + 58}" x2="780" y2="${productY + 162}" stroke="#F3C2A4" stroke-width="1.3"/>
-        ${renderText("自領日期區間", 224, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 224, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
-        ${renderText("自領件數", 595, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(`${productUsageCount.toLocaleString()} 件`, 595, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
-        ${renderText("自領商品小計", 966, productY + 92, { anchor: "middle", size: 18, color: "#A55124", weight: 700 })}
-        ${renderText(formatPdfMoney(productTotal), 966, productY + 126, { anchor: "middle", size: 24, color: "#573A2B", weight: 800 })}
-        <rect x="38" y="${productY + 162}" width="1114" height="46" fill="#FADCCA"/>
-        <line x1="38" y1="${productY + 162}" x2="1152" y2="${productY + 162}" stroke="#D96724" stroke-width="2.4"/>
-        <line x1="780" y1="${productY + 162}" x2="780" y2="${productY + 208}" stroke="#D96724" stroke-width="1.5"/>
-        ${renderText("自領商品合計", 62, productY + 192, { size: 21, color: "#9A4318", weight: 900 })}
-        ${renderText(productTotal.toLocaleString(), 1132, productY + 192, { anchor: "end", size: 21, color: "#9A4318", weight: 900 })}
-        <rect x="38" y="${productY}" width="1114" height="${productHeight}" rx="15" fill="none" stroke="#D96724" stroke-width="3.2"/>
-      </g>`;
-      const totalSvg = renderInvoiceTable({
-        y: productEndY + 34,
-        title: "本月應繳總額",
-        columns: [
-          { label: "", width: 610, align: "center" },
-          { label: "", width: 504, align: "right" },
-        ],
-        rows: [
-          ["費用小計", feeTotal.toLocaleString()],
-          ["自領商品小計", productTotal.toLocaleString()],
-          ["本月應繳總額", formatPdfMoney(totalDue)],
-        ],
-        rowHeight: 52,
-        theme: { main: "#45AE49", header: "#FAFFF7", stripe: "#FAFFF7", subtotal: "#EBFCEE", line: "#68C05C", text: "#2A522F", headerText: "#2A522F" },
-        showHeader: false,
-      });
+      const serviceCommissionTotal = reports.reduce((sum, item) => sum + item.report.serviceCommission, 0);
+      const brandFeeTotal = reports.reduce((sum, item) => sum + item.report.brandFee, 0);
+      const serviceRateLabel = reports.length === 1 ? `${Math.round(Number(reports[0].designer.commission_rate || 0) * 100)}%` : "依個人合約";
+      const brandRateLabel = reports.length === 1 ? `${Math.round(Number(reports[0].report.brandFeeRate || 0) * 100)}%` : "依個人合約";
+      const visibleProductRows = productRows.slice(0, 5);
+      const reportYearMonth = `${reportStartDate.slice(0, 4)}年${Number(reportStartDate.slice(5, 7))}月`;
       const invoiceSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
         <rect width="100%" height="100%" fill="#fff"/>
-        <rect x="0" y="0" width="${svgWidth}" height="198" fill="#FFFDF8"/>
-        ${wordmarkDataUrl ? `<image href="${wordmarkDataUrl}" x="38" y="34" width="430" height="126" preserveAspectRatio="xMidYMid meet"/>` : renderText("Bing Cherry", 38, 112, { size: 70, color: "#111", weight: 300 })}
-        <rect x="736" y="48" width="410" height="102" fill="#FFFDF8"/>
-        ${renderText(targetLabel, 762, 98, { size: 45, color: "#263A32", weight: 900 })}
-        ${renderText(`${formatReportDate(reportStartDate)} - ${formatReportDate(reportEndDate)}`, 762, 146, { size: 25, color: "#7D7A73", weight: 700 })}
-        <line x1="0" y1="198" x2="${svgWidth}" y2="198" stroke="#C8A46B" stroke-width="8"/>
-        ${renderText("結算摘要", 62, 300, { size: 28, color: "#263A32", weight: 900 })}
-        <rect x="878" y="280" width="250" height="104" rx="20" fill="#E8F5FC"/>
-        ${renderText("本月應繳總額", 1003, 318, { anchor: "middle", size: 18, color: "#1674AE", weight: 800 })}
-        ${renderText(formatPdfMoney(totalDue), 1003, 360, { anchor: "middle", size: 38, color: "#1674AE", weight: 900 })}
-        <rect x="224" y="430" width="454" height="250" rx="16" fill="#FFFDF8" stroke="#E6DAC7" stroke-width="2"/>
-        ${renderPieChart(serviceCategoryTotals, 342, 555, 84)}
-        ${feeSvg.html}
-        ${productSvg}
-        ${totalSvg.html}
+        ${renderText("Bing Cherry Hair Salon", 50, 78, { size: 20, color: "#617083", weight: 500 })}
+        ${renderText("設計師月結帳單", 50, 142, { size: 48, color: "#132337", weight: 900 })}
+        ${renderText(reportYearMonth, 490, 142, { size: 29, color: "#52606D", weight: 800 })}
+        ${renderText(targetLabel, 50, 192, { size: 27, color: "#263544", weight: 600 })}
+        <rect x="830" y="52" width="310" height="142" rx="18" fill="#E8F5FC"/>
+        ${renderText("本月應繳總額", 985, 98, { anchor: "middle", size: 20, color: "#1674AE", weight: 800 })}
+        ${renderText(formatPdfMoney(totalDue), 985, 158, { anchor: "middle", size: 43, color: "#1269A5", weight: 900 })}
+
+        <rect x="40" y="238" width="1110" height="410" rx="16" fill="#fff" stroke="#CBD9E6" stroke-width="2"/>
+        <rect x="68" y="278" width="8" height="38" rx="4" fill="#1674AE"/>
+        ${renderText("服務項目分布", 90, 309, { size: 29, color: "#132337", weight: 900 })}
+        ${renderPieChart(serviceCategoryTotals, 405, 475, 128)}
+
+        <rect x="40" y="680" width="1110" height="342" rx="16" fill="#fff" stroke="#CBD9E6" stroke-width="2"/>
+        <rect x="68" y="718" width="8" height="38" rx="4" fill="#1674AE"/>
+        ${renderText("本月結算摘要", 90, 749, { size: 29, color: "#132337", weight: 900 })}
+        ${[["服務業績", formatPdfMoney(serviceTotal), "#EEF7FF"], [`收益共享服務費（${serviceRateLabel}）`, formatPdfMoney(serviceCommissionTotal), "#EDF9F5"], [`品牌社群資源共享費（${brandRateLabel}）`, formatPdfMoney(brandFeeTotal), "#FFF8E8"], ["自領商品", formatPdfMoney(productTotal), "#FFF3EC"]].map((row, index) => {
+          const y = 786 + index * 58;
+          return `<rect x="68" y="${y}" width="1052" height="58" rx="8" fill="${row[2]}"/>${renderText(row[0], 88, y + 38, { size: 20, color: "#334B61", weight: 800 })}${renderText(row[1], 1100, y + 38, { anchor: "end", size: 23, color: "#132337", weight: 900 })}`;
+        }).join("")}
+
+        <rect x="40" y="1054" width="1110" height="430" rx="16" fill="#fff" stroke="#EDC79B" stroke-width="2"/>
+        <rect x="40" y="1054" width="8" height="430" rx="4" fill="#D9892B"/>
+        ${renderText("自領商品明細", 76, 1100, { size: 27, color: "#263544", weight: 900 })}
+        ${renderText(`${formatReportDate(reportStartDate)}－${formatReportDate(reportEndDate)}`, 1110, 1100, { anchor: "end", size: 17, color: "#7D7A73", weight: 600 })}
+        <rect x="52" y="1124" width="1086" height="48" fill="#FFF4E7"/>
+        ${renderText("日期", 76, 1155, { size: 18, color: "#8A5A20", weight: 800 })}
+        ${renderText("商品名稱", 300, 1155, { size: 18, color: "#8A5A20", weight: 800 })}
+        ${renderText("數量", 880, 1155, { anchor: "middle", size: 18, color: "#8A5A20", weight: 800 })}
+        ${renderText("小計", 1110, 1155, { anchor: "end", size: 18, color: "#8A5A20", weight: 800 })}
+        ${visibleProductRows.length ? visibleProductRows.map((row, index) => {
+          const y = 1172 + index * 48;
+          return `<line x1="52" y1="${y}" x2="1138" y2="${y}" stroke="#F0DFCC"/>${renderText(row[0], 76, y + 31, { size: 16, color: "#3D4C59", weight: 600 })}${renderText(row[2], 300, y + 31, { size: 16, color: "#263544", weight: 600, maxChars: 30 })}${renderText(row[1], 880, y + 31, { anchor: "middle", size: 16, color: "#3D4C59", weight: 600 })}${renderText(formatPdfMoney(Number(String(row[3]).replace(/[^\d.-]/g, ""))), 1110, y + 31, { anchor: "end", size: 16, color: "#263544", weight: 800 })}`;
+        }).join("") : renderText("本期無自領商品", 76, 1220, { size: 18, color: "#7D7A73", weight: 600 })}
+        ${productRows.length > visibleProductRows.length ? renderText(`另有 ${productRows.length - visibleProductRows.length} 筆，請至系統查看完整明細`, 76, 1430, { size: 15, color: "#8A5A20", weight: 600 }) : ""}
+        <rect x="52" y="1430" width="1086" height="42" fill="#FFF4E7"/>
+        ${renderText(`合計 ${productUsageCount.toLocaleString()} 件`, 76, 1458, { size: 18, color: "#8A5A20", weight: 800 })}
+        ${renderText(formatPdfMoney(productTotal), 1110, 1458, { anchor: "end", size: 19, color: "#8A5A20", weight: 900 })}
+
+        <line x1="40" y1="1530" x2="1150" y2="1530" stroke="#D6E0E8" stroke-width="2"/>
+        ${renderText("備註", 78, 1574, { size: 21, color: "#4E5965", weight: 800 })}
+        ${renderText("本報表依系統完成交易及個人合約設定自動計算。", 78, 1608, { size: 16, color: "#75808A", weight: 500 })}
       </svg>`;
       const invoiceDataUrl = await svgToPngDataUrl(invoiceSvg, svgWidth, svgHeight);
       doc.addImage(invoiceDataUrl, "PNG", 0, 0, pageWidth, pageHeight);
@@ -853,9 +1041,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
       const renderDailyDetailPage = (items: typeof dailyDetailItems, pageIndex: number, pageCount: number, includeTotal: boolean) => {
         const x = 38;
         const width = 1114;
-        const headerY = 152;
-        const headerHeight = 54;
-        const rowHeight = 50;
+        const headerY = 120;
+        const headerHeight = 48;
+        const rowHeight = 43;
         const columns = [
           { label: "訂單日期", x: 0, width: 188, align: "start" as const },
           { label: "分類", x: 188, width: 126, align: "start" as const },
@@ -872,37 +1060,38 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           const color = isProduct ? "#E02A1F" : "#20262C";
           return `<g>
             <rect x="${x}" y="${rowY}" width="${width}" height="${rowHeight}" fill="${fill}"/>
-            ${renderText(item.date, x + 12, rowY + 30, { size: 16, color: isProduct ? "#D7231A" : "#164F94", weight: 700, maxChars: 18 })}
-            ${renderText(item.category, x + 200, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 600, maxChars: 9 })}
-            ${renderText(item.item, x + 326, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 24, lineHeight: 22 })}
-            ${renderText(item.amount.toLocaleString(), x + 786, rowY + 30, { anchor: "end", size: 16, color, weight: 700 })}
-            ${renderText(item.discount.toLocaleString(), x + 866, rowY + 30, { anchor: "end", size: 16, color, weight: 700 })}
-            ${renderText(item.designer, x + 890, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 8 })}
-            ${renderText(item.payment, x + 998, rowY + 30, { size: 16, color, weight: isProduct ? 800 : 500, maxChars: 12 })}
+            ${renderText(item.date, x + 12, rowY + 27, { size: 15, color: isProduct ? "#D7231A" : "#164F94", weight: 700, maxChars: 18 })}
+            ${renderText(item.category, x + 200, rowY + 27, { size: 15, color, weight: isProduct ? 800 : 600, maxChars: 9 })}
+            ${renderText(item.item, x + 326, rowY + 27, { size: 15, color, weight: isProduct ? 800 : 500, maxChars: 24, lineHeight: 19 })}
+            ${renderText(item.amount.toLocaleString(), x + 786, rowY + 27, { anchor: "end", size: 15, color, weight: 700 })}
+            ${renderText(item.discount.toLocaleString(), x + 866, rowY + 27, { anchor: "end", size: 15, color, weight: 700 })}
+            ${renderText(item.designer, x + 890, rowY + 27, { size: 15, color, weight: isProduct ? 800 : 500, maxChars: 8 })}
+            ${renderText(item.payment, x + 998, rowY + 27, { size: 15, color, weight: isProduct ? 800 : 500, maxChars: 12 })}
           </g>`;
         }).join("");
         const totalY = headerY + headerHeight + items.length * rowHeight + 8;
         const totalSvg = includeTotal ? `<g>
           <rect x="${x}" y="${totalY}" width="${width}" height="56" fill="#D4E9FA"/>
           ${renderText("總計", x + 12, totalY + 36, { size: 22, color: "#20262C", weight: 900 })}
-          ${renderText(`${dailyDetailItems.length.toLocaleString()} 筆`, x + 176, totalY + 36, { size: 20, color: "#20262C", weight: 800 })}
-          ${renderText(dailySalesTotal.toLocaleString(), x + 812, totalY + 36, { anchor: "end", size: 20, color: "#20262C", weight: 900 })}
-          ${renderText(dailyDiscountTotal.toLocaleString(), x + 892, totalY + 36, { anchor: "end", size: 20, color: "#20262C", weight: 900 })}
+          ${renderText(`${dailyDetailItems.length.toLocaleString()} 筆`, x + 170, totalY + 36, { size: 20, color: "#20262C", weight: 800 })}
+          ${renderText(`服務業績 ${dailyServiceTotal.toLocaleString()}`, x + 350, totalY + 36, { size: 19, color: "#164F94", weight: 900 })}
+          ${renderText(`商品 ${dailyProductTotal.toLocaleString()}`, x + 690, totalY + 36, { size: 19, color: "#D96724", weight: 900 })}
+          ${renderText(`折扣 ${dailyDiscountTotal.toLocaleString()}`, x + width - 16, totalY + 36, { anchor: "end", size: 19, color: "#20262C", weight: 900 })}
         </g>` : "";
         const emptySvg = !items.length ? renderText("此區間尚無每日明細", x + 12, headerY + headerHeight + 52, { size: 22, color: "#59636D", weight: 700 }) : "";
         return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
           <style>text{font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;dominant-baseline:alphabetic;}</style>
           <rect width="100%" height="100%" fill="#fff"/>
-          ${renderText("每日明細", 38, 86, { size: 42, color: "#20262C", weight: 900 })}
+          ${renderText("每日明細", 38, 76, { size: 38, color: "#20262C", weight: 900 })}
           <rect x="${x}" y="${headerY}" width="${width}" height="${headerHeight}" fill="#009799"/>
-          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 36, { size: 21, color: "#fff", weight: 800 })).join("")}
+          ${columns.map((column) => renderText(column.label, x + column.x + 12, headerY + 32, { size: 19, color: "#fff", weight: 800 })).join("")}
           ${rowsSvg}
           ${emptySvg}
           ${totalSvg}
-          ${renderText(`Bing Cherry Hair Hub 2.0 · Page ${pageIndex + 1} of ${pageCount}`, 38, 1628, { size: 16, color: "#7D7A73", weight: 600 })}
+          ${renderText(`第 ${pageIndex + 1} / ${pageCount} 頁`, 1152, 1644, { anchor: "end", size: 16, color: "#7D7A73", weight: 600 })}
         </svg>`;
       };
-      const rowsPerPage = 24;
+      const rowsPerPage = 31;
       const dailyPages = dailyDetailItems.length
         ? Array.from({ length: Math.ceil(dailyDetailItems.length / rowsPerPage) }, (_, index) => dailyDetailItems.slice(index * rowsPerPage, (index + 1) * rowsPerPage))
         : [[]];
@@ -922,12 +1111,26 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     }
   }
 
-  // ── 匯入舊系統歷史資料 ──
+  function getCurrentAdminUsername() {
+    try {
+      return JSON.parse(sessionStorage.getItem("adminSession") || "{}").username || "admin";
+    } catch {
+      return "admin";
+    }
+  }
+
+  async function loadImportBatches() {
+    const { data } = await supabase.from("import_batches").select("*").order("created_at", { ascending: false }).limit(50);
+    if (data) setImportBatches(data as ImportBatch[]);
+  }
+
+  // ── 匯入舊系統歷史資料：先預覽，再確認寫入 ──
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
     setImportResult("");
+    setImportPreview(null);
 
     try {
       const buf = await file.arrayBuffer();
@@ -984,22 +1187,19 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         }
       }
 
-      // 轉換成 transactions 格式並寫入
-      let successCount = 0;
-      let skipCount = 0;
-      const errors: string[] = [];
-
+      const previewOrders: ImportPreviewOrder[] = [];
       for (const order of Object.values(orderMap)) {
-        // 找設計師
         const designer = findDesignerByDisplayName(designers, order.designerName);
         if (!designer) {
-          skipCount++;
-          errors.push(`找不到設計師「${order.designerName}」，跳過訂單 ${order.orderNo}`);
+          previewOrders.push({ orderNo: order.orderNo, orderTime: order.orderTime, designerName: order.designerName, month: order.orderTime.slice(0, 7), itemCount: order.items.length, totalAmount: 0, error: `找不到設計師「${order.designerName}」`, txData: null });
           continue;
         }
 
-        // 解析時間 "2026-01-01 12:53" → ISO
         const createdAt = order.orderTime.replace(" ", "T") + ":00";
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(createdAt)) {
+          previewOrders.push({ orderNo: order.orderNo, orderTime: order.orderTime, designerName: order.designerName, month: order.orderTime.slice(0, 7), itemCount: order.items.length, totalAmount: 0, error: "日期時間格式錯誤", txData: null });
+          continue;
+        }
 
         // 商品品牌關鍵字
         const productBrands = ["Oright", "O'right", "Sumuzu", "哥德式", "善詩", "威傑式", "沂樂"];
@@ -1028,6 +1228,11 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         // 支付方式文字（去掉金額部分）
         const payMethod = payStr.replace(/[：:]\s*\d+[\s\S]*/, "").trim() || "現金";
 
+        const duplicate = transactions.some((transaction) =>
+          transaction.designer_id === designer.id &&
+          transaction.created_at?.slice(0, 16) === createdAt.slice(0, 16) &&
+          Number(transaction.total_amount || 0) === totalAmount
+        );
         const txData = {
           designer_id: designer.id,
           customer_name: "",
@@ -1036,28 +1241,90 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           payment_method: payMethod,
           created_at: createdAt,
         };
-
-        const { error } = await supabase.from("transactions").insert(txData);
-        if (error) {
-          errors.push(`訂單 ${order.orderNo} 寫入失敗：${error.message}`);
-        } else {
-          successCount++;
-        }
+        previewOrders.push({ orderNo: order.orderNo, orderTime: order.orderTime, designerName: order.designerName, month: order.orderTime.slice(0, 7), itemCount: order.items.length, totalAmount, error: duplicate ? "疑似重複交易（同設計師、時間及金額）" : "", txData: duplicate ? null : txData });
       }
-
-      // 重新載入資料
-      const { data: tData } = await supabase.from("transactions").select("*").order("created_at", { ascending: false });
-      if (tData) setTransactions(tData);
-
-      let msg = `匯入完成：${successCount} 筆成功`;
-      if (skipCount > 0) msg += `，${skipCount} 筆跳過（找不到設計師）`;
-      if (errors.length > 0) msg += `\n\n錯誤：\n` + errors.slice(0,5).join("\n");
-      setImportResult(msg);
+      setImportPreview({ fileName: file.name, orders: previewOrders });
     } catch (err: any) {
-      setImportResult("匯入失敗：" + err.message);
+      setImportResult("檔案解析失敗：" + err.message);
     }
     setImporting(false);
     e.target.value = "";
+  }
+
+  async function confirmImport() {
+    if (!importPreview || importing) return;
+    const validOrders = importPreview.orders.filter((order) => order.txData);
+    const invalidOrders = importPreview.orders.filter((order) => !order.txData);
+    if (validOrders.length === 0) {
+      setImportResult("沒有可匯入的交易，請先修正檔案內容。");
+      return;
+    }
+    setImporting(true);
+    setImportResult("");
+    const months = [...new Set(validOrders.map((order) => order.month).filter((month) => /^\d{4}-\d{2}$/.test(month)))];
+    const username = getCurrentAdminUsername();
+    const { data: batch, error: batchError } = await supabase.from("import_batches").insert({
+      file_name: importPreview.fileName,
+      admin_username: username,
+      total_count: importPreview.orders.length,
+      skipped_count: invalidOrders.length,
+      error_count: invalidOrders.length,
+      months,
+      error_messages: invalidOrders.map((order) => `${order.orderNo}：${order.error}`),
+    }).select("id").single();
+    if (batchError || !batch) {
+      setImportResult(`無法建立匯入批次：${batchError?.message || "未知錯誤"}`);
+      setImporting(false);
+      return;
+    }
+
+    const transactionIds: number[] = [];
+    const errors: string[] = invalidOrders.map((order) => `${order.orderNo}：${order.error}`);
+    for (const order of validOrders) {
+      const note = `[歷史匯入] 批次:${batch.id}｜訂單:${order.orderNo}`;
+      const { data, error } = await supabase.from("transactions").insert({ ...order.txData, import_batch_id: batch.id, note }).select("id").single();
+      if (error || !data) errors.push(`${order.orderNo}：${error?.message || "寫入失敗"}`);
+      else transactionIds.push(Number(data.id));
+    }
+
+    const status = errors.length > invalidOrders.length ? "partial" : "completed";
+    await supabase.from("import_batches").update({
+      status,
+      success_count: transactionIds.length,
+      error_count: errors.length,
+      transaction_ids: transactionIds,
+      error_messages: errors,
+    }).eq("id", batch.id);
+    setImportResult(`匯入完成：${transactionIds.length} 筆成功${errors.length ? `，${errors.length} 筆未匯入` : ""}`);
+    setImportPreview(null);
+    const { data: tData } = await supabase.from("transactions").select("*").order("created_at", { ascending: false });
+    if (tData) setTransactions(tData);
+    await loadImportBatches();
+    setImporting(false);
+  }
+
+  async function revertImportBatch(batch: ImportBatch) {
+    if (batch.status === "reverted" || revertingBatchId) return;
+    const monthKeys = batch.months.map((month) => `monthly_settlement_${month}`);
+    if (monthKeys.length) {
+      const { data: lockedRows } = await supabase.from("shop_info").select("key").in("key", monthKeys);
+      if ((lockedRows || []).length > 0) {
+        alert("此批次包含已鎖帳月份，不能整批撤銷。請至設計師月結明細使用「新增更正」。");
+        return;
+      }
+    }
+    if (!window.confirm(`確定撤銷「${batch.file_name}」的 ${batch.success_count} 筆交易？此動作會留下批次撤銷紀錄。`)) return;
+    setRevertingBatchId(batch.id);
+    const { error: deleteError } = await supabase.rpc("revert_import_batch_secure", { p_batch_id: batch.id });
+    if (deleteError) {
+      alert(`撤銷失敗：${deleteError.message.includes("locked month") ? "此批次包含已鎖帳月份" : deleteError.message}`);
+      setRevertingBatchId(null);
+      return;
+    }
+    const { data: tData } = await supabase.from("transactions").select("*").order("created_at", { ascending: false });
+    if (tData) setTransactions(tData);
+    await loadImportBatches();
+    setRevertingBatchId(null);
   }
 
   useEffect(() => {
@@ -1097,6 +1364,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     fetchData();
   }, [router]);
 
+  useEffect(() => {
+    if (importOnly) queueMicrotask(() => loadImportBatches());
+  }, [importOnly]);
+
   const monthlyTransactions = transactions.filter(t => {
     const date = t.created_at?.slice(0, 10);
     if (!date) return false;
@@ -1108,13 +1379,13 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
   function calcDesignerReport(d: Designer) {
     const dTransactions = monthlyTransactions.filter(t => t.designer_id === d.id);
-    const serviceRevenue = dTransactions.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+    const serviceRevenue = dTransactions.reduce((sum, t) => sum + getServiceRevenue(t), 0);
     const baseDeduction = d.commission_base_deduction || 0;
     const commissionBase = Math.max(0, serviceRevenue - baseDeduction);
     const serviceCommission = Math.round(commissionBase * (d.commission_rate || 0));
     const brandFeeRate = (d as any).brand_fee_rate || 0;
     const brandFee = Math.round(serviceRevenue * brandFeeRate);
-    const totalCommission = Math.max(0, serviceCommission - brandFee);
+    const totalCommission = serviceCommission + brandFee;
     return {
       serviceRevenue, baseDeduction, commissionBase,
       serviceCommission, brandFee, brandFeeRate, totalCommission,
@@ -1158,7 +1429,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     return designer ? getDesignerLabel(designer) : "-";
   };
   const serviceDetailRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) => {
-    const serviceItems = (transaction.service_items || []).filter((item: any) => !item.name?.startsWith("[商品]"));
+    const serviceItems = (transaction.service_items || []).map((item: any, sourceIndex) => ({ item, sourceIndex })).filter(({ item }) => !item.name?.startsWith("[商品]"));
     if (serviceItems.length === 0 && getServiceRevenue(transaction) > 0) {
       return [{
         id: `tx-${transaction.id}-service-total`,
@@ -1168,16 +1439,21 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         itemName: transaction.customer_name ? `${transaction.customer_name}｜服務收入` : "服務收入",
         quantity: "1",
         amount: formatMoney(getServiceRevenue(transaction)),
+        sourceType: "legacy" as const,
+        sourceId: transaction.id,
       }];
     }
-    return serviceItems.map((item: any, index) => ({
-      id: `tx-${transaction.id}-service-${index}`,
+    return serviceItems.map(({ item, sourceIndex }) => ({
+      id: `tx-${transaction.id}-service-${sourceIndex}`,
       date: formatReportDate(transaction.created_at),
       designerName: getDesignerNameById(transaction.designer_id),
       kind: "服務明細",
       itemName: transaction.customer_name ? `${transaction.customer_name}｜${item.name}` : item.name,
       quantity: "1",
       amount: formatMoney(Number(item.amount || 0)),
+      sourceType: "service" as const,
+      sourceId: transaction.id,
+      sourceIndex,
     }));
   });
   const productSaleRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) =>
@@ -1196,6 +1472,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     quantity: String(usage.quantity || 0),
     amount: formatMoney(Number(usage.total_cost || 0), true),
     isNegative: true,
+    sourceType: "selfUse",
+    sourceId: usage.id,
   }));
   const shopUseRows: ReportDetailRow[] = monthlyShopUseRecords.map((record) => ({
     id: `shop-use-${record.id}`,
@@ -1208,9 +1486,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
   }));
   const discountRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) => {
     const serviceDiscountRows = (transaction.service_items || [])
-      .filter((item: any) => Number(item.discount || 0) > 0)
-      .map((item: any, index) => ({
-        id: `tx-${transaction.id}-service-discount-${index}`,
+      .map((item: any, sourceIndex) => ({ item, sourceIndex }))
+      .filter(({ item }) => Number(item.discount || 0) > 0)
+      .map(({ item, sourceIndex }) => ({
+        id: `tx-${transaction.id}-service-discount-${sourceIndex}`,
         date: formatReportDate(transaction.created_at),
         designerName: getDesignerNameById(transaction.designer_id),
         kind: "服務折扣",
@@ -1218,6 +1497,9 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         quantity: "1",
         amount: formatMoney(Number(item.discount || 0), true),
         isNegative: true,
+        sourceType: "discount" as const,
+        sourceId: transaction.id,
+        sourceIndex,
       }));
     const productDiscount = [...((transaction.note || "").matchAll(/商品折扣NT\$?([\d,]+)/g))]
       .reduce((sum, match) => sum + Number(match[1].replace(/,/g, "")), 0);
@@ -1233,6 +1515,8 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
         quantity: "1",
         amount: formatMoney(productDiscount, true),
         isNegative: true,
+        sourceType: "legacy" as const,
+        sourceId: transaction.id,
       },
     ];
   });
@@ -1279,6 +1563,12 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
     selfUse: "設計師自領材料明細",
     discount: "設計師折扣明細",
   };
+  const designerDetailSections: Array<{ key: DesignerDetailKey; title: string; rows: ReportDetailRow[] }> = [
+    { key: "serviceRevenue", title: "服務業績明細", rows: designerDetailRowsByKey.serviceRevenue },
+    { key: "productRevenue", title: "商品銷售明細", rows: designerDetailRowsByKey.productRevenue },
+    { key: "selfUse", title: "自領商品明細", rows: designerDetailRowsByKey.selfUse },
+    { key: "discount", title: "折扣明細", rows: designerDetailRowsByKey.discount },
+  ];
   const designerSettlementRows = designers.map((designer) => ({
     designer,
     settlement: getDesignerSettlement(designer, monthlyTransactions, monthlyProductUsages),
@@ -1307,24 +1597,21 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{reportMode === "shop" ? "店舖報表" : "設計師報表"}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>{importOnly ? "帳務管理｜資料匯入與修正" : reportMode === "shop" ? "帳務管理｜店舖帳務報表" : "帳務管理｜設計師月結"}</div>
         </div>
-        <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowImport(!showImport)} style={{ background: "#BA7517", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>匯入歷史</button>
-          <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>導出 Excel</button>
-        </div>
+        {!importOnly && <div style={{ fontSize: 12, color: "#888780" }}>{selectedMonth.replace("-", " 年 ")} 月</div>}
+        <div />
       </div>
 
       <div style={{ padding: 16 }}>
 
         {/* 匯入歷史資料面板 */}
-        {showImport && (
+        {importOnly && (
           <div style={{ background: "#fff", borderRadius: 14, padding: 16, marginBottom: 12, border: "0.5px solid #BA7517" }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", marginBottom: 6 }}>匯入舊系統訂單列表</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#2C2C2A", marginBottom: 6 }}>匯入歷史交易明細</div>
             <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
               上傳從舊系統導出的「訂單列表.xlsx」<br/>
               欄位需包含：訂單號碼、訂單時間、分類、品項、數量、總價、折扣、工作人員、指定、業績、支付方式
@@ -1339,27 +1626,55 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
               </div>
             </div>
             <label style={{ display: "block", width: "100%", padding: "10px 0", background: importing ? "#D3D1C7" : "#FAEEDA", color: importing ? "#888" : "#BA7517", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: importing ? "default" : "pointer", textAlign: "center" }}>
-              {importing ? "匯入中..." : "選擇 .xlsx 檔案上傳"}
+              {importing ? "處理中..." : "選擇 .xlsx 檔案預覽"}
               <input type="file" accept=".xlsx" onChange={handleImport} style={{ display: "none" }} disabled={importing} />
             </label>
+            {importPreview && (() => {
+              const validOrders = importPreview.orders.filter((order) => order.txData);
+              const invalidOrders = importPreview.orders.filter((order) => !order.txData);
+              const totalAmount = validOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+              return <div style={{ marginTop: 14, border: "1px solid #E8D8B9", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: 14, background: "#FFF8E8", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div><div style={{ fontSize: 14, fontWeight: 900, color: "#2C2C2A" }}>{importPreview.fileName}</div><div style={{ marginTop: 4, fontSize: 11, color: "#7A6A4A" }}>確認後才會寫入資料庫</div></div>
+                  <button type="button" onClick={confirmImport} disabled={importing || validOrders.length === 0} style={{ border: "none", borderRadius: 9, padding: "9px 16px", background: validOrders.length ? "#BA7517" : "#D3D1C7", color: "#fff", fontSize: 12, fontWeight: 900, cursor: validOrders.length ? "pointer" : "default" }}>確認匯入 {validOrders.length} 筆</button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4,1fr)" : "1fr 1fr", gap: 1, background: "#EEE7D9" }}>
+                  {[{ label: "檔案訂單", value: `${importPreview.orders.length} 筆` }, { label: "可匯入", value: `${validOrders.length} 筆` }, { label: "需處理", value: `${invalidOrders.length} 筆` }, { label: "可匯入金額", value: `NT$${totalAmount.toLocaleString()}` }].map((item) => <div key={item.label} style={{ padding: 12, background: "#fff" }}><div style={{ fontSize: 10, color: "#888780" }}>{item.label}</div><div style={{ marginTop: 4, fontSize: 16, fontWeight: 900, color: "#2C2C2A" }}>{item.value}</div></div>)}
+                </div>
+                {invalidOrders.length > 0 && <div style={{ padding: 12, background: "#FFF1F1" }}><div style={{ fontSize: 11, fontWeight: 900, color: "#A32D2D", marginBottom: 6 }}>以下資料不會匯入</div>{invalidOrders.slice(0, 12).map((order) => <div key={`${order.orderNo}-${order.orderTime}`} style={{ padding: "5px 0", borderTop: "1px solid #F4D6D6", fontSize: 11, color: "#7F1D1D" }}>{order.orderNo || "無訂單編號"}・{order.orderTime || "無日期"}・{order.error}</div>)}</div>}
+              </div>;
+            })()}
             {importResult && (
               <div style={{ marginTop: 10, padding: "10px 12px", background: importResult.includes("失敗") || importResult.includes("錯誤") ? "#FCEBEB" : "#E1F5EE", borderRadius: 8, fontSize: 12, color: importResult.includes("失敗") || importResult.includes("錯誤") ? "#A32D2D" : "#085041", whiteSpace: "pre-wrap" }}>
                 {importResult}
               </div>
             )}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #EEEAE2" }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#2C2C2A" }}>最近匯入批次</div>
+              <div style={{ marginTop: 4, fontSize: 11, color: "#888780" }}>未鎖帳批次可整批撤銷；已鎖帳資料請至月結明細新增更正。</div>
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {importBatches.length === 0 ? <div style={{ padding: 16, borderRadius: 10, background: "#F7F6F2", color: "#888780", fontSize: 12, textAlign: "center" }}>尚無匯入批次</div> : importBatches.map((batch) => <div key={batch.id} style={{ display: "grid", gridTemplateColumns: isDesktop ? "minmax(220px,1.5fr) 1fr 1fr auto" : "1fr", gap: 10, alignItems: "center", padding: 12, border: "1px solid #E5E1D8", borderRadius: 11, background: batch.status === "reverted" ? "#F7F6F2" : "#fff" }}>
+                  <div><div style={{ fontSize: 12, fontWeight: 900, color: "#2C2C2A" }}>{batch.file_name}</div><div style={{ marginTop: 3, fontSize: 10, color: "#888780" }}>{new Date(batch.created_at).toLocaleString("zh-TW")}・{batch.admin_username}</div></div>
+                  <div style={{ fontSize: 11, color: "#5F5E5A" }}>{batch.months.join("、") || "未辨識月份"}</div>
+                  <div style={{ fontSize: 11, color: "#5F5E5A" }}>成功 {batch.success_count}・未匯入 {batch.error_count}</div>
+                  {batch.status === "reverted" ? <span style={{ padding: "6px 10px", borderRadius: 999, background: "#EEECE6", color: "#77736A", fontSize: 10, fontWeight: 900 }}>已撤銷</span> : <button type="button" disabled={revertingBatchId === batch.id} onClick={() => revertImportBatch(batch)} style={{ border: "1px solid #E7B6B6", borderRadius: 8, background: "#FFF5F5", color: "#A32D2D", padding: "7px 10px", fontSize: 10, fontWeight: 900, cursor: "pointer" }}>{revertingBatchId === batch.id ? "撤銷中" : "整批撤銷"}</button>}
+                </div>)}
+              </div>
+            </div>
           </div>
         )}
 
+        {!importOnly && <>
         <div style={{ background: "#fff", borderRadius: 18, border: "0.5px solid #D3D1C7", padding: 16, marginBottom: 12, boxShadow: "0 10px 26px rgba(44,44,42,0.05)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ fontSize: 20, fontWeight: 800, color: "#2C2C2A" }}>📅 結算區間</div>
-              <div style={{ padding: "8px 13px", borderRadius: 12, background: reportMode === "shop" ? "#F7F5FF" : "#F1EFE8", color: reportMode === "shop" ? "#534AB7" : "#5F5E5A", fontSize: 13, fontWeight: 800 }}>{reportMode === "shop" ? "店舖報表" : "設計師報表"}</div>
+              <div style={{ padding: "8px 13px", borderRadius: 12, background: reportMode === "shop" ? "#F7F5FF" : "#F1EFE8", color: reportMode === "shop" ? "#534AB7" : "#5F5E5A", fontSize: 13, fontWeight: 800 }}>{reportMode === "shop" ? "店舖報表" : "設計師月結"}</div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => shiftReportPeriod(1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#D7F8E6", color: "#047857", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>下一期</button>
-              <button onClick={setCurrentReportPeriod} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#E2F2FF", color: "#0877B5", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>本期</button>
               <button onClick={() => shiftReportPeriod(-1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#F1EFE8", color: "#5F5E5A", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>上一期</button>
+              <button onClick={setCurrentReportPeriod} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#E2F2FF", color: "#0877B5", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>本期</button>
+              <button onClick={() => shiftReportPeriod(1)} style={{ border: "none", padding: "9px 14px", borderRadius: 12, background: "#D7F8E6", color: "#047857", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>下一期</button>
             </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(4, minmax(150px, 1fr))" : "1fr", gap: 10, alignItems: "end" }}>
@@ -1388,9 +1703,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
             <button onClick={() => window.location.reload()} style={{ background: "#D7F8E6", color: "#047857", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>重新整理</button>
-            <button onClick={exportCsv} style={{ background: "#E2F2FF", color: "#0877B5", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>CSV</button>
             <button onClick={exportExcel} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>Excel</button>
-            <button onClick={exportPdf} style={{ background: "#0877B5", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>PDF（每位設計師）</button>
+            {reportMode === "designer" && (
+              <button onClick={exportPdf} style={{ background: "#0877B5", color: "#fff", border: "none", borderRadius: 12, padding: "9px 14px", fontSize: 13, cursor: "pointer", fontWeight: 800 }}>PDF（每位設計師）</button>
+            )}
           </div>
         </div>
 
@@ -1439,7 +1755,7 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
                 <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#F8F7F3" }}>
-                      {["設計師", "筆數", "總營業額", "服務抽成", "商品抽成", "應付 BC", "設計師實收"].map((head, index) => (
+                      {["設計師", "筆數", "服務業績", "商品銷售", "服務抽成", "品牌共享費", "應付 BC", "設計師實收"].map((head, index) => (
                         <th key={head} style={{ padding: "11px 14px", fontSize: 12, color: "#888780", fontWeight: 800, textAlign: index < 2 ? "left" : "right" }}>{head}</th>
                       ))}
                     </tr>
@@ -1451,9 +1767,10 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
                         <tr key={designer.id} onClick={() => setSelectedShopDesignerId(selected ? null : designer.id)} style={{ borderTop: "0.5px solid #F1EFE8", background: selected ? "#F7F5FF" : "#fff", cursor: "pointer" }}>
                           <td style={{ padding: "12px 14px", fontSize: 15, color: "#2C2C2A", fontWeight: 800 }}>{getDesignerLabel(designer)}</td>
                           <td style={{ padding: "12px 14px", fontSize: 13, color: "#5F5E5A", fontWeight: 700 }}>{settlement.totals.customerCount}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#0877B5", fontWeight: 900, textAlign: "right" }}>NT${settlement.totals.totalRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#0877B5", fontWeight: 900, textAlign: "right" }}>NT${settlement.totals.serviceRevenue.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#6D28D9", fontWeight: 900, textAlign: "right" }}>NT${settlement.totals.productRevenue.toLocaleString()}</td>
                           <td style={{ padding: "12px 14px", fontSize: 15, color: "#087F5B", fontWeight: 900, textAlign: "right" }}>NT${settlement.serviceCommission.toLocaleString()}</td>
-                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#6D28D9", fontWeight: 900, textAlign: "right" }}>NT${settlement.productCommission.toLocaleString()}</td>
+                          <td style={{ padding: "12px 14px", fontSize: 15, color: "#A55124", fontWeight: 900, textAlign: "right" }}>NT${settlement.brandFee.toLocaleString()}</td>
                           <td style={{ padding: "12px 14px", fontSize: 15, color: "#BA7517", fontWeight: 900, textAlign: "right" }}>NT${settlement.bcReceivable.toLocaleString()}</td>
                           <td style={{ padding: "12px 14px", fontSize: 15, color: "#534AB7", fontWeight: 900, textAlign: "right" }}>NT${settlement.designerIncome.toLocaleString()}</td>
                         </tr>
@@ -1512,88 +1829,114 @@ export default function AdminReport({ initialMode = "shop" }: AdminReportProps =
 
         {reportMode === "designer" && activeReportDesigner && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, 1fr)" : "repeat(2, 1fr)", gap: 8, marginBottom: 12 }}>
-              {[
-                { key: "actualIncome" as DesignerDetailKey, label: "設計師實收", value: `NT$${(activeDesignerSettlement?.designerIncome || 0).toLocaleString()}`, color: "#1D9E75" },
-                { key: "serviceRevenue" as DesignerDetailKey, label: "服務業績", value: `NT$${designerTotals.serviceRevenue.toLocaleString()}`, color: "#534AB7" },
-                { key: "productRevenue" as DesignerDetailKey, label: "商品銷售", value: `NT$${designerTotals.productRevenue.toLocaleString()}`, color: "#BA7517" },
-                { key: "selfUse" as DesignerDetailKey, label: "自領材料", value: `-NT$${designerTotals.selfUse.toLocaleString()}`, color: "#A32D2D" },
-                { key: "discount" as DesignerDetailKey, label: "折扣", value: `-NT$${designerTotals.discount.toLocaleString()}`, color: "#E24B4A" },
-                { key: "actualIncome" as DesignerDetailKey, label: "總客數", value: String(designerTotals.customerCount), color: "#0B66C3" },
-              ].map((card) => (
-                <button key={card.label} onClick={() => setActiveDesignerDetail(card.key)} style={{ background: activeDesignerDetail === card.key ? "#F7F5FF" : "#fff", borderRadius: 12, border: activeDesignerDetail === card.key ? "1.5px solid #534AB7" : "0.5px solid #D3D1C7", padding: 14, textAlign: "left", cursor: "pointer" }}>
-                  <div style={{ fontSize: 11, color: "#888780", fontWeight: 600, marginBottom: 8 }}>{card.label}</div>
-                  <div style={{ fontSize: 18, color: card.color, fontWeight: 800 }}>{card.value}</div>
-                </button>
-              ))}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "420px 1fr" : "1fr", gap: 12, marginBottom: 12 }}>
-              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
-                <div style={{ padding: "12px 14px", fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{getDesignerLabel(activeReportDesigner)} 月報摘要</div>
-                {[
-                  ["服務業績", designerTotals.serviceRevenue, false],
-                  ["服務抽成", activeDesignerSettlement?.serviceCommission || 0, false],
-                  ["商品銷售", designerTotals.productRevenue, false],
-                  ["商品抽成", activeDesignerSettlement?.productCommission || 0, false],
-                  ["品牌共享費", activeDesignerSettlement?.brandFee || 0, true],
-                  ["自領材料", designerTotals.selfUse, true],
-                  ["折扣", designerTotals.discount, true],
-                  ["設計師實收", activeDesignerSettlement?.designerIncome || 0, false],
-                  ["應付 BC", activeDesignerSettlement?.bcReceivable || 0, false],
-                ].map(([label, value, negative]) => (
-                  <div key={String(label)} style={{ display: "flex", justifyContent: "space-between", padding: "10px 14px", borderTop: "0.5px solid #F1EFE8", fontSize: 13, color: label === "實際收入" ? "#534AB7" : "#2C2C2A", fontWeight: label === "實際收入" ? 800 : 500 }}>
-                    <span>{label}</span>
-                    <span>{negative ? "-" : ""}NT${Number(value).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden" }}>
-                <div style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 700 }}>{activeDesignerDetailTitle[activeDesignerDetail]}</div>
-                    <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>只顯示目前選擇設計師的資料</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#888780", fontWeight: 600 }}>共 {activeDesignerDetailRows.length} 筆</div>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: "#F1EFE8" }}>
-                        {["日期", "明細", "數量", "金額"].map((head) => (
-                          <th key={head} style={{ padding: "10px 14px", fontSize: 12, color: "#888780", fontWeight: 700, textAlign: "left" }}>{head}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeDesignerDetailRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} style={{ padding: "18px 14px", color: "#888780", fontSize: 13, textAlign: "center" }}>目前沒有明細</td>
-                        </tr>
-                      ) : activeDesignerDetailRows.map((row, index) => {
-                        const showDate = index === 0 || activeDesignerDetailRows[index - 1].date !== row.date;
-                        return (
-                          <tr key={row.id} style={{ borderTop: "0.5px solid #F1EFE8" }}>
-                            <td style={{ padding: "11px 14px", fontSize: 13, color: showDate ? "#2C2C2A" : "#B4AEA4", fontWeight: showDate ? 700 : 500 }}>{showDate ? row.date : ""}</td>
-                            <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A", fontWeight: 600 }}>
-                              <span style={{ color: "#888780", marginRight: 8 }}>{row.kind}</span>
-                              {row.itemName}
-                            </td>
-                            <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A" }}>{row.quantity}</td>
-                            <td style={{ padding: "11px 14px", fontSize: 13, color: row.isNegative ? "#A32D2D" : "#1976C9", fontWeight: 800 }}>{row.amount}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <SettlementPreviewPage
+              key={`${reportStartDate.slice(0, 7)}-${activeReportDesigner.id}`}
+              embedded
+              initialMonth={reportStartDate.slice(0, 7)}
+              designerId={activeReportDesigner.id}
+              reportSummary={{
+                actualIncome: activeDesignerSettlement?.designerIncome || 0,
+                serviceRevenue: designerTotals.serviceRevenue,
+                productRevenue: designerTotals.productRevenue,
+                selfUse: designerTotals.selfUse,
+                discount: designerTotals.discount,
+                customerCount: designerTotals.customerCount,
+              }}
+              activeMetric={activeDesignerDetail}
+              onMetricChange={(key) => {
+                if (["serviceRevenue", "productRevenue", "selfUse", "discount"].includes(key)) setActiveDesignerDetail(key as DesignerDetailKey);
+              }}
+              onConfirmed={() => { setSettlementLocked(true); setAuditRefresh((value) => value + 1); }}
+              onUnlocked={() => { setSettlementLocked(false); setAuditRefresh((value) => value + 1); }}
+            />
+            <div style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "14px 16px 0" }}>
+                <div style={{ fontSize: 17, color: "#2C2C2A", fontWeight: 900 }}>交易明細</div>
+                <div style={{ display: "flex", overflowX: "auto", borderBottom: "1px solid #E8E5DE", marginTop: 8 }}>
+                  {designerDetailSections.map((section) => {
+                    const selected = activeDesignerDetail === section.key;
+                    return <button key={section.key} type="button" onClick={() => setActiveDesignerDetail(section.key)} style={{ minWidth: isDesktop ? 170 : 132, border: "none", borderBottom: selected ? "3px solid #1976C9" : "3px solid transparent", background: selected ? "#F1F8FF" : "transparent", color: selected ? "#1269B0" : "#4F4E49", padding: "11px 16px 10px", fontSize: 13, fontWeight: selected ? 900 : 700, cursor: "pointer", whiteSpace: "nowrap" }}>{section.title.replace("明細", "")} <span style={{ color: selected ? "#1976C9" : "#888780", marginLeft: 5 }}>{section.rows.length}</span></button>;
+                  })}
                 </div>
               </div>
+              <div style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 800 }}>{activeDesignerDetailTitle[activeDesignerDetail]}</div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>共 {activeDesignerDetailRows.length} 筆・點選上方分類切換明細</div>
+                </div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", minWidth: 860, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#F1EFE8" }}>
+                      {["日期", "明細", "數量", "金額", "狀態", "操作"].map((head) => (
+                        <th key={head} style={{ padding: "10px 14px", fontSize: 12, color: "#888780", fontWeight: 700, textAlign: "left" }}>{head}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeDesignerDetailRows.length === 0 ? (
+                      <tr><td colSpan={6} style={{ padding: "24px 14px", color: "#888780", fontSize: 13, textAlign: "center" }}>目前沒有明細</td></tr>
+                    ) : activeDesignerDetailRows.map((row, index) => {
+                      const showDate = index === 0 || activeDesignerDetailRows[index - 1].date !== row.date;
+                      const editable = isDetailEditable(row);
+                      return <tr key={row.id} style={{ borderTop: "0.5px solid #F1EFE8" }}>
+                        <td style={{ padding: "11px 14px", fontSize: 13, color: showDate ? "#2C2C2A" : "#B4AEA4", fontWeight: showDate ? 700 : 500 }}>{showDate ? row.date : ""}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A", fontWeight: 600 }}><span style={{ color: "#888780", marginRight: 8 }}>{row.kind}</span>{row.itemName}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 13, color: "#2C2C2A" }}>{row.quantity}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 13, color: row.isNegative ? "#A32D2D" : "#1976C9", fontWeight: 800 }}>{row.amount}</td>
+                        <td style={{ padding: "8px 14px" }}><span style={{ display: "inline-block", borderRadius: 999, background: editable ? "#E6F3FF" : "#E4F8EA", color: editable ? "#1976C9" : "#1A7F45", padding: "5px 10px", fontSize: 10, fontWeight: 800 }}>{editable ? "可修改" : "已鎖定"}</span></td>
+                        <td style={{ padding: "8px 14px" }}>{editable ? <button type="button" onClick={() => openDetailEditor(row)} style={{ border: "1px solid #CFC8F5", borderRadius: 8, background: "#fff", color: "#534AB7", padding: "6px 12px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>修改</button> : row.sourceType && row.sourceType !== "legacy" ? <div style={{ display: "grid", gap: 4, justifyItems: "start" }}><button type="button" onClick={() => openDetailEditor(row, true)} style={{ border: "1px solid #D6A54A", borderRadius: 8, background: "#FFF8E8", color: "#8A5A10", padding: "6px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>新增更正</button><span style={{ color: "#AAA49B", fontSize: 9 }}>{detailLockLabel(row)}</span></div> : <span style={{ color: "#AAA49B", fontSize: 10 }}>{detailLockLabel(row)}</span>}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
+            <details style={{ background: "#fff", borderRadius: 14, border: "0.5px solid #D3D1C7", overflow: "hidden", marginBottom: 12 }}>
+              <summary style={{ padding: "13px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", listStyle: "none" }}>
+                <div><div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 800 }}>修改紀錄</div><div style={{ marginTop: 3, color: "#888780", fontSize: 11 }}>查看哪個後台帳號在何時修改了什麼資料</div></div>
+                <div style={{ color: "#888780", fontSize: 12, fontWeight: 700 }}>共 {adjustmentAuditLogs.length} 筆　▼</div>
+              </summary>
+              <div style={{ borderTop: "1px solid #EEEAE2" }}>
+                {adjustmentAuditLogs.length === 0 ? <div style={{ padding: 18, color: "#888780", fontSize: 12, textAlign: "center" }}>本月尚無修改紀錄</div> : adjustmentAuditLogs.map((log) => <div key={log.id} style={{ padding: "12px 14px", borderBottom: "1px solid #F1EFE8", display: "grid", gridTemplateColumns: isDesktop ? "170px 160px minmax(0,1fr) 170px" : "1fr", gap: 8, alignItems: "center" }}>
+                  <div style={{ color: "#5F5E5A", fontSize: 11 }}>{new Date(log.changedAt).toLocaleString("zh-TW")}</div>
+                  <div><div style={{ color: "#2C2C2A", fontSize: 12, fontWeight: 800 }}>{log.username}</div><div style={{ color: "#888780", fontSize: 10 }}>{log.roleName}</div></div>
+                  <div><div style={{ color: "#2C2C2A", fontSize: 12, fontWeight: 700 }}>{log.designerName ? `${log.designerName}・` : ""}{log.category}</div>{log.beforeName && log.afterName && log.beforeName !== log.afterName && <div style={{ color: "#534AB7", fontSize: 10, marginTop: 3 }}>{log.beforeName} → {log.afterName}</div>}<div style={{ color: "#888780", fontSize: 10, marginTop: 3 }}>原因：{log.reason}</div></div>
+                  <div style={{ color: "#534AB7", fontSize: 12, fontWeight: 900, textAlign: isDesktop ? "right" : "left" }}>NT${Math.abs(log.beforeAmount).toLocaleString()} → NT${Math.abs(log.afterAmount).toLocaleString()}</div>
+                </div>)}
+              </div>
+            </details>
           </>
         )}
 
+        </>}
+
       </div>
 
-      <AdminBottomNav current={reportMode === "designer" ? "report-designer" : "report-shop"} />
+      {!importOnly && editingDetail && <div onClick={() => !savingDetail && setEditingDetail(null)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(24,24,22,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+        <div onClick={(event) => event.stopPropagation()} style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: 18, padding: 18, boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
+          <div style={{ fontSize: 18, color: "#2C2C2A", fontWeight: 900 }}>{isHistoricalCorrection ? "新增歷史更正" : "修改明細"}</div>
+          <div style={{ marginTop: 5, color: "#888780", fontSize: 12 }}>{editingDetail.date}・{editingDetail.itemName}</div>
+          {isHistoricalCorrection && <div style={{ marginTop: 10, padding: "9px 10px", borderRadius: 9, background: "#FFF5D9", color: "#765817", fontSize: 11, lineHeight: 1.5 }}>原始匯入紀錄會保留在修改紀錄中；報表與統計將使用更正後的品項與金額。</div>}
+          <label style={{ display: "grid", gap: 6, marginTop: 16, color: "#5F5E5A", fontSize: 12, fontWeight: 700 }}>品項名稱／分類文字
+            <input value={editItemName} onChange={(event) => setEditItemName(event.target.value)} placeholder="輸入正確的服務或商品名稱" style={{ padding: "11px 12px", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 14 }} />
+          </label>
+          <label style={{ display: "grid", gap: 6, marginTop: 12, color: "#5F5E5A", fontSize: 12, fontWeight: 700 }}>金額
+            <input type="number" min="0" value={editAmount} onChange={(event) => setEditAmount(Number(event.target.value || 0))} style={{ padding: "11px 12px", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 15 }} />
+          </label>
+          <label style={{ display: "grid", gap: 6, marginTop: 12, color: "#5F5E5A", fontSize: 12, fontWeight: 700 }}>修改原因（必填）
+            <textarea value={editReason} onChange={(event) => setEditReason(event.target.value)} placeholder="例如：原結帳金額輸入錯誤" rows={3} style={{ padding: "11px 12px", border: "1px solid #D3D1C7", borderRadius: 10, fontSize: 13, resize: "vertical" }} />
+          </label>
+          <div style={{ marginTop: 8, color: "#888780", fontSize: 10, lineHeight: 1.5 }}>儲存後會更新原始交易資料，並在交易備註留下後台更正原因。</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 16 }}>
+            <button type="button" disabled={savingDetail} onClick={() => setEditingDetail(null)} style={{ border: "1px solid #D3D1C7", borderRadius: 10, background: "#fff", color: "#5F5E5A", padding: 10, fontWeight: 800 }}>取消</button>
+            <button type="button" disabled={savingDetail} onClick={saveDetailCorrection} style={{ border: "none", borderRadius: 10, background: isHistoricalCorrection ? "#BA7517" : "#534AB7", color: "#fff", padding: 10, fontWeight: 800 }}>{savingDetail ? "儲存中" : isHistoricalCorrection ? "確認新增更正" : "確認修改"}</button>
+          </div>
+        </div>
+      </div>}
+
+      <AdminBottomNav current={importOnly ? "report-import" : reportMode === "designer" ? "report-designer" : "report-shop"} />
     </div>
   );
 }

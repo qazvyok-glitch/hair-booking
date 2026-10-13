@@ -43,6 +43,15 @@ function getSelectedDurationMinutes(selectedServices: { duration?: string }[]) {
   return total > 0 ? total : 60;
 }
 
+function formatDurationMinutes(minutes: number, isEnglish: boolean) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (isEnglish) {
+    return [hours ? `${hours} hr` : "", mins ? `${mins} min` : ""].filter(Boolean).join(" ") || "60 min";
+  }
+  return [hours ? `${hours} 小時` : "", mins ? `${mins} 分鐘` : ""].filter(Boolean).join(" ") || "60 分鐘";
+}
+
 function getBookingDurationMinutes(booking: Booking, durationItems: DurationItem[]) {
   if (booking.duration_minutes && booking.duration_minutes > 0) return booking.duration_minutes;
   const durationMap = new Map(durationItems.map((item) => [item.id, parseDurationMinutes(item.duration)]));
@@ -64,7 +73,7 @@ function isBlockingBookingStatus(status?: string | null) {
 
 export default function Step3() {
   const router = useRouter();
-  const { designer, date, time, selectedServices, setDate, setTime } = useBookingStore();
+  const { designer, date, time, attendeeCount, selectedServices, companionSelectedServices, setDate, setTime } = useBookingStore();
   const { language } = useLanguageStore();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -75,6 +84,8 @@ export default function Step3() {
   const [durationItems, setDurationItems] = useState<DurationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const isEnglish = language === "en";
+  const requestedServices = attendeeCount === 2 ? [...selectedServices, ...companionSelectedServices] : selectedServices;
+  const requestedDurationMinutes = getSelectedDurationMinutes(requestedServices);
 
   useEffect(() => {
     if (!designer) { router.push(appRoutes.customer.bookingStart); return; }
@@ -106,7 +117,7 @@ export default function Step3() {
   function isTimeUnavailable(dateStr: string, t: string) {
     if (!designer) return true;
     const start = timeToMinutes(t);
-    const end = start + getSelectedDurationMinutes(selectedServices);
+    const end = start + requestedDurationMinutes;
     const sortedHours = [...(designer.work_hours || [])].sort();
     const latestEnd = sortedHours.length > 0 ? timeToMinutes(sortedHours[sortedHours.length - 1]) + getSlotMinutes(sortedHours) : 0;
     const exceedsWorkHours = latestEnd > 0 && end > latestEnd;
@@ -166,6 +177,15 @@ export default function Step3() {
       </button>
       <div style={{ fontSize: 20, fontWeight: 600, color: "#1a1a1a", marginBottom: 4 }}>{isEnglish ? "Choose Date & Time" : "選擇時間"}</div>
       <div style={{ fontSize: 12, color: "#9a9188", marginBottom: 20 }}>{isEnglish ? "Please choose your appointment date and time." : "請選擇預約日期與時段"}</div>
+      <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 14, background: "#F7EFE9", border: "1px solid #E7D8CC", color: "#6F3E2E", fontSize: 12, fontWeight: 700, lineHeight: 1.6 }}>
+        {attendeeCount === 2
+          ? isEnglish
+            ? `Two guests with the same stylist will reserve one continuous ${formatDurationMinutes(requestedDurationMinutes, true)} block. Available times are calculated from the next open gap.`
+            : `2 人同一位設計師時，系統會依兩位服務總時長連續保留 ${formatDurationMinutes(requestedDurationMinutes, false)}，可預約時段會自動跳到下一個足夠空檔。`
+          : isEnglish
+            ? `This booking will reserve ${formatDurationMinutes(requestedDurationMinutes, true)}.`
+            : `本次預約會保留 ${formatDurationMinutes(requestedDurationMinutes, false)}。`}
+      </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <button onClick={prevMonth} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#9a6060" }}>‹</button>

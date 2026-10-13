@@ -23,8 +23,21 @@ export default function MemberLogin() {
     setLoading(true);
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/member/setup` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/member/setup` },
     });
+  }
+
+  async function handleLineLogin() {
+    setLoading(true);
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "custom:line-oauth",
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=/member/setup` },
+    });
+    if (error) {
+      setError("LINE 登入目前無法使用，請確認 Supabase 已啟用 LINE provider。");
+      setLoading(false);
+    }
   }
 
   async function handleEmailAuth() {
@@ -73,9 +86,15 @@ export default function MemberLogin() {
               使用 Google 帳號登入
             </button>
 
+            <button onClick={handleLineLogin} disabled={loading} style={{ width: "100%", padding: "13px 0", background: "#06C755", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: loading ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+              <span style={{ fontSize: 16, fontWeight: 900 }}>LINE</span>
+              使用 LINE 登入
+            </button>
+
             <button onClick={() => setMode("email")} style={{ width: "100%", padding: "13px 0", background: "transparent", color: "#fff", border: "1.5px solid #fff", borderRadius: 12, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
               使用 Email 登入 / 註冊
             </button>
+            {error && <div style={{ background: "#3A1A1A", color: "#F09595", borderRadius: 8, padding: "8px 12px", fontSize: 12 }}>{error}</div>}
           </div>
         ) : (
           <div>

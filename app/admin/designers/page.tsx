@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
+import { readAdminSession } from "../../../lib/adminSession";
+import { hasPermission, permissionsForRole } from "../../../lib/adminPermissions";
 
 type Designer = {
   id: number;
@@ -18,6 +20,11 @@ type Designer = {
   is_active: boolean;
   avatar_url: string;
   commission_rate: number;
+  commission_base_deduction?: number;
+  commission_threshold?: number;
+  commission_rate_after?: number;
+  brand_fee_rate?: number;
+  product_commission_rate?: number;
   status: string;
   joined_date: string;
   left_date: string;
@@ -66,6 +73,44 @@ type SettlementItemForm = {
 
 type FormSection = "profile" | "settlement";
 
+type ContractVersion = {
+  effective_date: string;
+  monthly_rent: number;
+  commission_threshold: number;
+  commission_rate: number;
+  marketing_rate: number;
+  changed_at: string;
+  changed_by: string;
+};
+
+type ContractSettings = {
+  effective_date: string;
+  monthly_rent: number;
+  deposit_amount: number;
+  deposit_received_date: string;
+  deposit_refunded_date: string;
+  deposit_status: "unpaid" | "received" | "refunded";
+  note: string;
+  versions: ContractVersion[];
+  updated_at: string;
+  updated_by: string;
+};
+
+const defaultContractSettings: ContractSettings = {
+  effective_date: new Date().toISOString().split("T")[0],
+  monthly_rent: 12000,
+  deposit_amount: 0,
+  deposit_received_date: "",
+  deposit_refunded_date: "",
+  deposit_status: "unpaid",
+  note: "",
+  versions: [],
+  updated_at: "",
+  updated_by: "",
+};
+
+const contractSettingKey = (designerId: number) => `designer_contract_${designerId}`;
+
 const defaultWorkHours = ["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"];
 const defaultSettlementItemForm: SettlementItemForm = {
   name: "",
@@ -84,6 +129,8 @@ export function AdminDesignersContent() {
   const [designers, setDesigners] = useState<Designer[]>([]);
   const [authByDesignerId, setAuthByDesignerId] = useState<Record<number, DesignerAuth>>({});
   const [settlementItems, setSettlementItems] = useState<SettlementItem[]>([]);
+  const [contractByDesignerId, setContractByDesignerId] = useState<Record<number, ContractSettings>>({});
+  const [contractForm, setContractForm] = useState<ContractSettings>(defaultContractSettings);
   const [loading, setLoading] = useState(true);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -91,17 +138,20 @@ export function AdminDesignersContent() {
   const [sortDesignerIndex, setSortDesignerIndex] = useState<number | null>(null);
   const [formSection, setFormSection] = useState<FormSection>("profile");
   const [showSettlementForm, setShowSettlementForm] = useState(false);
+  const [showOtherSettlementItems, setShowOtherSettlementItems] = useState(false);
   const [editingSettlementItemId, setEditingSettlementItemId] = useState<number | null>(null);
   const [settlementForm, setSettlementForm] = useState<SettlementItemForm>(defaultSettlementItemForm);
   const [saving, setSaving] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+  const [canViewContracts, setCanViewContracts] = useState(true);
   const [form, setForm] = useState({
     name: "", display_name: "", nickname: "", initials: "", style: "", ig: "", avatar_url: "",
     bg_color: "#EEEDFE", text_color: "#3C3489",
     commission_rate: 0.5,
-    commission_base_deduction: 0,
+    commission_base_deduction: 50000,
     commission_threshold: 0,
     commission_rate_after: 0.5,
-    brand_fee_rate: 0,
+    brand_fee_rate: 0.03,
     product_commission_rate: 0,
     joined_date: "", left_date: "",
     can_view_members: true, is_manager: false, status: "active",
@@ -119,49 +169,70 @@ export function AdminDesignersContent() {
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
+    queueMicrotask(() => {
+      const currentSession = readAdminSession();
+      const role = currentSession?.role || "owner";
+      setCanViewContracts(hasPermission("designer_contracts", permissionsForRole(role, currentSession).permissions));
+    });
     fetchData();
   }, [router]);
 
   async function fetchData() {
-    const [{ data }, { data: authData }, { data: settlementData }] = await Promise.all([
+    const [{ data }, { data: authData }, { data: settlementData }, { data: contractData }] = await Promise.all([
       supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("designer_auth").select("designer_id, username, password_hash"),
       supabase.from("designer_settlement_items").select("*").order("sort_order").order("id"),
+      supabase.from("shop_info").select("key, value").like("key", "designer_contract_%"),
     ]);
     if (data) setDesigners(data);
     if (authData) {
       setAuthByDesignerId(Object.fromEntries((authData as DesignerAuth[]).map((auth) => [auth.designer_id, auth])));
     }
     if (settlementData) setSettlementItems(settlementData as SettlementItem[]);
+    if (contractData) {
+      const contracts = Object.fromEntries(contractData.map((item) => {
+        const designerId = Number(item.key.replace("designer_contract_", ""));
+        try {
+          return [designerId, { ...defaultContractSettings, ...JSON.parse(item.value || "{}") }];
+        } catch {
+          return [designerId, { ...defaultContractSettings }];
+        }
+      }));
+      setContractByDesignerId(contracts);
+    }
     setLoading(false);
   }
 
   function openNew() {
     setEditing(null);
+    setSaveNotice("");
     setFormSection("profile");
     setForm({
       name: "", display_name: "", nickname: "", initials: "", style: "", ig: "", avatar_url: "",
       bg_color: "#EEEDFE", text_color: "#3C3489",
       commission_rate: 0.5,
-      commission_base_deduction: 0,
+      commission_base_deduction: 50000,
       commission_threshold: 0,
       commission_rate_after: 0.5,
-      brand_fee_rate: 0,
+      brand_fee_rate: 0.03,
       product_commission_rate: 0,
       joined_date: new Date().toISOString().split("T")[0], left_date: "",
       can_view_members: true, is_manager: false, status: "active",
       login_username: "", login_password: "",
       work_hours: defaultWorkHours,
-    } as any);
+    });
     setShowSettlementForm(false);
+    setShowOtherSettlementItems(false);
     setEditingSettlementItemId(null);
     setSettlementForm({ ...defaultSettlementItemForm });
+    setContractForm({ ...defaultContractSettings });
     setShowForm(true);
   }
 
   function openEdit(d: Designer, section: FormSection = "profile") {
     const auth = authByDesignerId[d.id];
     setEditing(d);
+    setSaveNotice("");
     setFormSection(section);
     setForm({
       name: d.name,
@@ -174,11 +245,11 @@ export function AdminDesignersContent() {
       bg_color: d.bg_color || "#EEEDFE",
       text_color: d.text_color || "#3C3489",
       commission_rate: d.commission_rate ?? 0.5,
-      commission_base_deduction: (d as any).commission_base_deduction ?? 0,
-      commission_threshold: (d as any).commission_threshold ?? 0,
-      commission_rate_after: (d as any).commission_rate_after ?? 0.5,
-      brand_fee_rate: (d as any).brand_fee_rate ?? 0,
-      product_commission_rate: (d as any).product_commission_rate ?? 0,
+      commission_base_deduction: d.commission_base_deduction ?? 0,
+      commission_threshold: d.commission_threshold ?? 0,
+      commission_rate_after: d.commission_rate_after ?? 0.5,
+      brand_fee_rate: d.brand_fee_rate ?? 0,
+      product_commission_rate: d.product_commission_rate ?? 0,
       joined_date: d.joined_date || "",
       left_date: d.left_date || "",
       can_view_members: d.can_view_members ?? true,
@@ -189,8 +260,10 @@ export function AdminDesignersContent() {
       work_hours: d.work_hours || defaultWorkHours,
     });
     setShowSettlementForm(false);
+    setShowOtherSettlementItems(false);
     setEditingSettlementItemId(null);
     setSettlementForm({ ...defaultSettlementItemForm });
+    setContractForm({ ...(contractByDesignerId[d.id] || defaultContractSettings) });
     setShowForm(true);
   }
 
@@ -198,37 +271,95 @@ export function AdminDesignersContent() {
     if (!form.name) { alert("請填寫設計師姓名"); return; }
     if (!form.login_username) { alert("請填寫登入帳號"); return; }
     if (!editing && !form.login_password) { alert("新增設計師時請設定登入密碼"); return; }
+    if (!contractForm.effective_date) { alert("請設定合約生效日期"); return; }
+    if (form.commission_base_deduction < 0 || form.commission_rate < 0 || form.commission_rate > 1 || form.brand_fee_rate < 0 || form.brand_fee_rate > 1 || contractForm.monthly_rent < 0 || contractForm.deposit_amount < 0) {
+      alert("金額不得為負數，抽成比例須介於 0% 至 100%");
+      return;
+    }
+    if (form.status === "inactive" && contractForm.deposit_status === "received") {
+      alert("押金仍為「已收取」。請先登記退還日期並將押金狀態改為「已退還」，再辦理退租停用。");
+      return;
+    }
+    if (form.status === "inactive" && editing && !window.confirm("設為退租後，將立即關閉此設計師的登入與預約使用權限。確定繼續嗎？")) return;
     setSaving(true);
-    const isActive = form.status === "active";
-    const nextSortOrder = designers.reduce((max, designer) => Math.max(max, designer.sort_order || 0), 0) + 1;
-    const { login_username, login_password, ...designerForm } = form;
-    const saveData = { ...designerForm, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null, sort_order: editing?.sort_order || nextSortOrder };
-    if (editing) {
-      await supabase.from("designers").update(saveData).eq("id", editing.id);
-      const authPayload = {
-        designer_id: editing.id,
-        username: login_username,
-        password_hash: login_password || authByDesignerId[editing.id]?.password_hash || "",
-      };
-      const { error: authUpdateError } = await supabase.from("designer_auth").update(authPayload).eq("designer_id", editing.id);
-      if (authUpdateError) await supabase.from("designer_auth").insert(authPayload);
-      setAuthByDesignerId({ ...authByDesignerId, [editing.id]: authPayload });
-      setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...designerForm, is_active: isActive } : d));
-    } else {
-      const { data } = await supabase.from("designers").insert(saveData).select().single();
-      if (data) {
-        setDesigners([...designers, data].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id)));
+    setSaveNotice("");
+    try {
+      let auditUsername = "admin";
+      try {
+        auditUsername = JSON.parse(sessionStorage.getItem("adminSession") || "{}").username || "admin";
+      } catch {
+        // Older sessions may not be JSON; keep the fallback audit name.
+      }
+      const isActive = form.status === "active";
+      const nextSortOrder = designers.reduce((max, designer) => Math.max(max, designer.sort_order || 0), 0) + 1;
+      const { login_username, login_password, ...designerForm } = form;
+      const saveData = { ...designerForm, is_active: isActive, joined_date: form.joined_date || null, left_date: form.left_date || null, sort_order: editing?.sort_order || nextSortOrder };
+      let savedDesignerId = editing?.id || 0;
+
+      if (editing) {
+        const { error: designerError } = await supabase.from("designers").update(saveData).eq("id", editing.id);
+        if (designerError) throw designerError;
         const authPayload = {
-          designer_id: data.id,
+          designer_id: editing.id,
           username: login_username,
-          password_hash: login_password,
+          password_hash: login_password || authByDesignerId[editing.id]?.password_hash || "",
         };
-        await supabase.from("designer_auth").insert(authPayload);
+        const { error: authUpdateError } = await supabase.from("designer_auth").update(authPayload).eq("designer_id", editing.id);
+        if (authUpdateError) throw authUpdateError;
+        setAuthByDesignerId({ ...authByDesignerId, [editing.id]: authPayload });
+        setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...designerForm, is_active: isActive } : d));
+      } else {
+        const { data, error: designerError } = await supabase.from("designers").insert(saveData).select().single();
+        if (designerError || !data) throw designerError || new Error("設計師資料新增失敗");
+        savedDesignerId = data.id;
+        setDesigners([...designers, data].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id)));
+        const authPayload = { designer_id: data.id, username: login_username, password_hash: login_password };
+        const { error: authError } = await supabase.from("designer_auth").insert(authPayload);
+        if (authError) throw authError;
         setAuthByDesignerId({ ...authByDesignerId, [data.id]: authPayload });
       }
+
+      const previousContract = contractByDesignerId[savedDesignerId];
+      const financialChanged = Boolean(previousContract) && (
+        previousContract.monthly_rent !== contractForm.monthly_rent
+        || editing?.commission_base_deduction !== form.commission_base_deduction
+        || editing?.commission_rate !== form.commission_rate
+        || editing?.brand_fee_rate !== form.brand_fee_rate
+        || previousContract.effective_date !== contractForm.effective_date
+      );
+      const previousVersion: ContractVersion | null = previousContract && financialChanged ? {
+        effective_date: previousContract.effective_date,
+        monthly_rent: previousContract.monthly_rent,
+        commission_threshold: editing?.commission_base_deduction || 0,
+        commission_rate: editing?.commission_rate || 0,
+        marketing_rate: editing?.brand_fee_rate || 0,
+        changed_at: previousContract.updated_at || new Date().toISOString(),
+        changed_by: previousContract.updated_by || auditUsername,
+      } : null;
+      const nextContract: ContractSettings = {
+        ...contractForm,
+        versions: previousVersion ? [...(contractForm.versions || []), previousVersion] : (contractForm.versions || []),
+        updated_at: new Date().toISOString(),
+        updated_by: auditUsername,
+      };
+      const key = contractSettingKey(savedDesignerId);
+      const value = JSON.stringify(nextContract);
+      const { data: existingContract, error: lookupError } = await supabase.from("shop_info").select("id").eq("key", key).maybeSingle();
+      if (lookupError) throw lookupError;
+      const contractResult = existingContract
+        ? await supabase.from("shop_info").update({ value, label: `${form.display_name || form.name} 合約與月結設定`, is_active: true }).eq("id", existingContract.id)
+        : await supabase.from("shop_info").insert({ key, value, label: `${form.display_name || form.name} 合約與月結設定`, is_active: true, sort_order: 90 });
+      if (contractResult.error) throw contractResult.error;
+      setContractByDesignerId({ ...contractByDesignerId, [savedDesignerId]: nextContract });
+      setContractForm(nextContract);
+      setSaveNotice("設定已成功儲存");
+      setTimeout(() => setShowForm(false), 700);
+    } catch (error) {
+      console.error("Designer save failed", error);
+      setSaveNotice("儲存失敗，資料尚未完整更新，請再試一次");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
   }
 
   function openSettlementItemForm(item?: SettlementItem) {
@@ -366,87 +497,26 @@ export function AdminDesignersContent() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>設計師管理</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, paddingRight: isDesktop ? 92 : 76 }}>
           <button onClick={() => router.push("/admin/prices")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>公版價目表</button>
-          <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer" }}>＋ 新增</button>
+          <button onClick={openNew} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>＋ 新增設計師</button>
         </div>
       </div>
 
-      <div style={{ padding: 16 }}>
-        {designers.map((d, index) => (
-          <div key={d.id} style={{ background: "#fff", borderRadius: 14, padding: 14, marginBottom: 10, border: "0.5px solid #D3D1C7", opacity: d.status === "active" ? 1 : 0.7 }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-              <div style={{ width: 70, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 52, height: 52, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 700, overflow: "hidden" }}>
-                  {d.avatar_url ? <img src={d.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
-                </div>
-                <button onClick={() => openEdit(d)} style={{ width: "100%", padding: "5px 0", background: "#EEEDFE", color: "#534AB7", border: "none", borderRadius: 999, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>管理</button>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "#2C2C2A" }}>
-                      {d.name}
-                      {d.display_name && (
-                        <span style={{ fontSize: 13, color: "#7B6FD4", marginLeft: 6 }}>（{d.display_name}）</span>
-                      )}
-                    </div>
-                    {d.nickname && <div style={{ fontSize: 11, color: "#7B6FD4" }}>{d.nickname}</div>}
-                    <div style={{ fontSize: 11, color: "#888780", marginTop: 2 }}>{d.style}</div>
-                    <div style={{ fontSize: 11, color: "#888780", marginTop: 4 }}>登入帳號：{authByDesignerId[d.id]?.username || "未設定"}</div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 10, background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 500 }}>
-                      {d.status === "active" ? "在職" : "離職"}
-                    </span>
-                    <button onClick={() => setSortDesignerIndex(index)} aria-label={`${d.name} 排序`} style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid #D3D1C7", background: "#fff", color: "#888780", fontSize: 18, lineHeight: 1, cursor: "pointer" }}>☰</button>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(6, minmax(118px, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 12 }}>
-                  <div style={{ background: "#EEEDFE", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: "#7B6FD4", fontWeight: 700 }}>服務業績抽成</div>
-                    <div style={{ fontSize: 20, color: "#534AB7", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round((d.commission_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>底扣 NT${((d as any).commission_base_deduction || 0).toLocaleString()}</div>
-                  </div>
-                  <div style={{ background: "#E1F5EE", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: "#08785E", fontWeight: 700 }}>商品販售抽成</div>
-                    <div style={{ fontSize: 20, color: "#085041", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round(((d as any).product_commission_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>商品銷售獨立計算</div>
-                  </div>
-                  <div style={{ background: "#F8F7F3", borderRadius: 12, padding: "10px 12px", border: "1px solid #E5E1D7", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: "#BA7517", fontWeight: 700 }}>品牌共享費</div>
-                    <div style={{ fontSize: 20, color: "#BA7517", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{Math.round(((d as any).brand_fee_rate || 0) * 100)}%</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>列入 BC 應收</div>
-                  </div>
-                  <div style={{ background: d.status === "active" ? "#E1F5EE" : "#FCEBEB", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: d.status === "active" ? "#08785E" : "#A32D2D", fontWeight: 700 }}>職務狀態</div>
-                    <div style={{ fontSize: 18, color: d.status === "active" ? "#085041" : "#A32D2D", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.status === "active" ? "在職" : "離職"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>{d.left_date ? `離職日 ${d.left_date.replace(/-/g, "/")}` : "可預約與登入"}</div>
-                  </div>
-                  <div style={{ background: d.is_manager ? "#EEEDFE" : "#F8F7F3", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 700 }}>店長權限</div>
-                    <div style={{ fontSize: 18, color: d.is_manager ? "#534AB7" : "#888780", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.is_manager ? "已開啟" : "未開啟"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>全員排程與待確認</div>
-                  </div>
-                  <div style={{ background: d.can_view_members ? "#E1F5EE" : "#FCEBEB", borderRadius: 12, padding: "10px 12px", minHeight: 78 }}>
-                    <div style={{ fontSize: 11, color: d.can_view_members ? "#08785E" : "#A32D2D", fontWeight: 700 }}>會員資料</div>
-                    <div style={{ fontSize: 18, color: d.can_view_members ? "#085041" : "#A32D2D", fontWeight: 900, marginTop: 4, lineHeight: 1 }}>{d.can_view_members ? "可查看" : "不可查看"}</div>
-                    <div style={{ fontSize: 10, color: "#888780", marginTop: 6, lineHeight: 1.35 }}>設計師端顧客資料</div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11, color: "#888780" }}>
-                  {d.joined_date && <span>加入：{d.joined_date.replace(/-/g, "/")}</span>}
-                  {d.left_date && <span style={{ color: "#A32D2D" }}>離職：{d.left_date.replace(/-/g, "/")}</span>}
-                </div>
-              </div>
+      <div style={{ padding: isDesktop ? 22 : 14, display: "grid", gridTemplateColumns: isDesktop ? "repeat(auto-fill, minmax(190px, 1fr))" : "repeat(2, minmax(0, 1fr))", gap: isDesktop ? 14 : 10 }}>
+        {designers.map((d) => (
+          <button key={d.id} onClick={() => openEdit(d)} style={{ minHeight: isDesktop ? 230 : 190, background: "#fff", borderRadius: 18, padding: isDesktop ? 22 : 16, border: "1px solid #DDD9D0", opacity: d.status === "active" ? 1 : 0.65, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 13, boxShadow: "0 8px 24px rgba(44,44,42,.04)" }}>
+            <div style={{ width: isDesktop ? 108 : 82, height: isDesktop ? 108 : 82, borderRadius: "50%", background: d.bg_color, color: d.text_color, display: "grid", placeItems: "center", fontSize: isDesktop ? 32 : 25, fontWeight: 800, overflow: "hidden" }}>
+              {d.avatar_url ? <img src={d.avatar_url} alt={`${d.name} 頭像`} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : d.initials}
             </div>
-          </div>
+            <div style={{ fontSize: isDesktop ? 18 : 15, fontWeight: 900, color: "#2C2C2A", textAlign: "center" }}>{d.name}</div>
+            <div style={{ color: "#534AB7", fontSize: 12, fontWeight: 800 }}>查看設定 →</div>
+          </button>
         ))}
       </div>
 
@@ -477,7 +547,7 @@ export function AdminDesignersContent() {
             <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 10, marginBottom: 18, background: isDesktop ? "#F8F7F3" : "transparent", padding: isDesktop ? 8 : 0, borderRadius: 18 }}>
               {[
                 { key: "profile", label: "個人基本設定" },
-                { key: "settlement", label: "結算規則" },
+                ...(canViewContracts ? [{ key: "settlement", label: "合約與月結設定" }] : []),
                 { key: "prices", label: "專屬價目表" },
               ].map((item) => (
                 <button
@@ -504,18 +574,18 @@ export function AdminDesignersContent() {
               <>
             <div style={{ fontSize: 13, fontWeight: 800, color: "#888780", marginBottom: 10 }}>基本資料</div>
             <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(2, minmax(0, 1fr))" : "1fr", columnGap: 14 }}>
-            {[
+            {([
               { key: "name", label: "英文名 *", placeholder: "Cherry" },
               { key: "display_name", label: "中文名", placeholder: "林亮瑩" },
               { key: "nickname", label: "暱稱", placeholder: "扁頭救星" },
               { key: "initials", label: "縮寫", placeholder: "C" },
               { key: "style", label: "專長", placeholder: "日系、剪髮、染髮" },
               { key: "ig", label: "Instagram", placeholder: "bingcherry_cherry" },
-            ].map(f => (
+            ] as const).map(f => (
               <div key={f.key} style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>{f.label}</div>
                 <input
-                  value={(form as any)[f.key]}
+                  value={form[f.key]}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                   placeholder={f.placeholder}
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
@@ -615,46 +685,114 @@ export function AdminDesignersContent() {
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>狀態</div>
               <div style={{ display: "flex", gap: 8 }}>
-                {[{ val: "active", label: "在職" }, { val: "inactive", label: "離職" }].map(s => (
+                {[{ val: "active", label: "在職" }, { val: "inactive", label: "退租並停用" }].map(s => (
                   <button key={s.val} onClick={() => setForm({ ...form, status: s.val })} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", background: form.status === s.val ? (s.val === "active" ? "#E1F5EE" : "#FCEBEB") : "#F1EFE8", color: form.status === s.val ? (s.val === "active" ? "#085041" : "#A32D2D") : "#888780", fontWeight: form.status === s.val ? 600 : 400, fontSize: 13, cursor: "pointer" }}>
                     {s.label}
                   </button>
                 ))}
               </div>
+              {form.status === "inactive" && <div style={{ marginTop: 8, padding: "9px 12px", borderRadius: 10, background: "#FCEBEB", color: "#A32D2D", fontSize: 11, lineHeight: 1.5 }}>儲存後將關閉此設計師的登入及顧客端預約權限，過去紀錄仍會保留。</div>}
             </div>
               </>
             )}
 
             {formSection === "settlement" && (
               <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#888780", marginBottom: 8, marginTop: 4 }}>結算規則</div>
-            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "repeat(3, minmax(0, 1fr))" : "1fr", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, marginTop: 4 }}>
+              <div style={{ fontSize: 16, fontWeight: 900, color: "#2C2C2A" }}>合約與月結設定</div>
+              <span style={{ padding: "5px 10px", borderRadius: 999, background: form.status === "active" ? "#E1F5EE" : "#FCEBEB", color: form.status === "active" ? "#08785E" : "#A32D2D", fontSize: 11, fontWeight: 800 }}>{form.status === "active" ? "● 合約生效中" : "已退租停用"}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "320px minmax(0, 1fr)" : "1fr", gap: 14, alignItems: "start" }}>
+              <div style={{ background: "#FBFAF7", border: "1px solid #E5E1D7", borderRadius: 18, padding: isDesktop ? 18 : 14, position: isDesktop ? "sticky" : "static", top: 0 }}>
+                <div style={{ fontSize: 15, color: "#2C2C2A", fontWeight: 900, marginBottom: 12 }}>本月合約摘要</div>
+                {[
+                  { label: "合約生效", value: contractForm.effective_date ? contractForm.effective_date.replace(/-/g, "/") : "未設定" },
+                  { label: "每月租金", value: `NT$${contractForm.monthly_rent.toLocaleString()}` },
+                  { label: "營業抽成", value: `超過 NT$${form.commission_base_deduction.toLocaleString()} 後 ${Math.round(form.commission_rate * 100)}%` },
+                  { label: "行銷抽成", value: `${Math.round(form.brand_fee_rate * 100)}%` },
+                  { label: "合約押金", value: contractForm.deposit_amount ? `NT$${contractForm.deposit_amount.toLocaleString()}・${contractForm.deposit_status === "received" ? "已收取" : contractForm.deposit_status === "refunded" ? "已退還" : "未收取"}` : "未設定" },
+                ].map((item) => (
+                  <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", background: "#fff", borderRadius: 12, padding: "11px 12px", marginBottom: 8 }}>
+                    <span style={{ color: "#888780", fontSize: 11, fontWeight: 700 }}>{item.label}</span>
+                    <span style={{ color: "#2C2C2A", fontSize: 12, fontWeight: 900, textAlign: "right" }}>{item.value}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 14, background: "#EEEDFE", borderRadius: 14, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ color: "#534AB7", fontSize: 12, fontWeight: 900 }}>本月應收試算</span>
+                    <span style={{ color: "#534AB7", fontSize: 20, fontWeight: 900 }}>NT${(contractForm.monthly_rent + Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate + 100000 * form.brand_fee_rate).toLocaleString()}</span>
+                  </div>
+                  <div style={{ color: "#7B6FD4", fontSize: 10, lineHeight: 1.7, marginTop: 8 }}>
+                    以服務實收 NT$100,000 試算<br/>
+                    月租 NT${contractForm.monthly_rent.toLocaleString()}＋營業抽成 NT${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}＋行銷抽成 NT${(100000 * form.brand_fee_rate).toLocaleString()}
+                  </div>
+                </div>
+                {contractForm.versions.length > 0 && (
+                  <details style={{ marginTop: 12, borderTop: "1px solid #E5E1D7", paddingTop: 10 }}>
+                    <summary style={{ color: "#5F5E5A", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>查看異動紀錄（{contractForm.versions.length}）</summary>
+                    <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                      {[...contractForm.versions].reverse().map((version, index) => (
+                        <div key={`${version.changed_at}-${index}`} style={{ background: "#fff", borderRadius: 10, padding: "8px 10px", fontSize: 10, color: "#888780", lineHeight: 1.6 }}>
+                          <div style={{ color: "#2C2C2A", fontWeight: 800 }}>生效 {version.effective_date?.replace(/-/g, "/") || "未記錄"}</div>
+                          月租 NT${Number(version.monthly_rent || 0).toLocaleString()}｜門檻 NT${Number(version.commission_threshold || 0).toLocaleString()}｜營業 {Math.round(Number(version.commission_rate || 0) * 100)}%｜行銷 {Math.round(Number(version.marketing_rate || 0) * 100)}%
+                          <div>{version.changed_by || "管理者"}・{version.changed_at ? new Date(version.changed_at).toLocaleString("zh-TW") : ""}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
             <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>服務業績抽成</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexDirection: isDesktop ? "row" : "column", marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 4 }}>每月租金</div>
+                  <div style={{ fontSize: 11, color: "#888780", lineHeight: 1.6 }}>選擇常用租金，或直接輸入個別合約金額。</div>
+                </div>
+                <div style={{ width: isDesktop ? 190 : "100%" }}>
+                  <div style={{ fontSize: 11, color: "#888780", marginBottom: 4 }}>合約生效日期 *</div>
+                  <input type="date" value={contractForm.effective_date} onChange={(e) => setContractForm({ ...contractForm, effective_date: e.target.value })} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 12, outline: "none", boxSizing: "border-box", background: "#fff" }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                {[12000, 15000].map((amount) => (
+                  <button key={amount} type="button" onClick={() => setContractForm({ ...contractForm, monthly_rent: amount })} style={{ flex: 1, padding: "9px 8px", borderRadius: 9, border: contractForm.monthly_rent === amount ? "2px solid #534AB7" : "1px solid #D3D1C7", background: contractForm.monthly_rent === amount ? "#EEEDFE" : "#fff", color: contractForm.monthly_rent === amount ? "#534AB7" : "#5F5E5A", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>NT${amount.toLocaleString()}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>租金金額（元）</div>
+              <input value={contractForm.monthly_rent || ""} onChange={(e) => setContractForm({ ...contractForm, monthly_rent: parseInt(e.target.value) || 0 })} type="number" min="0" placeholder="輸入自訂金額" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>營業抽成</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 10, lineHeight: 1.6 }}>
-                計算方式：(業績 - 底扣) × 抽成%<br/>
-                例：業績 10萬，底扣 5萬，抽 20% → (10萬-5萬)×20% = 1萬
+                依服務實收業績計算：超過免抽門檻的部分 × 抽成比例。
               </div>
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>每月底扣金額（元）</div>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>免抽門檻（元）</div>
                 <input value={form.commission_base_deduction || ""} onChange={(e) => setForm({ ...form, commission_base_deduction: parseInt(e.target.value) || 0 })} type="number" placeholder="0" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
               </div>
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>抽成比例（底扣後）</div>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>超過門檻抽成比例</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input value={Math.round(form.commission_rate * 100) || ""} onChange={(e) => setForm({ ...form, commission_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
                 </div>
               </div>
               <div style={{ background: "#EEEDFE", borderRadius: 8, padding: "8px 12px", fontSize: 11, color: "#534AB7" }}>
-                預覽：業績 $100,000 → 抽成 ${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}
+                預覽：服務實收 NT$100,000 → 抽成 NT${(Math.max(0, 100000 - form.commission_base_deduction) * form.commission_rate).toLocaleString()}
               </div>
             </div>
 
             <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>品牌社群資源共享費</div>
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>行銷抽成</div>
               <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
-                計算方式：總服務業績 × %，會從設計師抽成中扣除並列入 BC 應收。
+                計算方式：服務實收業績 × 行銷抽成比例。
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                {[0.03, 0.05].map((rate) => (
+                  <button key={rate} type="button" onClick={() => setForm({ ...form, brand_fee_rate: rate })} style={{ flex: 1, padding: "9px 8px", borderRadius: 9, border: form.brand_fee_rate === rate ? "2px solid #534AB7" : "1px solid #D3D1C7", background: form.brand_fee_rate === rate ? "#EEEDFE" : "#fff", color: form.brand_fee_rate === rate ? "#534AB7" : "#5F5E5A", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{Math.round(rate * 100)}%</button>
+                ))}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input value={Math.round((form.brand_fee_rate || 0) * 100) || ""} onChange={(e) => setForm({ ...form, brand_fee_rate: (parseInt(e.target.value) || 0) / 100 })} type="number" min="0" max="100" placeholder="0" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
@@ -663,28 +801,62 @@ export function AdminDesignersContent() {
             </div>
 
             <div style={{ background: "#F1EFE8", borderRadius: 16, padding: isDesktop ? 18 : 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>商品販售抽成</div>
-              <div style={{ fontSize: 11, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
-                計算方式：商品銷售額 × %，報表會獨立顯示商品業績與商品抽成。
+              <div style={{ fontSize: 13, color: "#2C2C2A", fontWeight: 700, marginBottom: 6 }}>合約押金</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>押金金額（元）</div>
+                  <input value={contractForm.deposit_amount || ""} onChange={(e) => setContractForm({ ...contractForm, deposit_amount: parseInt(e.target.value) || 0 })} type="number" min="0" placeholder="0" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>押金狀態</div>
+                  <select value={contractForm.deposit_status} onChange={(e) => setContractForm({ ...contractForm, deposit_status: e.target.value as ContractSettings["deposit_status"] })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+                    <option value="unpaid">未收取</option>
+                    <option value="received">已收取</option>
+                    <option value="refunded">已退還</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>收取日期</div>
+                  <input type="date" value={contractForm.deposit_received_date} onChange={(e) => setContractForm({ ...contractForm, deposit_received_date: e.target.value, deposit_status: e.target.value ? "received" : contractForm.deposit_status })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>退還日期</div>
+                  <input type="date" value={contractForm.deposit_refunded_date} onChange={(e) => setContractForm({ ...contractForm, deposit_refunded_date: e.target.value, deposit_status: e.target.value ? "refunded" : contractForm.deposit_status })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>備註</div>
+                  <textarea value={contractForm.note} onChange={(e) => setContractForm({ ...contractForm, note: e.target.value })} placeholder="例如：押金於幾月幾日收取，退租時退還。" rows={3} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", resize: "vertical" }} />
+                </div>
+                {editing && form.status === "active" && (
+                  <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+                    <button type="button" onClick={() => {
+                      if (contractForm.deposit_status === "received") {
+                        alert("押金尚未退還，請先填寫退還日期並將狀態改為「已退還」。");
+                        return;
+                      }
+                      setForm({ ...form, status: "inactive", left_date: form.left_date || new Date().toISOString().split("T")[0] });
+                    }} style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid #D84A4A", background: "#fff", color: "#A32D2D", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>退租並停用帳號</button>
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input
-                  value={Math.round((form.product_commission_rate || 0) * 100) || ""}
-                  onChange={(e) => setForm({ ...form, product_commission_rate: (parseInt(e.target.value) || 0) / 100 })}
-                  type="number" min="0" max="100" placeholder="0"
-                  style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                />
-                <span style={{ fontSize: 14, fontWeight: 600, color: "#534AB7" }}>%</span>
-              </div>
+            </div>
             </div>
             </div>
 
             <div style={{ marginTop: 6, background: "#fff", border: "1px solid #E5E1D7", borderRadius: 18, padding: isDesktop ? 18 : 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: isDesktop ? "center" : "flex-start", gap: 12, flexDirection: isDesktop ? "row" : "column", marginBottom: 12 }}>
+              <button type="button" onClick={() => setShowOtherSettlementItems(!showOtherSettlementItems)} style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, border: "none", background: "transparent", padding: 0, cursor: "pointer", textAlign: "left" }}>
                 <div>
-                  <div style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 900 }}>其他結算項目</div>
-                  <div style={{ fontSize: 11, color: "#888780", marginTop: 4, lineHeight: 1.5 }}>可新增租金、清潔費、補貼、特殊扣款或其他分潤，會同步到線上資料庫供報表使用。</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 14, color: "#2C2C2A", fontWeight: 900 }}>其他月結項目</span>
+                    <span style={{ background: "#F1EFE8", color: "#888780", borderRadius: 999, padding: "3px 8px", fontSize: 10, fontWeight: 800 }}>{currentSettlementItems.length} 項</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#888780", marginTop: 4, lineHeight: 1.5 }}>可新增清潔費、補貼、特殊扣款或其他分潤，會同步到線上資料庫供報表使用。</div>
                 </div>
+                <span style={{ color: "#534AB7", fontSize: 18, transform: showOtherSettlementItems ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s" }}>⌄</span>
+              </button>
+
+              {showOtherSettlementItems && (<>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12, marginBottom: 12 }}>
                 <button onClick={() => openSettlementItemForm()} style={{ width: isDesktop ? "auto" : "100%", padding: "10px 14px", borderRadius: 12, border: "none", background: "#534AB7", color: "#fff", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>＋ 新增項目</button>
               </div>
 
@@ -761,8 +933,6 @@ export function AdminDesignersContent() {
                           <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>計算來源</div>
                           <select value={settlementForm.calculation_base} onChange={(e) => setSettlementForm({ ...settlementForm, calculation_base: e.target.value as SettlementCalculationBase })} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", background: "#fff" }}>
                             <option value="service_revenue">服務業績</option>
-                            <option value="product_revenue">商品銷售</option>
-                            <option value="total_revenue">總營業額</option>
                             <option value="net_income">實收金額</option>
                           </select>
                         </div>
@@ -787,10 +957,12 @@ export function AdminDesignersContent() {
                   </div>
                 </div>
               )}
+              </>)}
             </div>
               </>
             )}
 
+            {saveNotice && <div style={{ marginTop: 12, marginBottom: 10, marginLeft: isDesktop ? "auto" : 0, width: isDesktop ? 320 : "100%", padding: "10px 12px", borderRadius: 10, background: saveNotice.includes("成功") ? "#E1F5EE" : "#FCEBEB", color: saveNotice.includes("成功") ? "#085041" : "#A32D2D", fontSize: 12, fontWeight: 800, textAlign: "center", boxSizing: "border-box" }}>{saveNotice}</div>}
             <button onClick={handleSave} disabled={saving} style={{ width: isDesktop ? 220 : "100%", display: "block", marginLeft: isDesktop ? "auto" : 0, padding: "12px 0", background: saving ? "#D3D1C7" : "#534AB7", color: "#fff", border: "none", borderRadius: 12, fontSize: 14, fontWeight: 800, cursor: saving ? "default" : "pointer" }}>
               {saving ? "儲存中..." : "儲存"}
             </button>

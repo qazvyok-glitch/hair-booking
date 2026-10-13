@@ -10,6 +10,11 @@ type BookingInfo = {
   designerNickname: string;
   date: string;
   time: string;
+  attendeeCount?: number;
+  companionName?: string;
+  lineBindingCode?: string | null;
+  lineBindingMinutes?: number | null;
+  lineAlreadyBound?: boolean;
 };
 
 function CalendarIcon() {
@@ -107,6 +112,38 @@ export default function BookingSuccess() {
           </div>
         </div>
 
+        {booking?.lineAlreadyBound ? (
+          <div style={{ background: "#E1F5EE", borderRadius: 16, padding: "14px 16px", marginBottom: 12, border: "0.5px solid #9AD8C5" }}>
+            <div style={{ fontSize: fs * 13, fontWeight: 700, color: "#085041", marginBottom: 6 }}>
+              {isEnglish ? "LINE notifications enabled" : "LINE 通知已啟用"}
+            </div>
+            <div style={{ fontSize: fs * 11, color: "#085041", lineHeight: 1.8 }}>
+              {isEnglish
+                ? "We will send booking updates through the official Bing Cherry Salon LINE account."
+                : "後續預約狀態會透過 Bing Cherry Salon 官方 LINE 傳送給您。"}
+            </div>
+          </div>
+        ) : booking?.lineBindingCode ? (
+          <div style={{ background: "#E1F5EE", borderRadius: 16, padding: "14px 16px", marginBottom: 12, border: "0.5px solid #9AD8C5" }}>
+            <div style={{ fontSize: fs * 13, fontWeight: 700, color: "#085041", marginBottom: 8 }}>
+              {isEnglish ? "Bind LINE booking notifications" : "綁定 LINE 預約通知"}
+            </div>
+            <div style={{ fontSize: fs * 11, color: "#085041", lineHeight: 1.8, marginBottom: 10 }}>
+              {isEnglish
+                ? `Send this code to the official Bing Cherry Salon LINE account within ${booking.lineBindingMinutes || 30} minutes.`
+                : `請在 ${booking.lineBindingMinutes || 30} 分鐘內，到 Bing Cherry Salon 官方 LINE 傳送這組綁定碼。`}
+            </div>
+            <div style={{ borderRadius: 12, background: "#fff", color: "#06A348", fontSize: fs * 24, fontWeight: 900, letterSpacing: "0.08em", textAlign: "center", padding: "12px 10px", marginBottom: 8 }}>
+              {booking.lineBindingCode}
+            </div>
+            <div style={{ fontSize: fs * 10, color: "#397A66", lineHeight: 1.7 }}>
+              {isEnglish
+                ? "After binding once, future booking notifications can be sent directly to LINE."
+                : "綁定一次後，之後同電話預約就能直接收到 LINE 通知。"}
+            </div>
+          </div>
+        ) : null}
+
         <div style={{ background: cardBg, borderRadius: 16, padding: "20px 16px", marginBottom: 12, border: `0.5px solid ${cardBorder}` }}>
           <div style={{ fontSize: fs * 13, fontWeight: 600, color: textMain, marginBottom: 14 }}>📋 {isEnglish ? "Booking Details" : "預約資訊"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -125,6 +162,15 @@ export default function BookingSuccess() {
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
               <span style={{ color: textSub }}>{isEnglish ? "Time" : "時段"}</span>
               <span style={{ color: textMain, fontWeight: 500 }}>{time || "—"}</span>
+            </div>
+            <div style={{ borderTop: `0.5px solid ${cardBorder}` }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <span style={{ color: textSub }}>{isEnglish ? "Guests" : "預約人數"}</span>
+              <span style={{ color: textMain, fontWeight: 500 }}>
+                {booking?.attendeeCount === 2
+                  ? isEnglish ? `2 guests (${booking.companionName || "second guest"})` : `2 人（同行人：${booking.companionName || "未填"}）`
+                  : isEnglish ? "1 guest" : "1 人"}
+              </span>
             </div>
             <div style={{ borderTop: `0.5px solid ${cardBorder}` }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>

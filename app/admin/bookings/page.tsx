@@ -109,12 +109,6 @@ function getMonthCells(monthKey: string) {
   return { year, month, cells };
 }
 
-function getScheduleRowText(row: ScheduleRow, getDesignerName: (id: number) => string, getServiceNames: (ids: number[], note?: string | null) => string) {
-  if (row.type === "off-day") return `${getDesignerName(row.designer_id)} 整天公休`;
-  if (row.type === "off-slot") return `${getDesignerName(row.designer_id)} ${row.label}`;
-  return `${row.time} ${getDesignerName(row.designer_id)} ${row.booking.customer_name || "訪客"} ${getServiceNames(row.booking.service_ids, row.booking.note)}`;
-}
-
 function getDaySummary(rows: ScheduleRow[]) {
   return [
     { key: "confirmed", label: "已確認", count: rows.filter((row) => row.status === "confirmed").length, color: "#37C967" },
@@ -195,8 +189,21 @@ export default function AdminBookings() {
   }
 
   async function updateStatus(id: number, status: string) {
-    await supabase.from("bookings").update({ status }).eq("id", id);
+    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
+    if (error) {
+      alert("預約狀態更新失敗，請稍後再試。");
+      return;
+    }
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+    if (status === "confirmed") {
+      fetch("/api/line/notify-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: id }),
+      }).catch((notifyError) => {
+        console.warn("LINE booking confirmation notification failed", notifyError);
+      });
+    }
   }
 
   const scheduleRows = buildScheduleRows(bookings, offDays, offSlots);
@@ -233,7 +240,7 @@ export default function AdminBookings() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button onClick={() => router.push("/admin/dashboard")} style={{ background: "#2C2C2A", color: "#fff", border: "1px solid #5F5E5A", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer" }}>← 返回</button>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>預約管理</div>
@@ -364,15 +371,28 @@ export default function AdminBookings() {
                 </div>
                 <div style={{ fontSize: 12, color: "#888780" }}>共 {selectedDayRows.length} 筆</div>
               </div>
+              {isDesktop && selectedDayRows.length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "74px 110px 110px minmax(0, 1fr) 80px", gap: 10, padding: "8px 14px", background: "#F8F7F3", color: "#888780", fontSize: 11, fontWeight: 700 }}>
+                  <span>時間</span><span>設計師</span><span>客戶名</span><span>服務項目</span><span style={{ textAlign: "right" }}>狀態</span>
+                </div>
+              )}
               {selectedDayRows.length > 0 ? selectedDayRows.map((row) => {
                 const statusMeta = getStatusMeta(row.status);
                 return (
-                  <div key={`detail-${row.id}`} style={{ display: "grid", gridTemplateColumns: isDesktop ? "86px 1fr 96px" : "62px 1fr", gap: 10, alignItems: "center", padding: "12px 14px", borderTop: "0.5px solid #F1EFE8" }}>
+                  <div key={`detail-${row.id}`} style={{ display: "grid", gridTemplateColumns: isDesktop ? "74px 110px 110px minmax(0, 1fr) 80px" : "58px minmax(0, 1fr) auto", gap: 10, alignItems: "center", padding: "12px 14px", borderTop: "0.5px solid #F1EFE8" }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{row.time}</div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{getScheduleRowText(row, getDesignerName, getServiceNames)}</div>
-                      {row.type === "booking" && <div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>{row.booking.customer_phone || "未填電話"}</div>}
-                    </div>
+                    {isDesktop ? (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{getDesignerName(row.designer_id)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A" }}>{row.type === "booking" ? row.booking.customer_name || "訪客" : "—"}</div>
+                        <div style={{ fontSize: 13, color: "#2C2C2A", lineHeight: 1.45 }}>{row.type === "booking" ? getServiceNames(row.booking.service_ids, row.booking.note) : row.type === "off-day" ? "整天公休" : row.label}</div>
+                      </>
+                    ) : (
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#2C2C2A" }}>{getDesignerName(row.designer_id)}{row.type === "booking" ? ` · ${row.booking.customer_name || "訪客"}` : ""}</div>
+                        <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 3, lineHeight: 1.4 }}>{row.type === "booking" ? getServiceNames(row.booking.service_ids, row.booking.note) : row.type === "off-day" ? "整天公休" : row.label}</div>
+                      </div>
+                    )}
                     <span style={{ justifySelf: isDesktop ? "end" : "start", fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 600, background: statusMeta.background, color: statusMeta.color }}>
                       {statusMeta.label}
                     </span>

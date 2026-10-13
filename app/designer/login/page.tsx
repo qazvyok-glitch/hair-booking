@@ -21,7 +21,7 @@ export default function DesignerLogin() {
       .eq("username", username)
       .eq("password_hash", password)
       .single();
-    if (dbError || !data) {
+    if (dbError || !data || !data.designers?.is_active || data.designers?.status !== "active") {
       setError("帳號或密碼錯誤");
       setLoading(false);
       return;

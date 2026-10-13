@@ -11,6 +11,7 @@ type EarningsRange = "今日" | "本月" | "指定日期或區間";
 type PendingRow = {
   key: string;
   id?: number;
+  designerId?: number | null;
   rawDate: string;
   date: string;
   time: string;
@@ -18,11 +19,19 @@ type PendingRow = {
   phone: string;
   service: string;
   detail: string;
+  attendeeCount?: number;
+  mainService?: string;
+  companionName?: string;
+  companionService?: string;
+  customerNote?: string;
   designer?: string;
   durationMinutes?: number;
+  appointment?: Appointment;
 };
 type Appointment = {
   id?: number;
+  designerId?: number;
+  rawDate?: string;
   time: string;
   name: string;
   phone: string;
@@ -32,6 +41,19 @@ type Appointment = {
   action: "查看" | "結帳";
   note: string;
   image: string;
+  customerId?: string;
+  customerNo?: string;
+  customerEmail?: string;
+  customerReferrer?: string;
+  lastVisit?: string;
+  totalSpent?: number;
+  orderCount?: number;
+  history?: CustomerHistoryItem[];
+  customerNoteId?: number;
+  hairType?: string;
+  preferences?: string;
+  allergies?: string;
+  privateNote?: string;
 };
 type CheckoutDraft = {
   primaryServiceName: string;
@@ -62,9 +84,9 @@ type CustomerRecord = {
   note: string;
   lastVisit: string;
 };
-type ScheduleItem = { text: string; tone: string; designer?: string; customer?: string };
-type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string };
-type CalendarItem = { text: string; tone: string; designer?: string; customer?: string; category?: "booking" | "leave" };
+type ScheduleItem = { text: string; tone: string; designer?: string; customer?: string; bgColor?: string; textColor?: string; appointment?: Appointment };
+type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string; bgColor?: string; textColor?: string };
+type CalendarItem = { text: string; tone: string; designer?: string; customer?: string; category?: "booking" | "leave"; bgColor?: string; textColor?: string };
 type CalendarRecords<T> = Record<string, T[]>;
 type LeaveDraft = {
   date: string;
@@ -80,6 +102,8 @@ type DesignerProfile = {
   phone: string;
   specialties: string;
   avatarUrl: string;
+  bgColor: string;
+  textColor: string;
   joinedDate: string;
   leftDate: string;
 };
@@ -91,6 +115,8 @@ type BackendDesigner = {
   nickname?: string;
   style?: string;
   avatar_url?: string;
+  bg_color?: string;
+  text_color?: string;
   joined_date?: string | null;
   left_date?: string | null;
   is_manager?: boolean;
@@ -145,7 +171,8 @@ type BackendProductUsage = {
   used_at: string;
 };
 type BackendProduct = { id: number; name: string; unit?: string; unit_price: number; category?: string; stock_quantity?: number; is_active?: boolean; sort_order?: number | null };
-type BackendCustomer = { id: string; name?: string | null; phone?: string | null; customer_no?: string | null; referrer?: string | null };
+type BackendCustomer = { id: string; name?: string | null; phone?: string | null; email?: string | null; customer_no?: string | null; referrer?: string | null };
+type BackendCustomerNote = { id: number; designer_id: number; customer_name?: string | null; customer_phone?: string | null; hair_type?: string | null; preferences?: string | null; allergies?: string | null; notes?: string | null; last_visit?: string | null };
 type CheckoutServiceOption = { key: string; name: string; category: string; priceLabel: string; duration?: string | null; amount: number };
 type CheckoutServiceItem = { name: string; amount: number };
 type CheckoutProductItem = { product: BackendProduct; quantity: number; linePrice: number; discount: number };
@@ -156,12 +183,14 @@ type IncomeDetailRow = { date?: string; name: string; item: string; amount: stri
 type IncomeDetailGroup = { title: string; rows: IncomeDetailRow[] };
 type IncomeDetailGroupsByRange = Record<EarningsRange, IncomeDetailGroup[]>;
 type IncomeDateRange = { startDate: string; endDate: string };
+type CustomerHistoryItem = { date: string; title: string; amount: number; note: string };
+type CustomerProfileDraft = { name: string; phone: string; referrer: string; hairType: string; preferences: string; allergies: string; privateNote: string };
 
 const tabs: { key: TabKey; label: string; icon: string }[] = [
   { key: "today", label: "今日", icon: "" },
   { key: "pending", label: "待確認", icon: "" },
   { key: "calendar", label: "排程", icon: "" },
-  { key: "earnings", label: "收入", icon: "$" },
+  { key: "earnings", label: "業績", icon: "$" },
 ];
 
 const initialTodayRows: Appointment[] = [];
@@ -182,6 +211,8 @@ const initialDesignerProfile: DesignerProfile = {
   phone: "0912-345-678",
   specialties: "剪髮、染髮、燙髮、護髮",
   avatarUrl: "",
+  bgColor: "#E1F6DC",
+  textColor: "#208051",
   joinedDate: "2026-08-01",
   leftDate: "",
 };
@@ -230,6 +261,8 @@ export default function DesignerPreviewV2Page() {
   const [backendProductUsage, setBackendProductUsage] = useState<BackendProductUsage[]>([]);
   const [backendProducts, setBackendProducts] = useState<BackendProduct[]>([]);
   const [backendCustomers, setBackendCustomers] = useState<CustomerRecord[]>(customerRecords);
+  const [backendCustomerProfiles, setBackendCustomerProfiles] = useState<BackendCustomer[]>([]);
+  const [backendCustomerNotes, setBackendCustomerNotes] = useState<BackendCustomerNote[]>([]);
   const [designerPriceItems, setDesignerPriceItems] = useState<BackendDesignerPriceItem[]>([]);
   const [allDesignerPriceItems, setAllDesignerPriceItems] = useState<BackendDesignerPriceItem[]>([]);
   const [priceCategoryOrder, setPriceCategoryOrder] = useState<string[]>([]);
@@ -271,14 +304,15 @@ export default function DesignerPreviewV2Page() {
       .order("booking_time");
     const transactionQuery = supabase.from("transactions").select("*").order("created_at", { ascending: false });
     const productUsageQuery = supabase.from("product_usage").select("*").order("used_at", { ascending: false });
-    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: publicPriceData }, { data: priceData }, { data: allPriceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
-      supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
+    const [{ data: designerData }, { data: serviceData }, { data: bookingData }, { data: transactionData }, { data: productUsageData }, { data: productData }, { data: customerData }, { data: customerNoteData }, { data: publicPriceData }, { data: priceData }, { data: allPriceData }, { data: categorySettingData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+      supabase.from("designers").select("id, name, display_name, nickname, style, avatar_url, bg_color, text_color, joined_date, left_date, is_manager, is_active").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
       supabase.from("services").select("id, name, category_id, duration").eq("is_active", true).order("sort_order"),
       session.is_manager ? bookingQuery : bookingQuery.eq("designer_id", session.id),
       transactionQuery.eq("designer_id", session.id),
       productUsageQuery.eq("designer_id", session.id),
       supabase.from("products").select("id, name, unit, unit_price, category, stock_quantity, is_active, sort_order").eq("is_active", true).order("category").order("sort_order"),
-      supabase.from("customers").select("id, name, phone, customer_no, referrer").order("customer_no"),
+      supabase.from("customers").select("id, name, phone, email, customer_no, referrer").order("customer_no"),
+      session.is_manager ? supabase.from("customer_notes").select("*") : supabase.from("customer_notes").select("*").eq("designer_id", session.id),
       supabase.from("price_items").select("id, category, name, price_range, duration, sort_order").order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, duration, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, duration, sort_order, is_active").eq("is_active", true).order("category").order("sort_order"),
@@ -293,6 +327,8 @@ export default function DesignerPreviewV2Page() {
     const transactions = (transactionData || []) as BackendTransaction[];
     const productUsage = (productUsageData || []) as BackendProductUsage[];
     const products = (productData || []) as BackendProduct[];
+    const customerProfiles = (customerData || []) as BackendCustomer[];
+    const customerNotes = (customerNoteData || []) as BackendCustomerNote[];
     const customers = ((customerData || []) as BackendCustomer[]).map((customer) => ({
       id: customer.id,
       name: customer.name || customer.customer_no || "未命名顧客",
@@ -325,6 +361,12 @@ export default function DesignerPreviewV2Page() {
     const offSlots = (offSlotData || []) as BackendOffSlot[];
     const currentDesigner = designers.find((designer) => designer.id === session.id);
 
+    if (!currentDesigner) {
+      sessionStorage.removeItem("designerSession");
+      window.location.replace("/designer/login");
+      return;
+    }
+
     setBackendDesigners(designers);
     setBackendServices(services);
     setBackendBookings(bookings);
@@ -332,11 +374,13 @@ export default function DesignerPreviewV2Page() {
     setBackendProductUsage(productUsage);
     setBackendProducts(products);
     setBackendCustomers(customers);
+    setBackendCustomerProfiles(customerProfiles);
+    setBackendCustomerNotes(customerNotes);
     setAllDesignerPriceItems(allSpecificPriceItems);
     setPriceCategoryOrder(nextPriceCategoryOrder);
     setDesignerPriceItems(sortDesignerPriceItems(priceItems, nextPriceCategoryOrder));
-    setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), services, designers));
-    setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), services, designers));
+    setBackendScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id === session.id), transactions, services, designers, customerProfiles, customerNotes));
+    setBackendTeamScheduleItems(mapBookingsToCalendar(bookings.filter((booking) => booking.designer_id !== session.id), transactions, services, designers, customerProfiles, customerNotes));
     setBackendLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id === session.id), offSlots.filter((item) => item.designer_id === session.id), designers));
     setBackendTeamLeaveItems(mapLeavesToCalendar(offDays.filter((item) => item.designer_id !== session.id), offSlots.filter((item) => item.designer_id !== session.id), designers));
 
@@ -347,6 +391,8 @@ export default function DesignerPreviewV2Page() {
         phone: designerProfile.phone,
         specialties: currentDesigner.style || designerProfile.specialties,
         avatarUrl: currentDesigner.avatar_url || "",
+        bgColor: currentDesigner.bg_color || designerProfile.bgColor,
+        textColor: currentDesigner.text_color || designerProfile.textColor,
         joinedDate: currentDesigner.joined_date || "",
         leftDate: currentDesigner.left_date || "",
       });
@@ -359,16 +405,50 @@ export default function DesignerPreviewV2Page() {
       alert("後台尚未連線，無法同步預約狀態。");
       return;
     }
-    setPendingDecisions((prev) => ({ ...prev, [row.key]: decision }));
     const status = decision === "accepted" ? "confirmed" : decision === "declined" ? "cancelled" : "pending";
     const nextDuration = Math.max(15, Number(row.durationMinutes) || 60);
+    const targetDesignerId = row.designerId || backendSession.id;
+    if (decision === "accepted") {
+      const conflict = await findLiveScheduleConflict({
+        bookingIdToIgnore: row.id,
+        designerId: targetDesignerId,
+        date: row.rawDate,
+        time: row.time,
+        durationMinutes: nextDuration,
+      });
+      if (conflict) {
+        alert(conflict.message);
+        return;
+      }
+    }
+    setPendingDecisions((prev) => ({ ...prev, [row.key]: decision }));
     const payload = decision === "accepted"
       ? { status, booking_date: row.rawDate, booking_time: row.time, duration_minutes: nextDuration }
       : { status };
-    const { error } = await supabase.from("bookings").update(payload).eq("id", row.id);
+    const { data: updatedBooking, error } = await supabase
+      .from("bookings")
+      .update(payload)
+      .eq("id", row.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
     if (error) {
       alert("預約狀態同步失敗，請稍後再試。");
       return;
+    }
+    if (!updatedBooking) {
+      alert("這筆預約狀態已被更新，請重新整理後再確認。");
+      await loadBackendData(backendSession);
+      return;
+    }
+    if (status === "confirmed" || status === "cancelled") {
+      fetch("/api/line/notify-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: row.id }),
+      }).catch((notifyError) => {
+        console.warn("LINE booking confirmation notification failed", notifyError);
+      });
     }
     await loadBackendData(backendSession);
   }
@@ -391,6 +471,17 @@ export default function DesignerPreviewV2Page() {
       const selectedServiceIds = Array.from(new Set(selectedServices.map((service) => service.id)));
       if (!targetDesigner) {
         alert("找不到指定設計師，請重新選擇。");
+        return;
+      }
+      const durationMinutes = getBookingDraftDurationMinutes(bookingDraft, bookingServiceOptions);
+      const conflict = await findLiveScheduleConflict({
+        designerId: targetDesigner.id,
+        date: bookingDraft.date,
+        time: bookingDraft.time,
+        durationMinutes,
+      });
+      if (conflict) {
+        alert(conflict.message);
         return;
       }
       const customerName = bookingDraft.name.trim() || "新顧客";
@@ -418,7 +509,7 @@ export default function DesignerPreviewV2Page() {
         note: buildSyncedBookingNote(bookingServiceNames, bookingDraft.note),
         status: "confirmed",
         service_ids: selectedServiceIds,
-        duration_minutes: getBookingDraftDurationMinutes(bookingDraft, bookingServiceOptions),
+        duration_minutes: durationMinutes,
       });
       if (error) {
         alert("新增預約失敗，請稍後再試。");
@@ -441,10 +532,20 @@ export default function DesignerPreviewV2Page() {
     const targetDesignerId = backendSession.is_manager && targetDesigner ? targetDesigner.id : backendSession.id;
 
     if (item.tone === "day-off") {
+      const conflict = await findLiveLeaveConflict({ designerId: targetDesignerId, date });
+      if (conflict) {
+        alert(conflict.message);
+        return;
+      }
       await supabase.from("designer_off_days").insert({ designer_id: targetDesignerId, off_date: date });
     } else {
       const slots = getBlockedSlots(item.text);
       if (slots.length > 0) {
+        const conflict = await findLiveLeaveConflict({ designerId: targetDesignerId, date, slots });
+        if (conflict) {
+          alert(conflict.message);
+          return;
+        }
         await supabase.from("designer_off_slots").insert(slots.map((slot) => ({ designer_id: targetDesignerId, slot_date: date, slot_time: slot })));
       }
     }
@@ -460,12 +561,73 @@ export default function DesignerPreviewV2Page() {
       display_name: profile.name,
       nickname: profile.role,
       style: profile.specialties,
+      bg_color: profile.bgColor,
+      text_color: profile.textColor,
     }).eq("id", backendSession.id);
     if (error) alert("個人資料同步失敗，請稍後再試。");
     else {
       setDesignerProfile(profile);
       await loadBackendData(backendSession);
     }
+  }
+
+  async function saveAppointmentCustomer(row: Appointment, draft: CustomerProfileDraft) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，顧客資料未更新。請重新整理後再試。");
+      return;
+    }
+    const name = draft.name.trim();
+    const phone = draft.phone.trim();
+    if (!name || !phone) {
+      alert("請填寫顧客姓名與電話。");
+      return;
+    }
+    const payload = { name, phone, referrer: draft.referrer.trim() || null };
+    const customerId = row.customerId || backendCustomerProfiles.find((customer) => normalizePhone(customer.phone) === normalizePhone(row.phone))?.id;
+    if (customerId) {
+      const { error } = await supabase.from("customers").update(payload).eq("id", customerId);
+      if (error) {
+        alert("顧客資料儲存失敗，請稍後再試。");
+        return;
+      }
+    } else {
+      const { error } = await supabase.from("customers").insert({ id: crypto.randomUUID(), ...payload });
+      if (error) {
+        alert("顧客資料建立失敗，請稍後再試。");
+        return;
+      }
+    }
+    if (row.id) {
+      await supabase.from("bookings").update({ customer_name: name, customer_phone: phone }).eq("id", row.id);
+    }
+    await loadBackendData(backendSession);
+    setSelectedAppointment(null);
+  }
+
+  async function saveAppointmentCustomerNote(row: Appointment, draft: CustomerProfileDraft) {
+    if (!backendConnected || !backendSession) {
+      alert("後台尚未連線，顧客備註未更新。請重新整理後再試。");
+      return;
+    }
+    const payload = {
+      designer_id: row.designerId || backendSession.id,
+      customer_name: draft.name.trim() || row.name,
+      customer_phone: draft.phone.trim() || row.phone,
+      hair_type: draft.hairType.trim(),
+      preferences: draft.preferences.trim(),
+      allergies: draft.allergies.trim(),
+      notes: draft.privateNote.trim(),
+      last_visit: row.rawDate || new Date().toLocaleDateString("en-CA"),
+    };
+    const result = row.customerNoteId
+      ? await supabase.from("customer_notes").update(payload).eq("id", row.customerNoteId)
+      : await supabase.from("customer_notes").insert(payload);
+    if (result.error) {
+      alert("顧客備註儲存失敗，請稍後再試。");
+      return;
+    }
+    await loadBackendData(backendSession);
+    setSelectedAppointment(null);
   }
 
   async function uploadDesignerAvatar(file: File) {
@@ -503,6 +665,7 @@ export default function DesignerPreviewV2Page() {
         booking_id: checkoutAppointment.id || null,
         designer_id: backendSession.id,
         customer_name: checkoutAppointment.name || "現場客人",
+        customer_phone: checkoutAppointment.phone || null,
         service_items: distributeServiceDiscount(draft),
         total_amount: total,
         note: noteRows.join("\n"),
@@ -768,12 +931,12 @@ export default function DesignerPreviewV2Page() {
     : activeServiceOptions.map((name) => ({ key: `service-${name}`, name, category: "服務項目", priceLabel: "", duration: "", amount: 0 }));
   const defaultBookingDate = selectedScheduleDate;
   const defaultBookingService = checkoutServiceOptions[0]?.name || activeServiceOptions[0] || "";
-  const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendSession?.id) : emptyTodayRows;
+  const activeTodayRows = backendConnected ? mapBookingsToTodayRows(backendBookings, backendTransactions, backendServices, backendCustomerProfiles, backendCustomerNotes, backendSession?.id) : emptyTodayRows;
   const isManager = backendSession?.is_manager ?? false;
   const visiblePendingBookings = isManager && pendingScope === "team"
     ? backendBookings
     : backendBookings.filter((booking) => !backendSession || booking.designer_id === backendSession.id);
-  const activePendingRows = backendConnected ? mapBookingsToPendingRows(visiblePendingBookings, backendServices, isManager && pendingScope === "team") : pendingRows;
+  const activePendingRows = backendConnected ? mapBookingsToPendingRows(visiblePendingBookings, backendTransactions, backendServices, backendCustomerProfiles, backendCustomerNotes, isManager && pendingScope === "team") : pendingRows;
   const activeEarningsRanges = backendConnected ? buildEarningsRanges(backendTransactions, backendProductUsage, customIncomeRange) : withCustomIncomeRange(earningsRanges, customIncomeRange);
   const activeIncomeDetails = backendConnected ? buildIncomeDetailGroups(backendTransactions, backendProductUsage, customIncomeRange) : null;
   const activePendingCount = activePendingRows.filter((row) => (pendingDecisions[row.key] || "pending") === "pending").length;
@@ -796,14 +959,14 @@ export default function DesignerPreviewV2Page() {
             <>
               {activeTab === "today" && <TodayView rows={activeTodayRows} onView={setSelectedAppointment} onCheckout={setCheckoutAppointment} onAddBooking={() => { setBookingComplete(false); setBookingDraft(createBookingDraft(defaultBookingDate, "10:00", designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "pending" && <PendingView rows={activePendingRows} decisions={pendingDecisions} pendingCount={activePendingCount} isManager={isManager} pendingScope={pendingScope} onScopeChange={setPendingScope} onOpen={setSelectedPending} />}
-              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
+              {activeTab === "calendar" && <CalendarView mode={scheduleMode} selectedDate={selectedScheduleDate} scheduleItems={activeScheduleItems} teamScheduleItemsSource={activeTeamScheduleItems} leaveItems={activeLeaveItems} teamLeaveItemsSource={activeTeamLeaveItems} isManager={backendSession?.is_manager ?? false} designerName={designerProfile.name} designerOptions={activeDesignerOptions} isSynced={backendConnected} onModeChange={setScheduleMode} onSelectDate={setSelectedScheduleDate} onViewAppointment={setSelectedAppointment} onAddLeave={addSyncedLeave} onAddBooking={(date, time) => { setBookingComplete(false); setBookingDraft(createBookingDraft(date, time, designerProfile.name, defaultBookingService)); }} />}
               {activeTab === "earnings" && <EarningsView ranges={activeEarningsRanges} detailGroups={activeIncomeDetails} customRange={customIncomeRange} isManager={isManager} onCustomRangeChange={setCustomIncomeRange} onOpenSelfUse={() => { setSelfUseComplete(false); setShowSelfUseModal(true); }} onOpenShopUse={() => { setShopUseComplete(false); setShowShopUseModal(true); }} onOpenProductCheckout={() => { setProductCheckoutComplete(false); setShowProductCheckoutModal(true); }} onOpenStockIn={() => { setStockInComplete(false); setShowStockInModal(true); }} onOpenInventoryAdjust={() => { setInventoryAdjustComplete(false); setShowInventoryAdjustModal(true); }} />}
             </>
           )}
         </div>
         <BottomTabs activeTab={activeTab} pendingCount={activePendingCount} onChange={(tab) => { setShowSettings(false); setActiveTab(tab); }} />
       </section>
-      {selectedAppointment && <AppointmentModal row={selectedAppointment} onClose={() => setSelectedAppointment(null)} />}
+      {selectedAppointment && <AppointmentModal row={selectedAppointment} onSaveCustomer={saveAppointmentCustomer} onSaveCustomerNote={saveAppointmentCustomerNote} onClose={() => setSelectedAppointment(null)} />}
       {selectedPending && <PendingConfirmModal row={selectedPending} decision={pendingDecisions[selectedPending.key] || "pending"} onDecide={setDecision} onClose={() => setSelectedPending(null)} />}
       {showSelfUseModal && <SelfUseMaterialModal products={backendProducts} complete={selfUseComplete} isSynced={backendConnected} onComplete={saveSelfUseMaterials} onClose={() => { setShowSelfUseModal(false); setSelfUseComplete(false); }} />}
       {showShopUseModal && <ShopUseMaterialModal products={backendProducts} complete={shopUseComplete} isSynced={backendConnected} onComplete={saveShopUseMaterials} onClose={() => { setShowShopUseModal(false); setShopUseComplete(false); }} />}
@@ -862,6 +1025,14 @@ export default function DesignerPreviewV2Page() {
         .pending-card { min-height: 118px; display: grid; grid-template-columns: 58px 1fr 78px; gap: 10px; align-items: center; padding: 14px; }
         .pending-card.is-done { opacity: .74; }
         .pending-designer { color: #1478c8; font-size: 13px; font-weight: 950; margin-bottom: 4px; }
+        .pending-summary { display: grid; gap: 6px; }
+        .pending-line { display: grid; grid-template-columns: 42px 1fr; gap: 6px; align-items: start; color: #5f6673; font-size: 13px; line-height: 1.45; }
+        .pending-line-label { color: #9aa3af; font-weight: 950; white-space: nowrap; }
+        .pending-line-value { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-weight: 850; }
+        .pending-meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+        .pending-chip { display: inline-flex; align-items: center; border-radius: 999px; background: #eef7ff; color: #1478c8; padding: 3px 8px; font-size: 11px; font-weight: 950; }
+        .pending-chip.people { background: #fff5e6; color: #c96810; }
+        .pending-note-line { color: #8b95a3; font-size: 12px; font-weight: 800; line-height: 1.45; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
         .pending-actions { display: grid; gap: 9px; }
         .accept-btn, .decline-btn { border-radius: 8px; padding: 8px 0; background: #fff; font-weight: 900; font-size: 14px; cursor: pointer; }
         .accept-btn { border: 1px solid #f59f2c; color: #e67600; }
@@ -975,6 +1146,7 @@ export default function DesignerPreviewV2Page() {
         .profile-input-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
         .profile-input-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
         .profile-input-card input { width: 100%; border: none; background: transparent; color: #1f2937; font-size: 14px; font-weight: 850; outline: none; font-family: inherit; }
+        .profile-color-card input { width: 100%; height: 34px; border: none; background: transparent; padding: 0; cursor: pointer; }
         .readonly-profile-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
         .readonly-profile-card.wide { grid-column: 1 / -1; }
         .readonly-profile-card span { color: #8b95a3; font-size: 11px; font-weight: 900; }
@@ -993,10 +1165,12 @@ export default function DesignerPreviewV2Page() {
         .price-category-panel[open] .price-category-summary::after { transform: rotate(180deg); }
         .price-category-count { color: #8b95a3; font-size: 11px; font-weight: 850; margin-left: auto; }
         .price-list-rows { display: grid; border-top: 1px solid #edf0f4; background: #fff; }
-        .price-list-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
+        .price-list-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid #edf0f4; color: #1f2937; font-size: 12px; font-weight: 850; }
+        .price-list-row.stacked { grid-template-columns: 1fr; gap: 5px; align-items: start; }
         .price-list-row:last-child { border-bottom: none; }
-        .price-name { color: #1f2937; font-weight: 950; }
-        .price-value { color: #1478c8; font-weight: 950; white-space: nowrap; }
+        .price-name { color: #1f2937; font-weight: 950; min-width: 0; line-height: 1.45; overflow-wrap: anywhere; word-break: normal; }
+        .price-value { color: #1478c8; font-weight: 950; min-width: 0; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+        .price-list-row.stacked .price-value { text-align: left; }
         .price-note { border: 1px solid #edf0f4; background: #f8fafc; color: #6b7280; border-radius: 14px; padding: 12px; font-size: 12px; font-weight: 800; line-height: 1.55; margin-top: 10px; }
         .price-empty { color: #8b95a3; font-size: 12px; font-weight: 800; padding: 12px; text-align: center; border: 1px solid #edf0f4; border-radius: 14px; background: #fff; }
         .profile-note { color: #8b95a3; font-size: 12px; font-weight: 750; line-height: 1.55; margin-bottom: 14px; }
@@ -1028,7 +1202,8 @@ export default function DesignerPreviewV2Page() {
         .schedule-tab-icon { width: 24px; height: 24px; display: block; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
         .schedule-tab-icon .grid-dot { fill: currentColor; stroke: none; opacity: .8; }
         .tab-icon-wrap { position: relative; display: inline-flex; }
-        .tab-label-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 1; }
+        .tab-label-wrap { display: inline-flex; align-items: center; justify-content: center; gap: 4px; line-height: 1; font-size: 13px; }
+        .tab-btn.earnings-tab .tab-label-wrap { font-size: 14px; font-weight: 900; letter-spacing: .02em; }
         .tab-label-badge { min-width: 16px; height: 16px; border-radius: 999px; background: #ef244e; color: #fff; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 10px; line-height: 1; font-weight: 950; box-sizing: border-box; }
         .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: flex; justify-content: center; align-items: flex-end; padding: 18px; z-index: 20; overflow-y: auto; }
         .modal-panel { width: 100%; max-width: 430px; max-height: calc(100dvh - 36px); overflow-y: auto; overscroll-behavior: contain; background: #fff; border-radius: 22px; padding: 18px; box-shadow: 0 18px 40px rgba(15,23,42,.25); }
@@ -1038,12 +1213,60 @@ export default function DesignerPreviewV2Page() {
         .close-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: #eef1f5; color: #4b5563; font-size: 19px; font-weight: 900; cursor: pointer; }
         .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
         .detail-card { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 12px; }
+        .detail-card.wide { grid-column: 1 / -1; }
         .detail-label { color: #8b95a3; font-size: 11px; font-weight: 900; margin-bottom: 5px; }
+        .detail-label-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+        .detail-label-row .detail-label { margin-bottom: 0; }
         .detail-value { color: #1f2937; font-size: 14px; font-weight: 850; line-height: 1.45; }
+        .translate-note-btn { border: none; background: transparent; color: #1478c8; font-size: 12px; font-weight: 950; padding: 0; cursor: pointer; }
+        .translate-note-btn:disabled { color: #9aa3af; cursor: default; }
+        .translated-note-line { color: #1478c8; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e1e7ef; }
+        .customer-modal { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+        .customer-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; padding: 18px; }
+        .customer-modal-header { flex: 0 0 auto; display: grid; grid-template-columns: 74px minmax(0, 1fr) 38px; gap: 14px; align-items: center; padding: 20px 18px 18px; }
+        .customer-avatar { width: 62px; height: 62px; border-radius: 50%; background: linear-gradient(135deg, #bfe8ff, #3aa5e6); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 27px; font-weight: 950; }
+        .customer-modal-name { color: #1478c8; font-size: 24px; font-weight: 950; line-height: 1.15; margin-bottom: 4px; }
+        .customer-modal-meta { color: #8b95a3; font-size: 13px; font-weight: 950; line-height: 1.5; overflow-wrap: anywhere; }
+        .customer-profile-tabs { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; background: #eef3f8; border-top: 1px solid #e1e7ef; border-bottom: 1px solid #e1e7ef; margin-bottom: 0; }
+        .customer-profile-tabs button { border: none; border-radius: 0; background: transparent; color: #7b8492; padding: 14px 4px; font-size: 14px; font-weight: 950; cursor: pointer; }
+        .customer-profile-tabs button.active { background: #148bd8; color: #fff; box-shadow: none; border-radius: 0 999px 999px 0; }
+        .customer-profile-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .customer-phone-link { color: #1478c8; font-size: 15px; font-weight: 950; text-decoration: none; }
+        .customer-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-bottom: 16px; }
+        .customer-info-label { color: #8b95a3; font-size: 13px; font-weight: 950; margin-bottom: 6px; }
+        .customer-info-value { color: #1f2937; font-size: 16px; font-weight: 950; line-height: 1.45; overflow-wrap: anywhere; }
+        .customer-info-value a { color: #1478c8; text-decoration: none; }
+        .customer-metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+        .customer-metric-card { background: #eaf7ff; border-radius: 14px; padding: 13px; }
+        .customer-metric-label { color: #8b95a3; font-size: 13px; font-weight: 950; margin-bottom: 5px; }
+        .customer-metric-value { color: #1478c8; font-size: 20px; font-weight: 950; line-height: 1.25; }
+        .customer-service-summary { border-top: 1px solid #edf0f4; padding-top: 12px; margin-top: 2px; }
+        .customer-service-summary .customer-info-grid { margin-bottom: 0; }
+        .customer-service-value { font-size: 14px; line-height: 1.55; }
+        .secondary-modal-btn.compact { padding: 8px 11px; font-size: 12px; border-radius: 999px; }
+        .customer-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .customer-edit-field { background: #f8fafc; border: 1px solid #edf0f4; border-radius: 14px; padding: 10px 12px; display: grid; gap: 5px; }
+        .customer-edit-field.wide, .customer-save-btn { grid-column: 1 / -1; }
+        .customer-edit-field span { color: #8b95a3; font-size: 11px; font-weight: 900; }
+        .customer-edit-field input, .customer-edit-field textarea { width: 100%; border: none; background: transparent; color: #1f2937; font-family: inherit; font-size: 14px; font-weight: 850; outline: none; }
+        .customer-edit-field textarea { min-height: 70px; resize: vertical; }
+        .customer-history-panel { display: grid; gap: 10px; margin-bottom: 12px; }
+        .customer-important-note { background: #fff7ed; color: #b45309; border: 1px solid #fed7aa; border-radius: 14px; padding: 10px 12px; font-size: 12px; font-weight: 850; line-height: 1.5; }
+        .customer-history-row { display: grid; grid-template-columns: 66px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
+        .customer-history-row:last-child { border-bottom: none; }
+        .customer-history-date { color: #1478c8; font-size: 12px; font-weight: 950; line-height: 1.35; }
+        .customer-history-title { display: flex; justify-content: space-between; gap: 8px; color: #1f2937; font-size: 13px; font-weight: 900; line-height: 1.45; }
+        .customer-history-title span { color: #1478c8; white-space: nowrap; font-weight: 950; }
+        .customer-history-note { color: #8b95a3; font-size: 12px; font-weight: 800; line-height: 1.45; margin-top: 3px; }
+        .customer-history-empty { color: #8b95a3; font-size: 13px; font-weight: 850; text-align: center; padding: 18px 0; }
         .pending-adjust-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; padding: 12px; border: 1px solid #dceaf8; border-radius: 14px; background: #f7fbff; }
         .pending-adjust-panel > div:nth-child(3), .pending-adjust-hint { grid-column: 1 / -1; }
         .pending-adjust-hint { color: #7b8492; font-size: 11px; line-height: 1.5; font-weight: 800; }
+        .duration-shortcuts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+        .duration-shortcut { border: 1px solid #dfe3ea; background: #fff; color: #5f6673; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 900; cursor: pointer; }
+        .duration-shortcut.active { border-color: #148bd8; background: #eaf7ff; color: #1478c8; }
         .modal-action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+        .modal-action-row.single { grid-template-columns: 1fr; }
         .primary-modal-btn, .secondary-modal-btn { border-radius: 12px; padding: 12px 0; font-size: 14px; font-weight: 900; cursor: pointer; }
         .primary-modal-btn { border: none; background: #1478c8; color: #fff; }
         .primary-modal-btn:disabled { background: #9aa3af; cursor: not-allowed; }
@@ -1065,8 +1288,12 @@ export default function DesignerPreviewV2Page() {
         .single-range-card { border: 1px solid #e1e7ef; background: #f8fbff; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
         .checkout-line { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #edf0f4; }
         .checkout-line.removable { grid-template-columns: minmax(0, 1fr) 112px 32px; }
+        .checkout-line.discount-line { grid-template-columns: minmax(0, 1fr) 96px 78px; }
         .checkout-line:last-child { border-bottom: none; }
         .checkout-service-label { color: #5f6673; font-size: 13px; font-weight: 850; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+        .checkout-number-field, .discount-rate-field { display: grid; gap: 3px; }
+        .checkout-field-label, .discount-rate-label { color: #8b95a3; font-size: 10px; font-weight: 900; text-align: center; }
+        .discount-rate-input { text-align: center; }
         .checkout-remove-btn { width: 32px; height: 32px; border: none; border-radius: 50%; background: #f2f4f7; color: #6b7280; font-size: 18px; font-weight: 950; cursor: pointer; }
         .checkout-remove-btn:hover { background: #ffe7eb; color: #ef244e; }
         .checkout-section-total { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #1478c8; font-size: 13px; font-weight: 950; padding: 10px 0 0; }
@@ -1145,7 +1372,7 @@ export default function DesignerPreviewV2Page() {
         @media (max-width: 380px) {
           .checkout-line.removable { grid-template-columns: 1fr 30px; }
           .checkout-line.removable .checkout-service-label { grid-column: 1 / -1; }
-          .checkout-line.removable .checkout-input { grid-column: 1; }
+          .checkout-line.removable .checkout-number-field { grid-column: 1; }
           .checkout-line.removable .checkout-remove-btn { grid-column: 2; }
         }
       `}</style>
@@ -1238,6 +1465,8 @@ function ProfileSettingsPanel({ profile, priceItems, priceCategoryOrder, onProfi
         <ProfileInput label="職稱" value={draft.role} onChange={(value) => updateDraft("role", value)} />
         <ProfileInput label="電話" value={draft.phone} onChange={(value) => updateDraft("phone", value)} />
         <ProfileInput label="專長" value={draft.specialties} onChange={(value) => updateDraft("specialties", value)} />
+        <ProfileColorInput label="排程底色" value={draft.bgColor} onChange={(value) => updateDraft("bgColor", value)} />
+        <ProfileColorInput label="排程文字色" value={draft.textColor} onChange={(value) => updateDraft("textColor", value)} />
         <ReadOnlyProfileCard label="加入日期" value={formatProfileDate(draft.joinedDate)} wide />
       </div>
       <DesignerPriceListCard priceItems={priceItems} priceCategoryOrder={priceCategoryOrder} />
@@ -1281,12 +1510,16 @@ function DesignerPriceListCard({ priceItems, priceCategoryOrder }: { priceItems:
                 <span className="price-category-count">{groupedItems[category].length} 項</span>
               </summary>
               <div className="price-list-rows">
-                {groupedItems[category].map((item) => (
-                  <div className="price-list-row" key={item.id}>
-                    <span className="price-name">{item.name}</span>
-                    <span className="price-value">{formatPriceRange(item.price_range)}</span>
-                  </div>
-                ))}
+                {groupedItems[category].map((item) => {
+                  const priceLabel = formatPriceRange(item.price_range);
+                  const shouldStack = item.name.length > 16 || priceLabel.length > 24 || item.name.length + priceLabel.length > 34;
+                  return (
+                    <div className={`price-list-row ${shouldStack ? "stacked" : ""}`} key={item.id}>
+                      <span className="price-name">{item.name}</span>
+                      <span className="price-value">{priceLabel}</span>
+                    </div>
+                  );
+                })}
               </div>
             </details>
           ))}
@@ -1356,6 +1589,8 @@ function PendingView({ rows, decisions, pendingCount, isManager, pendingScope, o
       <section className="pending-list">
         {rows.map((row) => {
           const decision = decisions[row.key] || "pending";
+          const isGroupBooking = (row.attendeeCount || 1) > 1;
+          const customerLabel = isGroupBooking ? `${row.name} + ${(row.attendeeCount || 1) - 1} 位同行` : row.name;
           return (
             <div className={`pending-card ${decision !== "pending" ? "is-done" : ""}`} key={`${row.time}-${row.name}`}>
               <div className="row-time">
@@ -1363,10 +1598,25 @@ function PendingView({ rows, decisions, pendingCount, isManager, pendingScope, o
                 {row.time}
               </div>
               <div>
-                <div className="row-name">{row.name}</div>
+                <div className="row-name">{customerLabel}</div>
                 {row.designer && <div className="pending-designer">設計師：{row.designer}</div>}
-                <div className="row-service">{row.service}</div>
-                <div className={`row-service ${row.detail.includes("翻譯") ? "note-text" : ""}`}>{row.detail}</div>
+                <div className="pending-summary">
+                  <div className="pending-line">
+                    <span className="pending-line-label">本人</span>
+                    <span className="pending-line-value">{row.mainService || row.service}</span>
+                  </div>
+                  {row.companionName && (
+                    <div className="pending-line">
+                      <span className="pending-line-label">同行</span>
+                      <span className="pending-line-value">{row.companionName}：{row.companionService || "未選服務"}</span>
+                    </div>
+                  )}
+                  <div className="pending-meta-row">
+                    {isGroupBooking && <span className="pending-chip people">{row.attendeeCount} 人預約</span>}
+                    {row.durationMinutes ? <span className="pending-chip">預估 {row.durationMinutes} 分鐘</span> : null}
+                  </div>
+                  {row.customerNote && <div className="pending-note-line">備註：{row.customerNote}</div>}
+                </div>
               </div>
               {decision === "pending" ? (
                 <div className="pending-actions">
@@ -1384,7 +1634,7 @@ function PendingView({ rows, decisions, pendingCount, isManager, pendingScope, o
   );
 }
 
-function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSource, leaveItems, teamLeaveItemsSource, isManager, designerName, designerOptions, isSynced, onModeChange, onSelectDate, onAddBooking, onAddLeave }: { mode: ScheduleMode; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; teamScheduleItemsSource: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; teamLeaveItemsSource: CalendarRecords<LeaveItem>; isManager: boolean; designerName: string; designerOptions: string[]; isSynced: boolean; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onAddBooking: (date: string, time?: string) => void; onAddLeave: (date: string, item: LeaveItem, designerLabel?: string) => void | Promise<void> }) {
+function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSource, leaveItems, teamLeaveItemsSource, isManager, designerName, designerOptions, isSynced, onModeChange, onSelectDate, onViewAppointment, onAddBooking, onAddLeave }: { mode: ScheduleMode; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; teamScheduleItemsSource: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; teamLeaveItemsSource: CalendarRecords<LeaveItem>; isManager: boolean; designerName: string; designerOptions: string[]; isSynced: boolean; onModeChange: (mode: ScheduleMode) => void; onSelectDate: (date: string) => void; onViewAppointment: (row: Appointment) => void; onAddBooking: (date: string, time?: string) => void; onAddLeave: (date: string, item: LeaveItem, designerLabel?: string) => void | Promise<void> }) {
   const [scope, setScope] = useState<"自己" | "全員">("自己");
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const visibleScheduleItems = scope === "全員" ? mergeCalendarRecords(scheduleItems, teamScheduleItemsSource) : filterCalendarRecords(scheduleItems, designerName);
@@ -1419,9 +1669,9 @@ function CalendarView({ mode, selectedDate, scheduleItems, teamScheduleItemsSour
         </div>
       </div>}
       {mode === "月" ? (
-        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} />
+        <MonthSchedule selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onViewAppointment={onViewAppointment} />
       ) : (
-        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} />
+        <CompactSchedule mode={mode} selectedDate={selectedDate} scheduleItems={visibleScheduleItems} leaveItems={visibleLeaveItems} showDesigner={scope === "全員"} onSelectDate={onSelectDate} onViewAppointment={onViewAppointment} />
       )}
       {showLeaveForm && (
         <ScheduleLeaveModal
@@ -1510,7 +1760,7 @@ function ScheduleLeaveModal({ selectedDate, isManager, designerName, designerOpt
   );
 }
 
-function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate }: { selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; showDesigner: boolean; onSelectDate: (date: string) => void }) {
+function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onViewAppointment }: { selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; showDesigner: boolean; onSelectDate: (date: string) => void; onViewAppointment: (row: Appointment) => void }) {
   const [year, month] = selectedDate.split("-").map(Number);
   const selectedDay = Number(selectedDate.split("-")[2]);
   const selectedItems = getCalendarItems(selectedDate, scheduleItems, leaveItems);
@@ -1540,7 +1790,7 @@ function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, 
               <span className="date-badge">{date}</span>
               {summary.items.length > 0 ? (
                 <div className="schedule-summary">
-                  {summary.items.map((item) => <span className={`schedule-summary-pill ${item.tone}`} key={item.text}>{item.text}</span>)}
+                  {summary.items.map((item) => <span className={`schedule-summary-pill ${item.tone}`} style={item.bgColor ? { background: item.bgColor, color: item.textColor || "#1f2937" } : undefined} key={item.text}>{item.text}</span>)}
                   {summary.moreCount > 0 ? <span className="schedule-summary-more">+{summary.moreCount} 更多</span> : null}
                 </div>
               ) : null}
@@ -1549,12 +1799,12 @@ function MonthSchedule({ selectedDate, scheduleItems, leaveItems, showDesigner, 
         })}
       </div>
       <Legend />
-      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} showDesigner={showDesigner} />
+      <SelectedDayPanel selectedDate={selectedDate} items={selectedItems} showDesigner={showDesigner} onViewAppointment={onViewAppointment} />
     </>
   );
 }
 
-function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; showDesigner: boolean; onSelectDate: (date: string) => void }) {
+function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDesigner, onSelectDate, onViewAppointment }: { mode: Exclude<ScheduleMode, "月">; selectedDate: string; scheduleItems: CalendarRecords<ScheduleItem>; leaveItems: CalendarRecords<LeaveItem>; showDesigner: boolean; onSelectDate: (date: string) => void; onViewAppointment: (row: Appointment) => void }) {
   const days = mode === "3日" ? 3 : 7;
   const baseDate = new Date(`${selectedDate}T00:00:00+08:00`);
   const rows = Array.from({ length: days }, (_, index) => {
@@ -1592,12 +1842,12 @@ function CompactSchedule({ mode, selectedDate, scheduleItems, leaveItems, showDe
         </div>
         <div className="selected-day-hint">先選日期，再新增</div>
       </section>
-      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(selectedDate, scheduleItems, leaveItems)} showDesigner={showDesigner} />
+      <SelectedDayPanel selectedDate={selectedDate} items={getCalendarItems(selectedDate, scheduleItems, leaveItems)} showDesigner={showDesigner} onViewAppointment={onViewAppointment} />
     </>
   );
 }
 
-function SelectedDayPanel({ selectedDate, items, showDesigner }: { selectedDate: string; items: CalendarItem[]; showDesigner: boolean }) {
+function SelectedDayPanel({ selectedDate, items, showDesigner, onViewAppointment }: { selectedDate: string; items: CalendarItem[]; showDesigner: boolean; onViewAppointment: (row: Appointment) => void }) {
   return (
     <section className="compact-section">
       <div className="selected-day-title">
@@ -1610,7 +1860,7 @@ function SelectedDayPanel({ selectedDate, items, showDesigner }: { selectedDate:
           const rawDetail = isLeave ? item.text : serviceParts.join(" ");
           const detail = showDesigner && item.designer ? rawDetail.replace(new RegExp(`^${item.designer}\\s*`), "") : rawDetail;
           return (
-            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : ""}`} key={`${item.category}-${item.text}-${item.customer || ""}`}>
+            <div className={`timeline-row ${isLeave ? "leave-timeline-row" : item.appointment ? "can-add" : ""}`} key={`${item.category}-${item.text}-${item.customer || ""}`} onClick={() => item.appointment ? onViewAppointment(item.appointment) : undefined}>
               <div className="row-time">{isLeave ? "排休" : time}</div>
               <div className="row-service schedule-detail">
                 {isLeave ? (
@@ -1618,7 +1868,7 @@ function SelectedDayPanel({ selectedDate, items, showDesigner }: { selectedDate:
                 ) : (
                   <>
                     <span className="detail-meta">
-                      {showDesigner && item.designer ? <span className="detail-name">{item.designer}</span> : null}
+                      {showDesigner && item.designer ? <span className="detail-name" style={item.bgColor ? { background: item.bgColor, color: item.textColor || "#1f2937", borderRadius: 999, padding: "2px 7px" } : undefined}>{item.designer}</span> : null}
                     </span>
                     <strong className="detail-service">
                       {item.customer ? <span className="detail-customer">{item.customer}</span> : null}
@@ -1753,6 +2003,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
   const [category, setCategory] = useState("全部");
   const [showProductPicker, setShowProductPicker] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [productDiscountRate, setProductDiscountRate] = useState("");
   const categories = ["全部", ...Array.from(new Set(products.map((product) => product.category || "未分類").filter(Boolean)))];
   const filteredProducts = products.filter((product) => {
     const itemCategory = product.category || "未分類";
@@ -1805,9 +2056,20 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
   }
 
   function updateProductDiscount(value: number) {
+    setProductDiscountRate("");
     setDraft({
       ...draft,
       productDiscount: Math.min(Math.max(0, value), productGross),
+    });
+  }
+
+  function updateProductDiscountRate(value: string) {
+    setProductDiscountRate(value);
+    const rate = parseDiscountRate(value);
+    if (rate === null) return;
+    setDraft({
+      ...draft,
+      productDiscount: calculateDiscountFromRate(productGross, rate),
     });
   }
 
@@ -1897,7 +2159,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
                   <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
                 </div>
               ))}
-              <CheckoutNumber label="商品折扣" value={draft.productDiscount} onChange={updateProductDiscount} />
+              <DiscountNumber label="商品折扣" value={draft.productDiscount} rateValue={productDiscountRate} baseAmount={productGross} onAmountChange={updateProductDiscount} onRateChange={updateProductDiscountRate} />
               <div className="selected-product-summary">
                 <div className="selected-product-row">
                   <span>商品原價小計</span>
@@ -1914,7 +2176,7 @@ function ProductCheckoutModal({ products, complete, isSynced, onComplete, onClos
         <section className="panel">
           <div className="panel-label">付款與備註（備註僅設計師看）</div>
           <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
-            {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
+            {["現金", "轉帳", "Line Pay"].map((item) => <option key={item}>{item}</option>)}
           </select>
           <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="備註（設計師看）：商品交易備註、折扣原因..." />
         </section>
@@ -2361,26 +2623,114 @@ function RangePickerModal({ ranges, customRange, onCustomRangeChange, onClose }:
   );
 }
 
-function AppointmentModal({ row, onClose }: { row: Appointment; onClose: () => void }) {
+function AppointmentModal({ row, onSaveCustomer, onSaveCustomerNote, onClose }: { row: Appointment; onSaveCustomer: (row: Appointment, draft: CustomerProfileDraft) => void | Promise<void>; onSaveCustomerNote: (row: Appointment, draft: CustomerProfileDraft) => void | Promise<void>; onClose: () => void }) {
+  const [activePanel, setActivePanel] = useState<"profile" | "history">("profile");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<CustomerProfileDraft>({
+    name: row.name === "訪客" ? "" : row.name,
+    phone: row.phone === "未填電話" ? "" : row.phone,
+    referrer: row.customerReferrer || "",
+    hairType: row.hairType || "",
+    preferences: row.preferences || "",
+    allergies: row.allergies || "",
+    privateNote: row.privateNote || "",
+  });
+
+  async function saveAll() {
+    setSaving(true);
+    await onSaveCustomer(row, draft);
+    await onSaveCustomerNote(row, draft);
+    setSaving(false);
+  }
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
+      <div className="modal-panel customer-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="customer-modal-header">
+          <div className="customer-avatar">{getCustomerInitial(row.name)}</div>
           <div>
-            <div className="modal-title">{row.name}</div>
-            <div className="modal-subtitle">{row.time} · {row.status}</div>
+            <div className="customer-modal-name">{row.name}</div>
+            <div className="customer-modal-meta">
+              {formatDisplayPhone(row.phone)}{row.customerNo ? ` · 會員 ${row.customerNo}` : ""}
+            </div>
           </div>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
-        <div className="detail-grid">
-          <DetailCard label="電話" value={row.phone} />
-          <DetailCard label="服務項目" value={row.service} />
-          <DetailCard label="備註" value={row.note} />
-          <DetailCard label="參考圖片" value={row.image} />
+        <div className="customer-profile-tabs">
+          <button className={activePanel === "profile" ? "active" : ""} onClick={() => setActivePanel("profile")}>基本資訊</button>
+          <button className={activePanel === "history" ? "active" : ""} onClick={() => setActivePanel("history")}>消費紀錄與備註</button>
         </div>
-        <div className="modal-action-row">
-          <button className="secondary-modal-btn">聯絡客人</button>
-          <button className="primary-modal-btn" onClick={onClose}>關閉</button>
+        <div className="customer-modal-body">
+          {activePanel === "profile" ? (
+            <>
+            <div className="customer-profile-head">
+              <button className="secondary-modal-btn compact" onClick={() => setEditing(!editing)}>{editing ? "取消編輯" : "編輯資料"}</button>
+            </div>
+            {editing ? (
+              <div className="customer-edit-grid">
+                <CustomerEditInput label="姓名" value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+                <CustomerEditInput label="電話" value={draft.phone} onChange={(value) => setDraft({ ...draft, phone: value })} />
+                <CustomerEditInput label="介紹人" value={draft.referrer} onChange={(value) => setDraft({ ...draft, referrer: value })} />
+                <CustomerEditInput label="髮質" value={draft.hairType} onChange={(value) => setDraft({ ...draft, hairType: value })} />
+                <CustomerEditInput label="喜好" value={draft.preferences} onChange={(value) => setDraft({ ...draft, preferences: value })} />
+                <CustomerEditInput label="過敏／注意事項" value={draft.allergies} onChange={(value) => setDraft({ ...draft, allergies: value })} />
+                <label className="customer-edit-field wide">
+                  <span>設計師備註</span>
+                  <textarea value={draft.privateNote} onChange={(event) => setDraft({ ...draft, privateNote: event.target.value })} placeholder="例如：頭皮偏敏感、喜歡自然蓬鬆、瀏海長度注意..." />
+                </label>
+                <button className="primary-modal-btn customer-save-btn" disabled={saving} onClick={saveAll}>{saving ? "儲存中..." : "儲存顧客資料"}</button>
+              </div>
+            ) : (
+              <>
+                <div className="customer-info-grid">
+                  <CustomerInfoItem label="電話">
+                    <a href={`tel:${normalizePhone(row.phone)}`}>{formatDisplayPhone(row.phone)}</a>
+                  </CustomerInfoItem>
+                  <CustomerInfoItem label="來源">LINE</CustomerInfoItem>
+                  <CustomerInfoItem label="介紹人">{row.customerReferrer || "未填介紹人"}</CustomerInfoItem>
+                  <CustomerInfoItem label="最近一次消費日期">{row.lastVisit ? row.lastVisit.replace(/-/g, "/") : "尚無消費紀錄"}</CustomerInfoItem>
+                  <CustomerInfoItem label="髮質">{row.hairType || "未填"}</CustomerInfoItem>
+                  <CustomerInfoItem label="喜好">{row.preferences || "未填"}</CustomerInfoItem>
+                </div>
+                <div className="customer-metric-grid">
+                  <CustomerMetricCard label="累積消費" value={formatCurrency(row.totalSpent || 0)} />
+                  <CustomerMetricCard label="累積訂單" value={`${row.orderCount || 0} 筆`} />
+                </div>
+              </>
+            )}
+            <div className="customer-service-summary">
+              <div className="customer-info-grid">
+                <CustomerInfoItem label="本次服務項目"><span className="customer-service-value">{row.service}</span></CustomerInfoItem>
+                <CustomerInfoItem label="本次預約備註">{getCustomerNoteFromBookingNote(row.note)}</CustomerInfoItem>
+              </div>
+            </div>
+            </>
+          ) : (
+            <div className="customer-history-panel">
+            {(row.allergies || row.privateNote) && (
+              <div className="customer-important-note">
+                {row.allergies ? `注意：${row.allergies}` : row.privateNote}
+              </div>
+            )}
+            {(row.history || []).length === 0 ? (
+              <div className="customer-history-empty">尚無消費紀錄。</div>
+            ) : (
+              row.history?.map((item) => (
+                <div className="customer-history-row" key={`${item.date}-${item.title}-${item.amount}`}>
+                  <div className="customer-history-date">{item.date.replace(/-/g, "/")}</div>
+                  <div>
+                    <div className="customer-history-title"><strong>{item.title}</strong><span>{formatCurrency(item.amount)}</span></div>
+                    {item.note && <div className="customer-history-note">備註：{item.note}</div>}
+                  </div>
+                </div>
+              ))
+            )}
+            </div>
+          )}
+          <div className="modal-action-row single">
+            <button className="primary-modal-btn" onClick={onClose}>關閉</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2388,6 +2738,20 @@ function AppointmentModal({ row, onClose }: { row: Appointment; onClose: () => v
 }
 
 function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: PendingRow; decision: PendingDecision; onDecide: (row: PendingRow, decision: PendingDecision) => void | Promise<void>; onClose: () => void }) {
+  const [translatedNote, setTranslatedNote] = useState("");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const durationOptions = [
+    { label: "15 分", minutes: 15 },
+    { label: "30 分", minutes: 30 },
+    { label: "45 分", minutes: 45 },
+    { label: "1 小時", minutes: 60 },
+    { label: "1 小時 15 分", minutes: 75 },
+    { label: "1 小時 30 分", minutes: 90 },
+    { label: "2 小時", minutes: 120 },
+    { label: "2 小時 30 分", minutes: 150 },
+    { label: "3 小時", minutes: 180 },
+    { label: "4 小時", minutes: 240 },
+  ];
   const [draft, setDraft] = useState({
     date: row.rawDate,
     time: row.time,
@@ -2400,6 +2764,15 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
     time: draft.time,
     durationMinutes: Math.max(15, Number(draft.durationMinutes) || 60),
   };
+  const customerNote = row.customerNote || "";
+  const canTranslateNote = hasEnglishText(customerNote);
+
+  async function handleTranslateNote() {
+    if (!canTranslateNote || isTranslating) return;
+    setIsTranslating(true);
+    setTranslatedNote(await translateCustomerNoteToChinese(customerNote));
+    setIsTranslating(false);
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -2414,9 +2787,21 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
         <div className="detail-grid">
           {row.designer && <DetailCard label="設計師" value={row.designer} />}
           <DetailCard label="電話" value={row.phone} />
-          <DetailCard label="服務項目" value={row.service} />
-          <DetailCard label="顧客備註" value={row.detail} />
-          <DetailCard label="翻譯中文" value={row.detail.includes("Please") ? "請讓顏色呈現自然棕色。" : "不需翻譯"} />
+          {row.appointment?.customerNo && <DetailCard label="會員編號" value={row.appointment.customerNo} />}
+          <DetailCard label="介紹人" value={row.appointment?.customerReferrer || "未填介紹人"} />
+          <DetailCard label="最近一次消費日期" value={row.appointment?.lastVisit ? row.appointment.lastVisit.replace(/-/g, "/") : "尚無消費紀錄"} />
+          <DetailCard label="累積消費" value={formatCurrency(row.appointment?.totalSpent || 0)} />
+          {(row.attendeeCount || 1) > 1 && <DetailCard label="預約人數" value={`${row.attendeeCount} 人`} />}
+          <DetailCard label="主要預約人服務" value={row.mainService || row.service} />
+          {row.companionName && <DetailCard label="同行人" value={row.companionName} />}
+          {row.companionService && <DetailCard label="同行人服務" value={row.companionService} />}
+          <CustomerNoteCard
+            note={customerNote}
+            translatedNote={translatedNote}
+            canTranslate={canTranslateNote}
+            isTranslating={isTranslating}
+            onTranslate={handleTranslateNote}
+          />
         </div>
         {decision === "pending" && (
           <section className="pending-adjust-panel">
@@ -2431,6 +2816,18 @@ function PendingConfirmModal({ row, decision, onDecide, onClose }: { row: Pendin
             <div>
               <div className="booking-label">預估時長（分鐘）</div>
               <input className="checkout-input" type="number" min={15} step={15} value={draft.durationMinutes} onChange={(event) => setDraft({ ...draft, durationMinutes: Number(event.target.value) || 60 })} />
+              <div className="duration-shortcuts" aria-label="快速選擇預估時長">
+                {durationOptions.map((option) => (
+                  <button
+                    className={`duration-shortcut${Number(draft.durationMinutes) === option.minutes ? " active" : ""}`}
+                    key={option.minutes}
+                    type="button"
+                    onClick={() => setDraft({ ...draft, durationMinutes: option.minutes })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="pending-adjust-hint">設計師可依現場經驗先調整時長；確認後會同步影響顧客端可預約空檔。</div>
           </section>
@@ -2466,6 +2863,8 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
     note: "",
   });
   const [showServicePicker, setShowServicePicker] = useState(false);
+  const [serviceDiscountRate, setServiceDiscountRate] = useState("");
+  const [productDiscountRates, setProductDiscountRates] = useState<Record<number, string>>({});
   const serviceCategories = getServiceOptionCategories(serviceOptions);
   const [selectedServiceCategory, setSelectedServiceCategory] = useState(serviceCategories[0] || "");
   const [showProductPicker, setShowProductPicker] = useState(false);
@@ -2573,12 +2972,38 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
   }
 
   function updateProductDiscount(productId: number, value: number) {
+    setProductDiscountRates((prev) => ({ ...prev, [productId]: "" }));
     setDraft({
       ...draft,
       productItems: draft.productItems.map((item) => {
         if (item.product.id !== productId) return item;
         const originalTotal = item.linePrice;
         return { ...item, discount: Math.min(Math.max(0, value), originalTotal) };
+      }),
+    });
+  }
+
+  function updateServiceDiscount(value: number) {
+    setServiceDiscountRate("");
+    setDraft({ ...draft, serviceDiscount: Math.min(Math.max(0, value), serviceGross) });
+  }
+
+  function updateServiceDiscountRate(value: string) {
+    setServiceDiscountRate(value);
+    const rate = parseDiscountRate(value);
+    if (rate === null) return;
+    setDraft({ ...draft, serviceDiscount: calculateDiscountFromRate(serviceGross, rate) });
+  }
+
+  function updateProductDiscountRate(productId: number, value: string) {
+    setProductDiscountRates((prev) => ({ ...prev, [productId]: value }));
+    const rate = parseDiscountRate(value);
+    if (rate === null) return;
+    setDraft({
+      ...draft,
+      productItems: draft.productItems.map((item) => {
+        if (item.product.id !== productId) return item;
+        return { ...item, discount: calculateDiscountFromRate(item.linePrice, rate) };
       }),
     });
   }
@@ -2648,7 +3073,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
               <CheckoutNumber label={item.name} value={item.amount} onChange={(value) => updateExtraService(index, value)} onRemove={() => removeExtraService(index)} />
             </div>
           ))}
-          <CheckoutNumber label="服務折扣" value={draft.serviceDiscount} onChange={(value) => setDraft({ ...draft, serviceDiscount: Math.min(Math.max(0, value), serviceGross) })} />
+          <DiscountNumber label="服務折扣" value={draft.serviceDiscount} rateValue={serviceDiscountRate} baseAmount={serviceGross} onAmountChange={updateServiceDiscount} onRateChange={updateServiceDiscountRate} />
           <div className="checkout-section-total">
             <span>服務項目小計</span>
             <strong>NT${serviceSubtotal.toLocaleString()}</strong>
@@ -2698,7 +3123,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
               {draft.productItems.map((item) => (
                 <div key={item.product.id}>
                   <CheckoutProductNumber label={item.product.name} quantity={item.quantity} price={item.linePrice} onQuantityChange={(value) => updateProductQuantity(item.product.id, value)} onPriceChange={(value) => updateProductPrice(item.product.id, value)} />
-                  <CheckoutNumber label="商品折扣" value={item.discount} onChange={(value) => updateProductDiscount(item.product.id, value)} />
+                  <DiscountNumber label="商品折扣" value={item.discount} rateValue={productDiscountRates[item.product.id] || ""} baseAmount={item.linePrice} onAmountChange={(value) => updateProductDiscount(item.product.id, value)} onRateChange={(value) => updateProductDiscountRate(item.product.id, value)} />
                 </div>
               ))}
               <div className="selected-product-summary">
@@ -2713,7 +3138,7 @@ function CheckoutModal({ row, serviceOptions, products, complete, isSynced, onCo
         <section className="panel">
           <div className="panel-label">付款與備註（備註僅設計師看）</div>
           <select className="checkout-select" value={draft.paymentMethod} onChange={(event) => setDraft({ ...draft, paymentMethod: event.target.value })}>
-            {["現金", "轉帳", "LINE Pay", "刷卡", "其他"].map((item) => <option key={item}>{item}</option>)}
+            {["現金", "轉帳", "Line Pay"].map((item) => <option key={item}>{item}</option>)}
           </select>
           <textarea className="checkout-note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="備註（設計師看）：折扣原因、顧客狀況、服務紀錄..." />
         </section>
@@ -2731,8 +3156,27 @@ function CheckoutNumber({ label, value, onChange, onRemove }: { label: string; v
   return (
     <div className={`checkout-line${onRemove ? " removable" : ""}`}>
       <div className="checkout-service-label">{label}</div>
-      <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+      <label className="checkout-number-field">
+        <span className="checkout-field-label">金額</span>
+        <input className="checkout-input" type="number" value={value} onChange={(event) => onChange(Number(event.target.value) || 0)} />
+      </label>
       {onRemove && <button className="checkout-remove-btn" onClick={onRemove} aria-label={`移除 ${label}`}>×</button>}
+    </div>
+  );
+}
+
+function DiscountNumber({ label, value, rateValue, baseAmount, onAmountChange, onRateChange }: { label: string; value: number; rateValue: string; baseAmount: number; onAmountChange: (value: number) => void; onRateChange: (value: string) => void }) {
+  return (
+    <div className="checkout-line discount-line">
+      <div className="checkout-service-label">{label}</div>
+      <label className="discount-rate-field">
+        <span className="discount-rate-label">折數</span>
+        <input className="checkout-input discount-rate-input" type="number" min={0} max={100} step={0.1} value={rateValue} onChange={(event) => onRateChange(event.target.value)} placeholder="例 95" />
+      </label>
+      <label className="checkout-number-field">
+        <span className="checkout-field-label">金額</span>
+        <input className="checkout-input" type="number" min={0} max={baseAmount} value={value} onChange={(event) => onAmountChange(Number(event.target.value) || 0)} aria-label={`${label}金額`} />
+      </label>
     </div>
   );
 }
@@ -2745,7 +3189,10 @@ function CheckoutProductNumber({ label, quantity, price, onQuantityChange, onPri
         <span className="product-quantity-label">數量</span>
         <input className="checkout-input" type="number" min={1} value={quantity} onChange={(event) => onQuantityChange(Number(event.target.value) || 1)} />
       </label>
-      <input className="checkout-input" type="number" value={price} onChange={(event) => onPriceChange(Number(event.target.value) || 0)} />
+      <label className="checkout-number-field">
+        <span className="checkout-field-label">金額</span>
+        <input className="checkout-input" type="number" value={price} onChange={(event) => onPriceChange(Number(event.target.value) || 0)} />
+      </label>
     </div>
   );
 }
@@ -3005,17 +3452,158 @@ function findDesignerByLabel(designers: BackendDesigner[], label: string) {
   return designers.find((designer) => [designer.display_name, designer.name, designer.nickname].filter(Boolean).includes(label));
 }
 
-function mapBookingsToCalendar(bookings: BackendBooking[], services: BackendService[], designers: BackendDesigner[]): CalendarRecords<ScheduleItem> {
+type ScheduleConflict = { message: string };
+type LiveConflictBooking = {
+  id: number;
+  customer_name?: string | null;
+  booking_time?: string | null;
+  duration_minutes?: number | null;
+  status?: string | null;
+};
+
+function toMinutes(time?: string | null) {
+  if (!time) return null;
+  const [hourText, minuteText] = time.slice(0, 5).split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function formatConflictTime(startMinutes: number, endMinutes: number) {
+  const format = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  return `${format(startMinutes)}-${format(endMinutes)}`;
+}
+
+function hasTimeOverlap(startA: number, endA: number, startB: number, endB: number) {
+  return startA < endB && startB < endA;
+}
+
+async function findLiveScheduleConflict({
+  bookingIdToIgnore,
+  designerId,
+  date,
+  time,
+  durationMinutes,
+}: {
+  bookingIdToIgnore?: number;
+  designerId: number;
+  date: string;
+  time: string;
+  durationMinutes: number;
+}): Promise<ScheduleConflict | null> {
+  const startMinutes = toMinutes(time);
+  if (startMinutes === null) return { message: "預約時間格式不正確，請重新選擇時間。" };
+  const endMinutes = startMinutes + Math.max(15, durationMinutes || 60);
+
+  const [{ data: offDay }, { data: offSlots }, { data: bookings }] = await Promise.all([
+    supabase
+      .from("designer_off_days")
+      .select("designer_id, off_date")
+      .eq("designer_id", designerId)
+      .eq("off_date", date)
+      .maybeSingle(),
+    supabase
+      .from("designer_off_slots")
+      .select("slot_time")
+      .eq("designer_id", designerId)
+      .eq("slot_date", date),
+    supabase
+      .from("bookings")
+      .select("id, customer_name, booking_time, duration_minutes, status")
+      .eq("designer_id", designerId)
+      .eq("booking_date", date)
+      .neq("status", "cancelled"),
+  ]);
+
+  if (offDay) {
+    return { message: "此日期已設定整天休假，請先調整排程或改約其他日期。" };
+  }
+
+  const blockedSlot = (offSlots || []).find((slot) => {
+    const slotStart = toMinutes(slot.slot_time);
+    return slotStart !== null && hasTimeOverlap(startMinutes, endMinutes, slotStart, slotStart + 60);
+  });
+  if (blockedSlot) {
+    return { message: `此時段已設定不接客（${blockedSlot.slot_time.slice(0, 5)}），請先調整排程或改約其他時間。` };
+  }
+
+  const conflictBooking = ((bookings || []) as LiveConflictBooking[]).find((booking) => {
+    if (booking.id === bookingIdToIgnore) return false;
+    const bookingStart = toMinutes(booking.booking_time);
+    if (bookingStart === null) return false;
+    const bookingEnd = bookingStart + Math.max(15, Number(booking.duration_minutes) || 60);
+    return hasTimeOverlap(startMinutes, endMinutes, bookingStart, bookingEnd);
+  });
+
+  if (conflictBooking) {
+    const conflictStart = toMinutes(conflictBooking.booking_time) || startMinutes;
+    const conflictEnd = conflictStart + Math.max(15, Number(conflictBooking.duration_minutes) || 60);
+    return {
+      message: `此時段已有預約：${formatConflictTime(conflictStart, conflictEnd)} ${conflictBooking.customer_name || "顧客"}。請先調整原預約或改約其他時間。`,
+    };
+  }
+
+  return null;
+}
+
+async function findLiveLeaveConflict({
+  designerId,
+  date,
+  slots,
+}: {
+  designerId: number;
+  date: string;
+  slots?: string[];
+}): Promise<ScheduleConflict | null> {
+  const { data: bookings } = await supabase
+    .from("bookings")
+    .select("id, customer_name, booking_time, duration_minutes, status")
+    .eq("designer_id", designerId)
+    .eq("booking_date", date)
+    .neq("status", "cancelled");
+  const liveBookings = (bookings || []) as LiveConflictBooking[];
+
+  if (!slots?.length && liveBookings.length > 0) {
+    return { message: "當天已有預約，請先處理既有預約後再設定整天休假。" };
+  }
+
+  const conflictBooking = liveBookings.find((booking) => {
+    const bookingStart = toMinutes(booking.booking_time);
+    if (bookingStart === null) return false;
+    const bookingEnd = bookingStart + Math.max(15, Number(booking.duration_minutes) || 60);
+    return (slots || []).some((slot) => {
+      const slotStart = toMinutes(slot);
+      return slotStart !== null && hasTimeOverlap(slotStart, slotStart + 60, bookingStart, bookingEnd);
+    });
+  });
+
+  if (conflictBooking) {
+    const conflictStart = toMinutes(conflictBooking.booking_time) || 0;
+    const conflictEnd = conflictStart + Math.max(15, Number(conflictBooking.duration_minutes) || 60);
+    return {
+      message: `這段不接客時間會撞到既有預約：${formatConflictTime(conflictStart, conflictEnd)} ${conflictBooking.customer_name || "顧客"}。請先調整預約後再排休。`,
+    };
+  }
+
+  return null;
+}
+
+function mapBookingsToCalendar(bookings: BackendBooking[], transactions: BackendTransaction[], services: BackendService[], designers: BackendDesigner[], customers: BackendCustomer[], customerNotes: BackendCustomerNote[]): CalendarRecords<ScheduleItem> {
   return bookings.reduce<CalendarRecords<ScheduleItem>>((records, booking) => {
     const designer = designers.find((item) => item.id === booking.designer_id);
     const designerName = booking.designers?.display_name || booking.designers?.name || (designer ? getDesignerLabel(designer) : "未指定");
     const serviceName = getServiceNamesFromBackend(booking.service_ids || [], services, booking.note);
     const text = `${booking.booking_time} ${designerName} ${serviceName}`;
+    const appointment = buildAppointmentFromBooking(booking, transactions, services, customers, customerNotes);
     records[booking.booking_date] = [...(records[booking.booking_date] || []), {
       text,
       tone: getServiceTone(serviceName),
       designer: designerName,
       customer: booking.customer_name || "訪客",
+      bgColor: designer?.bg_color,
+      textColor: designer?.text_color,
+      appointment,
     }].sort((a, b) => a.text.localeCompare(b.text));
     return records;
   }, {});
@@ -3026,7 +3614,7 @@ function mapLeavesToCalendar(offDays: BackendOffDay[], offSlots: BackendOffSlot[
   offDays.forEach((item) => {
     const designer = designers.find((target) => target.id === item.designer_id);
     const designerName = designer ? getDesignerLabel(designer) : "設計師";
-    records[item.off_date] = [...(records[item.off_date] || []), { text: `${designerName} 整天休假`, tone: "day-off", designer: designerName }];
+    records[item.off_date] = [...(records[item.off_date] || []), { text: `${designerName} 整天休假`, tone: "day-off", designer: designerName, bgColor: designer?.bg_color, textColor: designer?.text_color }];
   });
   const slotsByDesignerDate = offSlots.reduce<Record<string, BackendOffSlot[]>>((groups, item) => {
     const key = `${item.designer_id}-${item.slot_date}`;
@@ -3039,54 +3627,169 @@ function mapLeavesToCalendar(offDays: BackendOffDay[], offSlots: BackendOffSlot[
     const designerName = designer ? getDesignerLabel(designer) : "設計師";
     const sortedSlots = slots.map((item) => item.slot_time).sort();
     const label = sortedSlots.length > 1 ? `${sortedSlots[0]}-${sortedSlots[sortedSlots.length - 1]} 不接客` : `${sortedSlots[0]} 不接客`;
-    records[first.slot_date] = [...(records[first.slot_date] || []), { text: `${designerName} ${label}`, tone: "blocked", designer: designerName }];
+    records[first.slot_date] = [...(records[first.slot_date] || []), { text: `${designerName} ${label}`, tone: "blocked", designer: designerName, bgColor: designer?.bg_color, textColor: designer?.text_color }];
   });
   return records;
 }
 
-function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: BackendTransaction[], services: BackendService[], designerId?: number): Appointment[] {
-  const today = new Date().toLocaleDateString("en-CA");
+function normalizePhone(phone?: string | null) {
+  return (phone || "").replace(/\D/g, "");
+}
+
+function hasEnglishText(text?: string | null) {
+  return /[A-Za-z]/.test(text || "");
+}
+
+async function translateCustomerNoteToChinese(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed.toLowerCase().replace(/[.!?。]/g, "").replace(/\s+/g, " ");
+  if (normalized.includes("i need help") && normalized.includes("cute style")) {
+    return "我需要協助，想要可愛風格的造型。";
+  }
+  try {
+    const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURIComponent(trimmed)}`);
+    const data = await response.json();
+    const translated = Array.isArray(data?.[0]) ? data[0].map((item: unknown[]) => item?.[0]).join("").trim() : "";
+    return translated || "此備註包含英文，建議先確認顧客需求。";
+  } catch {
+    return "此備註包含英文，建議先確認顧客需求。";
+  }
+}
+
+function formatDisplayPhone(phone?: string | null) {
+  const digits = normalizePhone(phone);
+  if (digits.length === 10) return `${digits.slice(0, 4)}-${digits.slice(4, 7)}-${digits.slice(7)}`;
+  return phone || "未填電話";
+}
+
+function getCustomerInitial(name?: string | null) {
+  const value = (name || "客").trim();
+  return value.slice(0, 1);
+}
+
+function isSameCustomer(phoneA?: string | null, nameA?: string | null, phoneB?: string | null, nameB?: string | null) {
+  const leftPhone = normalizePhone(phoneA);
+  const rightPhone = normalizePhone(phoneB);
+  if (leftPhone && rightPhone && leftPhone === rightPhone) return true;
+  const leftName = (nameA || "").trim();
+  const rightName = (nameB || "").trim();
+  return Boolean(leftName && rightName && leftName === rightName);
+}
+
+function findCustomerProfile(phone: string, name: string, customers: BackendCustomer[]) {
+  return customers.find((customer) => isSameCustomer(phone, name, customer.phone, customer.name));
+}
+
+function findCustomerNote(phone: string, name: string, designerId: number, notes: BackendCustomerNote[]) {
+  return notes.find((note) => note.designer_id === designerId && isSameCustomer(phone, name, note.customer_phone, note.customer_name));
+}
+
+function buildCustomerHistory(phone: string, name: string, transactions: BackendTransaction[]): CustomerHistoryItem[] {
+  return transactions
+    .filter((transaction) => isSameCustomer(phone, name, transaction.customer_phone, transaction.customer_name))
+    .map((transaction) => ({
+      date: transaction.created_at.slice(0, 10),
+      title: getTransactionTitle(transaction),
+      amount: Number(transaction.total_amount || 0),
+      note: getCustomerFacingTransactionNote(transaction.note || ""),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function getTransactionTitle(transaction: BackendTransaction) {
+  const serviceNames = (transaction.service_items || []).map((item) => item.name).filter(Boolean);
+  if (serviceNames.length > 0) return serviceNames.join("、");
+  const productRows = extractProductSaleRows(transaction.note || "", "");
+  if (productRows.length > 0) return productRows.map((row) => row.item).join("、");
+  return transaction.note?.split("\n").find(Boolean) || "消費紀錄";
+}
+
+function getCustomerFacingTransactionNote(note: string) {
+  return note
+    .split("\n")
+    .filter((line) => line && !line.startsWith("客人購買商品：") && !line.startsWith("純商品結帳"))
+    .join("、");
+}
+
+function buildAppointmentFromBooking(booking: BackendBooking, transactions: BackendTransaction[], services: BackendService[], customers: BackendCustomer[], customerNotes: BackendCustomerNote[]): Appointment {
   const paidBookingIds = new Set(transactions.map((transaction) => transaction.booking_id).filter(Boolean));
+  const isDone = booking.status === "completed" || paidBookingIds.has(booking.id);
+  const isProgress = !isDone && booking.booking_date === new Date().toLocaleDateString("en-CA") && isTimeStarted(booking.booking_time);
+  const customer = findCustomerProfile(booking.customer_phone || "", booking.customer_name || "", customers);
+  const note = findCustomerNote(booking.customer_phone || "", booking.customer_name || "", booking.designer_id, customerNotes);
+  const history = buildCustomerHistory(booking.customer_phone || "", booking.customer_name || "", transactions);
+
+  return {
+    id: booking.id,
+    designerId: booking.designer_id,
+    rawDate: booking.booking_date,
+    time: booking.booking_time,
+    name: booking.customer_name || "訪客",
+    phone: booking.customer_phone || "未填電話",
+    service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
+    status: isDone ? "已完成" : isProgress ? "服務中" : booking.status === "pending" ? "待確認" : "即將到來",
+    tone: isDone ? "done" : isProgress ? "progress" : "upcoming",
+    action: isProgress ? "結帳" : "查看",
+    note: booking.note || "未填備註",
+    image: "尚未上傳參考圖片",
+    customerId: customer?.id,
+    customerNo: customer?.customer_no || "",
+    customerEmail: customer?.email || "",
+    customerReferrer: customer?.referrer || "",
+    lastVisit: history[0]?.date || note?.last_visit || "",
+    totalSpent: history.reduce((total, item) => total + item.amount, 0),
+    orderCount: history.length,
+    history,
+    customerNoteId: note?.id,
+    hairType: note?.hair_type || "",
+    preferences: note?.preferences || "",
+    allergies: note?.allergies || "",
+    privateNote: note?.notes || "",
+  };
+}
+
+function mapBookingsToTodayRows(bookings: BackendBooking[], transactions: BackendTransaction[], services: BackendService[], customers: BackendCustomer[], customerNotes: BackendCustomerNote[], designerId?: number): Appointment[] {
+  const today = new Date().toLocaleDateString("en-CA");
   return bookings
     .filter((booking) => booking.booking_date === today)
     .filter((booking) => !designerId || booking.designer_id === designerId)
     .filter((booking) => booking.status !== "pending" && booking.status !== "cancelled")
-    .map((booking) => {
-      const isDone = booking.status === "completed" || paidBookingIds.has(booking.id);
-      const isProgress = !isDone && isTimeStarted(booking.booking_time);
-      return {
-        id: booking.id,
-        time: booking.booking_time,
-        name: booking.customer_name || "訪客",
-        phone: booking.customer_phone || "未填電話",
-        service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
-        status: isDone ? "已完成" : isProgress ? "服務中" : "即將到來",
-        tone: isDone ? "done" : isProgress ? "progress" : "upcoming",
-        action: isProgress ? "結帳" : "查看",
-        note: booking.note || "未填備註",
-        image: "尚未上傳參考圖片",
-      } satisfies Appointment;
-    })
+    .map((booking) => buildAppointmentFromBooking(booking, transactions, services, customers, customerNotes))
     .sort((a, b) => a.time.localeCompare(b.time));
 }
 
-function mapBookingsToPendingRows(bookings: BackendBooking[], services: BackendService[], showDesigner = false): PendingRow[] {
+function mapBookingsToPendingRows(bookings: BackendBooking[], transactions: BackendTransaction[], services: BackendService[], customers: BackendCustomer[], customerNotes: BackendCustomerNote[], showDesigner = false): PendingRow[] {
   return bookings
     .filter((booking) => booking.status === "pending")
     .map((booking) => {
       const designerName = booking.designers?.display_name || booking.designers?.name || booking.designers?.nickname || "未指定設計師";
+      const bookingNote = booking.note || "";
+      const mainService = getServiceNamesFromBackend(booking.service_ids || [], services, bookingNote);
+      const companionName = getBookingNoteField(bookingNote, "同行人");
+      const companionService = getBookingNoteField(bookingNote, "同行人服務項目");
+      const attendeeCount = getBookingAttendeeCount(bookingNote, companionName);
+      const customerNote = getCustomerNoteFromBookingNote(bookingNote);
+      const appointment = buildAppointmentFromBooking(booking, transactions, services, customers, customerNotes);
       return {
         key: String(booking.id),
         id: booking.id,
+        designerId: booking.designer_id,
         rawDate: booking.booking_date,
         date: formatScheduleDateLabel(booking.booking_date),
         time: booking.booking_time,
         name: booking.customer_name || "訪客",
         phone: booking.customer_phone || "未填電話",
-        service: getServiceNamesFromBackend(booking.service_ids || [], services, booking.note),
-        detail: booking.note || "未填備註",
+        service: mainService,
+        detail: bookingNote || "未填備註",
+        attendeeCount,
+        mainService,
+        companionName,
+        companionService,
+        customerNote,
         designer: showDesigner ? designerName : undefined,
         durationMinutes: booking.duration_minutes || getServiceIdsDurationMinutes(booking.service_ids || [], services),
+        appointment,
       };
     })
     .sort((a, b) => `${a.rawDate} ${a.time}`.localeCompare(`${b.rawDate} ${b.time}`));
@@ -3160,6 +3863,28 @@ function buildIncomeDetailGroupsForRange(range: EarningsRange, transactions: Bac
 function getServiceNamesFromNote(note?: string | null) {
   const matched = (note || "").match(/預約服務項目：([^\n]+)/);
   return matched?.[1]?.trim() || "";
+}
+
+function getBookingNoteField(note: string, label: string) {
+  const matched = note.match(new RegExp(`${label}：([^\\n]+)`));
+  return matched?.[1]?.trim() || "";
+}
+
+function getBookingAttendeeCount(note: string, companionName: string) {
+  const matched = note.match(/多人預約：\s*(\d+)\s*人/);
+  const count = matched ? Number(matched[1]) : 0;
+  if (count > 1) return count;
+  return companionName ? 2 : 1;
+}
+
+function getCustomerNoteFromBookingNote(note: string) {
+  const hiddenPrefixes = ["預約服務項目：", "多人預約：", "主要預約人：", "同行人：", "同行人服務項目："];
+  const cleaned = note
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !hiddenPrefixes.some((prefix) => line.startsWith(prefix)))
+    .join(" ");
+  return cleaned && cleaned !== "未填備註" ? cleaned : "";
 }
 
 function getServiceNamesFromBackend(ids: number[], services: BackendService[], note?: string | null) {
@@ -3505,18 +4230,23 @@ function getCalendarItems(date: string, scheduleItems: CalendarRecords<ScheduleI
 function getMonthCellSummary(items: CalendarItem[], showDesigner: boolean) {
   const bookingItems = items.filter((item) => item.category !== "leave");
   const leaveItems = items.filter((item) => item.category === "leave");
-  const summaryItems: { text: string; tone: "booking" | "leave" | "team" }[] = [];
+  const summaryItems: { text: string; tone: "booking" | "leave" | "team"; bgColor?: string; textColor?: string }[] = [];
 
   if (showDesigner) {
-    const designerCounts = new Map<string, number>();
+    const designerCounts = new Map<string, { count: number; bgColor?: string; textColor?: string }>();
     bookingItems.forEach((item) => {
       const designer = item.designer || "未指定";
-      designerCounts.set(designer, (designerCounts.get(designer) || 0) + 1);
+      const current = designerCounts.get(designer);
+      designerCounts.set(designer, {
+        count: (current?.count || 0) + 1,
+        bgColor: current?.bgColor || item.bgColor,
+        textColor: current?.textColor || item.textColor,
+      });
     });
     Array.from(designerCounts.entries())
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"))
+      .sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0], "zh-Hant"))
       .slice(0, 2)
-      .forEach(([designer, count]) => summaryItems.push({ text: `${designer} ${count}`, tone: "team" }));
+      .forEach(([designer, info]) => summaryItems.push({ text: `${designer} ${info.count}`, tone: "team", bgColor: info.bgColor, textColor: info.textColor }));
   } else if (bookingItems.length > 0) {
     summaryItems.push({ text: `${bookingItems.length} 則預約`, tone: "booking" });
   }
@@ -3555,12 +4285,70 @@ function getServiceTone(service: string) {
   return "cut";
 }
 
+function parseDiscountRate(value: string) {
+  if (value.trim() === "") return null;
+  const rate = Number(value);
+  if (!Number.isFinite(rate)) return null;
+  return Math.min(Math.max(rate, 0), 100);
+}
+
+function calculateDiscountFromRate(baseAmount: number, rate: number) {
+  const payableRatio = rate <= 10 ? rate / 10 : rate / 100;
+  return Math.min(baseAmount, Math.max(0, Math.round(baseAmount * (1 - payableRatio))));
+}
+
 function DetailCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="detail-card">
       <div className="detail-label">{label}</div>
       <div className="detail-value">{value}</div>
     </div>
+  );
+}
+
+function CustomerNoteCard({ note, translatedNote, canTranslate, isTranslating, onTranslate }: { note: string; translatedNote: string; canTranslate: boolean; isTranslating: boolean; onTranslate: () => void }) {
+  return (
+    <div className="detail-card wide">
+      <div className="detail-label-row">
+        <div className="detail-label">顧客備註</div>
+        {canTranslate && (
+          <button className="translate-note-btn" type="button" disabled={isTranslating} onClick={onTranslate}>
+            {isTranslating ? "翻譯中..." : translatedNote ? "重新翻譯" : "翻譯中文"}
+          </button>
+        )}
+      </div>
+      <div className="detail-value">
+        <div>{note || "未填備註"}</div>
+        {translatedNote && <div className="translated-note-line">{translatedNote}</div>}
+      </div>
+    </div>
+  );
+}
+
+function CustomerInfoItem({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="customer-info-label">{label}</div>
+      <div className="customer-info-value">{children}</div>
+    </div>
+  );
+}
+
+function CustomerMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="customer-metric-card">
+      <div className="customer-metric-label">{label}</div>
+      <div className="customer-metric-value">{value}</div>
+    </div>
+  );
+}
+
+function CustomerEditInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="customer-edit-field">
+      <span>{label}</span>
+      <input value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
   );
 }
 
@@ -3581,11 +4369,20 @@ function ProfileInput({ label, value, onChange }: { label: string; value: string
   );
 }
 
+function ProfileColorInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="profile-input-card profile-color-card">
+      <span>{label}</span>
+      <input type="color" value={value || "#E1F6DC"} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
 function BottomTabs({ activeTab, pendingCount, onChange }: { activeTab: TabKey; pendingCount: number; onChange: (tab: TabKey) => void }) {
   return (
     <nav className="bottom-tabs">
       {tabs.map((tab) => (
-        <button className={`tab-btn ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
+        <button className={`tab-btn ${tab.key === "earnings" ? "earnings-tab" : ""} ${activeTab === tab.key ? "active" : ""}`} key={tab.key} onClick={() => onChange(tab.key)}>
           <span className="tab-icon-wrap">
             <span className="tab-icon">
               {tab.key === "today" ? <TodayTabIcon /> : tab.key === "pending" ? <PendingTabIcon /> : tab.key === "calendar" ? <ScheduleTabIcon /> : tab.icon}

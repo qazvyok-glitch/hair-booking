@@ -51,9 +51,31 @@ function displayServiceName(name: string, isEnglish: boolean) {
   return size ? `${translated} (${size})` : translated;
 }
 
-function buildBookingNote(selectedServiceNames: string[], customerNote: string) {
+function buildBookingNote({
+  mainCustomerName,
+  selectedServiceNames,
+  attendeeCount,
+  companionName,
+  companionServiceNames,
+  customerNote,
+}: {
+  mainCustomerName: string;
+  selectedServiceNames: string[];
+  attendeeCount: 1 | 2;
+  companionName: string;
+  companionServiceNames: string[];
+  customerNote: string;
+}) {
   const serviceLine = selectedServiceNames.length > 0 ? `預約服務項目：${selectedServiceNames.join("、")}` : "";
-  return [serviceLine, customerNote.trim()].filter(Boolean).join("\n\n");
+  const companionLines = attendeeCount === 2
+    ? [
+        "多人預約：2 人",
+        `主要預約人：${mainCustomerName}`,
+        `同行人：${companionName}`,
+        `同行人服務項目：${companionServiceNames.join("、") || "未填"}`,
+      ]
+    : [];
+  return [serviceLine, ...companionLines, customerNote.trim()].filter(Boolean).join("\n\n");
 }
 
 function parseDurationMinutes(duration?: string) {
@@ -73,9 +95,37 @@ function getSelectedDurationMinutes(services: { duration?: string }[]) {
   return total > 0 ? total : 60;
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function getStoredLiffAccessToken() {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem("lineLiffAccessToken") || "";
+}
+
 export default function Step4() {
   const router = useRouter();
-  const { designer, serviceIds, selectedServices, date, time, contactValue, customerName, reset } = useBookingStore();
+  const {
+    designer,
+    serviceIds,
+    selectedServices,
+    attendeeCount,
+    companionName,
+    companionServiceIds,
+    companionSelectedServices,
+    date,
+    time,
+    contactValue,
+    customerName,
+    reset,
+  } = useBookingStore();
   const { language } = useLanguageStore();
   const [name, setName] = useState(customerName || "");
   const [contact, setContact] = useState(contactValue || "");
@@ -89,6 +139,10 @@ export default function Step4() {
   const displayServices = useMemo(
     () => selectedServices.length > 0 ? selectedServices.map((service) => ({ id: service.id, name: service.name })) : services,
     [selectedServices, services]
+  );
+  const displayCompanionServices = useMemo(
+    () => companionSelectedServices.map((service) => ({ id: service.id, name: service.name })),
+    [companionSelectedServices]
   );
 
   useEffect(() => {
@@ -179,6 +233,10 @@ export default function Step4() {
 
   async function handleSubmit() {
     if (!name || !contact) { alert(isEnglish ? "Please enter your name and phone number" : "請填寫姓名與手機號碼"); return; }
+    if (attendeeCount === 2 && (!companionName.trim() || companionSelectedServices.length === 0)) {
+      alert(isEnglish ? "Please enter the second guest name and services." : "請填寫同行人姓名與服務項目。");
+      return;
+    }
     setSubmitting(true);
     const { data: { session } } = await supabase.auth.getSession();
     let referenceImageUrl: string | null = null;
@@ -191,16 +249,29 @@ export default function Step4() {
       return;
     }
 
+    const combinedServiceIds = attendeeCount === 2
+      ? [...serviceIds, ...companionServiceIds]
+      : serviceIds;
+    const totalDurationMinutes = getSelectedDurationMinutes(
+      attendeeCount === 2 ? [...selectedServices, ...companionSelectedServices] : selectedServices
+    );
     const { data: booking, error } = await supabase.from("bookings").insert({
       designer_id: designer!.id === 0 ? null : designer!.id,
-      service_ids: serviceIds,
+      service_ids: combinedServiceIds,
       booking_date: date,
       booking_time: time,
       customer_name: name,
       customer_phone: contact,
-      note: buildBookingNote(displayServices.map((service) => service.name), note),
+      note: buildBookingNote({
+        mainCustomerName: name,
+        selectedServiceNames: displayServices.map((service) => service.name),
+        attendeeCount,
+        companionName: companionName.trim(),
+        companionServiceNames: displayCompanionServices.map((service) => service.name),
+        customerNote: note,
+      }),
       status: "pending",
-      duration_minutes: getSelectedDurationMinutes(selectedServices),
+      duration_minutes: totalDurationMinutes,
       reference_image_url: referenceImageUrl,
       user_id: session?.user?.id || null,
     }).select("id").single();
@@ -209,7 +280,48 @@ export default function Step4() {
       setSubmitting(false);
       return;
     }
+    let lineBinding: { code?: string | null; expiresInMinutes?: number | null; alreadyBound?: boolean } | null = null;
+
     if (booking?.id) {
+      const lineLiffAccessToken = getStoredLiffAccessToken();
+      if (lineLiffAccessToken) {
+        try {
+          const liffBindingResponse = await fetchWithTimeout("/api/line/bind-liff", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              accessToken: lineLiffAccessToken,
+              customerName: name,
+              customerPhone: contact,
+              userId: session?.user?.id || null,
+            }),
+          });
+          const liffBinding = await liffBindingResponse.json();
+          if (liffBinding?.ok) {
+            lineBinding = { alreadyBound: true, code: null, expiresInMinutes: null };
+          }
+        } catch (liffBindingError) {
+          console.warn("LINE LIFF binding failed", liffBindingError);
+        }
+      }
+
+      try {
+        if (!lineBinding?.alreadyBound) {
+          const bindingResponse = await fetchWithTimeout("/api/line/create-binding-code", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerName: name,
+              customerPhone: contact,
+              userId: session?.user?.id || null,
+            }),
+          });
+          lineBinding = await bindingResponse.json();
+        }
+      } catch (bindingError) {
+        console.warn("LINE binding code creation failed", bindingError);
+      }
+
       fetch("/api/line/notify-booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -223,8 +335,14 @@ export default function Step4() {
       designerNickname: designer!.nickname,
       date,
       time,
+      attendeeCount,
+      companionName: attendeeCount === 2 ? companionName.trim() : "",
+      lineBindingCode: lineBinding?.code || null,
+      lineBindingMinutes: lineBinding?.expiresInMinutes || null,
+      lineAlreadyBound: Boolean(lineBinding?.alreadyBound),
     }));
-    router.push(appRoutes.customer.bookingSuccess);
+    setSubmitting(false);
+    router.replace(appRoutes.customer.bookingSuccess);
     setTimeout(() => reset(), 1000);
   }
 
@@ -287,6 +405,23 @@ export default function Step4() {
             <div style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A" }}>—</div>
           )}
         </div>
+        {attendeeCount === 2 ? (
+          <div style={{ padding: "10px 0 2px", borderTop: "0.5px solid #D3D1C7", marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "#888780", marginBottom: 6 }}>{isEnglish ? "Second Guest" : "同行人"}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#2C2C2A", marginBottom: 6 }}>
+              {companionName || (isEnglish ? "Second guest" : "同行人")}
+            </div>
+            {displayCompanionServices.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {displayCompanionServices.map((service) => (
+                  <div key={`companion-${service.id}`} style={{ fontSize: 13, fontWeight: 600, color: "#2C2C2A", lineHeight: 1.5 }}>
+                    ・{displayServiceName(service.name, isEnglish)}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div style={{ marginBottom: 14 }}>

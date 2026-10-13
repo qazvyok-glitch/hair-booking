@@ -47,7 +47,7 @@ export default function AdminDashboard() {
       if (des) setDesigners(des);
       if (transactions) {
         const dStats: Record<number, number> = {};
-        transactions.forEach((t: any) => {
+        transactions.forEach((t: { designer_id: number | null; total_amount: number | null }) => {
           if (t.designer_id) dStats[t.designer_id] = (dStats[t.designer_id] || 0) + (t.total_amount || 0);
         });
         setDesignerStats(dStats);
@@ -57,11 +57,6 @@ export default function AdminDashboard() {
     fetchData();
   }, [router]);
 
-  function logout() {
-    sessionStorage.removeItem("adminSession");
-    router.push("/admin/login");
-  }
-
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -70,12 +65,11 @@ export default function AdminDashboard() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", paddingBottom: 70, paddingLeft: isDesktop ? 220 : 0 }}>
-      <div style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="admin-topbar" style={{ background: "#1A1A1A", padding: "14px 16px", display: "flex", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <img src="/logo.png" alt="logo" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
           <div style={{ fontSize: 15, fontWeight: 600, color: "#fff" }}>後台管理</div>
         </div>
-        <button onClick={logout} style={{ background: "#333", color: "#888780", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>登出</button>
       </div>
 
       <div style={{ padding: 16 }}>

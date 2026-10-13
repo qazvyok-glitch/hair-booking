@@ -213,7 +213,18 @@ function buildCategoriesFromPriceItems(list: PriceItem[], order: string[]) {
 
 export default function Step2() {
   const router = useRouter();
-  const { designer, serviceIds, toggleService } = useBookingStore();
+  const {
+    designer,
+    serviceIds,
+    selectedServices,
+    attendeeCount,
+    companionName,
+    companionServiceIds,
+    setAttendeeCount,
+    setCompanionName,
+    toggleService,
+    toggleCompanionService,
+  } = useBookingStore();
   const { language } = useLanguageStore();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
@@ -272,6 +283,8 @@ export default function Step2() {
     );
   }
 
+  const canContinue = serviceIds.length > 0 && (attendeeCount === 1 || (Boolean(companionName.trim()) && companionServiceIds.length > 0));
+
   return (
     <div style={{ padding: "20px 16px 120px" }}>
       <button
@@ -318,6 +331,62 @@ export default function Step2() {
       </div>
       <div style={{ background: "#f2e8e6", border: "0.5px solid #d9b8b0", borderRadius: 10, padding: "8px 10px", fontSize: 11, color: "#7a1f1f", lineHeight: 1.6, marginBottom: 16 }}>
         {isEnglish ? "Prices are for reference only. Final pricing will be confirmed by the stylist in person." : "價格僅供參考，實際金額皆以設計師現場報價為主。"}
+      </div>
+
+      <div style={{ background: "#fff", border: "0.5px solid #e5dbd0", borderRadius: 14, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>
+          {isEnglish ? "Number of guests" : "預約人數"}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          {([1, 2] as const).map((count) => {
+            const picked = attendeeCount === count;
+            return (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setAttendeeCount(count)}
+                style={{
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: `1px solid ${picked ? "#7a1f1f" : "#e5dbd0"}`,
+                  background: picked ? "#7a1f1f" : "#fdfaf7",
+                  color: picked ? "#fff" : "#1a1a1a",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {isEnglish ? `${count} guest${count > 1 ? "s" : ""}` : `${count} 人`}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => alert(isEnglish ? "For 3 or more guests, please message the official LINE account so the stylist can arrange enough time." : "3 人以上建議先私訊官方 LINE，讓設計師協助安排足夠時間。")}
+          style={{
+            width: "100%",
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px dashed #d9b8b0",
+            background: "#fff8f6",
+            color: "#7a1f1f",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {isEnglish ? "3+ guests: message official LINE" : "3 人以上請私訊官方 LINE"}
+        </button>
+        <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "#fff8f6", color: "#7a1f1f", fontSize: 11, lineHeight: 1.7 }}>
+          {isEnglish
+            ? "2-guest booking is for the same stylist. If each guest wants a different stylist, please submit separate bookings because each stylist has their own schedule and price list."
+            : "2 人預約目前適用於同一位設計師。若同行人想預約不同設計師，請分開送出兩筆預約，因為每位設計師的可預約時間與價目表皆不同。"}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+        {isEnglish ? "Main guest services" : "主要預約人服務"}
       </div>
       {showHairLengthGuide && (
         <div
@@ -367,28 +436,25 @@ export default function Step2() {
 
       {categories.map((cat) => {
         const pickedCount = cat.items.filter((i) => serviceIds.includes(i.id)).length;
-        const isOpen = openCategory === cat.name;
+        const isOpen = openCategory === `main-${cat.name}`;
         return (
           <div key={cat.id} style={{ marginBottom: 6 }}>
             <div
-              onClick={() => setOpenCategory(isOpen ? null : cat.name)}
+              onClick={() => setOpenCategory(isOpen ? null : `main-${cat.name}`)}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: "12px 14px",
                 background: pickedCount > 0 ? "#f2e8e6" : "#fdfaf7",
-                border: "0.5px solid " + (pickedCount > 0 ? "#d9b8b0" : "#e5dbd0"),
+                border: `0.5px solid ${pickedCount > 0 ? "#d9b8b0" : "#e5dbd0"}`,
                 borderRadius: isOpen ? "10px 10px 0 0" : 10,
                 cursor: "pointer",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>
                   {isEnglish ? (categoryNameEn[cat.name] || cat.label.replace(/^.\s/, "")) : cat.label.replace(/^.\s/, "")}
-                  <span style={{ fontSize: 11, color: "#9a9188", marginLeft: 6, textTransform: "capitalize" }}>
-                    {cat.name}
-                  </span>
                 </span>
                 {pickedCount > 0 ? (
                   <span style={{ fontSize: 10, background: "#7a1f1f", color: "#fff", borderRadius: 10, padding: "1px 8px" }}>
@@ -400,63 +466,143 @@ export default function Step2() {
             </div>
 
             {isOpen ? (
-              <div style={{ border: "0.5px solid #e5dbd0", borderTop: "none", borderRadius: "0 0 10px 10px", overflow: "hidden" }}>
-                {cat.items.map((item) => {
-                  const picked = serviceIds.includes(item.id);
-                  const priceRange = item.price_range ? displayPriceRange(item.price_range, language) : getServicePriceRange(item.name, priceData, language);
-                  const lengthPriceOptions = getLengthPriceOptions(priceRange);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange, duration: item.duration || "" })}
-                      style={{
-                        padding: "11px 14px",
-                        background: picked ? "#f2e8e6" : "#fdfaf7",
-                        borderTop: "0.5px solid #f0e9e0",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: picked ? 600 : 500, color: "#1a1a1a", lineHeight: 1.45 }}>{displayServiceName(item.name, language)}</div>
-                          {item.note ? (
-                            <div style={{ fontSize: 11, color: "#9a9188", marginTop: 3, lineHeight: 1.45 }}>
-                              {displayNote(item.note, language)}
-                            </div>
-                          ) : null}
+              <div style={{ border: "0.5px solid #e5dbd0", borderTop: "none", borderRadius: "0 0 10px 10px", padding: "8px", background: "#fdfaf7" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {cat.items.map((item) => {
+                    const picked = serviceIds.includes(item.id);
+                    const priceRange = item.price_range ? displayPriceRange(item.price_range, language) : getServicePriceRange(item.name, priceData, language);
+                    const lengthPriceOptions = getLengthPriceOptions(priceRange);
+                    const priceText = lengthPriceOptions ? lengthPriceOptions.map((option) => `${option.label} ${option.price}`).join(" / ") : priceRange;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => toggleService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange, duration: item.duration || "" })}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          border: `1px solid ${picked ? "#7a1f1f" : "#eee4dc"}`,
+                          background: picked ? "#fff6f4" : "#fff",
+                          color: "#1a1a1a",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: picked ? 700 : 500, lineHeight: 1.45 }}>{displayServiceName(item.name, language)}</span>
+                          <span style={{ color: picked ? "#7a1f1f" : "#c4b8b0", fontWeight: 900 }}>{picked ? "✓" : "+"}</span>
                         </div>
-                        <div style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 6,
-                          border: "1.5px solid " + (picked ? "#7a1f1f" : "#e5dbd0"),
-                          background: picked ? "#7a1f1f" : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          marginTop: 2,
-                        }}>
-                          {picked ? <span style={{ color: "#fff", fontSize: 13 }}>✓</span> : null}
-                        </div>
-                      </div>
-                      {lengthPriceOptions ? (
-                        <div style={{ fontSize: 13, color: "#7a1f1f", fontWeight: 800, lineHeight: 1.55, marginTop: 7, paddingRight: 32 }}>
-                          {lengthPriceOptions.map((option) => `${option.label} ${option.price}`).join(" / ")}
-                        </div>
-                      ) : priceRange ? (
-                        <div style={{ fontSize: 13, color: "#7a1f1f", fontWeight: 700, lineHeight: 1.45, marginTop: 7, paddingRight: 32 }}>
-                          {priceRange}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                        {item.note ? (
+                          <div style={{ fontSize: 11, color: "#9a9188", marginTop: 3, lineHeight: 1.45 }}>
+                            {displayNote(item.note, language)}
+                          </div>
+                        ) : null}
+                        {priceText ? <div style={{ fontSize: 11, color: "#7a1f1f", fontWeight: 700, marginTop: 4 }}>{priceText}</div> : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
           </div>
         );
       })}
+
+      {attendeeCount === 2 ? (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ background: "#fff", border: "0.5px solid #e5dbd0", borderRadius: 14, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+              {isEnglish ? "Second guest" : "第 2 位同行人"}
+            </div>
+            <input
+              value={companionName}
+              onChange={(event) => setCompanionName(event.target.value)}
+              placeholder={isEnglish ? "Companion name" : "同行人姓名"}
+              style={{
+                width: "100%",
+                padding: "11px 14px",
+                borderRadius: 10,
+                border: "1px solid #D3D1C7",
+                fontSize: 14,
+                background: "#fff",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+            {isEnglish ? "Second guest services" : "同行人服務"}
+          </div>
+          {categories.map((cat) => {
+            const pickedCount = cat.items.filter((i) => companionServiceIds.includes(i.id)).length;
+            const isOpen = openCategory === `companion-${cat.name}`;
+            return (
+              <div key={`companion-${cat.id}`} style={{ marginBottom: 6 }}>
+                <div
+                  onClick={() => setOpenCategory(isOpen ? null : `companion-${cat.name}`)}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 14px",
+                    background: pickedCount > 0 ? "#f2e8e6" : "#fdfaf7",
+                    border: `0.5px solid ${pickedCount > 0 ? "#d9b8b0" : "#e5dbd0"}`,
+                    borderRadius: isOpen ? "10px 10px 0 0" : 10,
+                    cursor: "pointer",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>
+                      {isEnglish ? (categoryNameEn[cat.name] || cat.label.replace(/^.\s/, "")) : cat.label.replace(/^.\s/, "")}
+                    </span>
+                    {pickedCount > 0 ? (
+                      <span style={{ fontSize: 10, background: "#7a1f1f", color: "#fff", borderRadius: 10, padding: "1px 8px" }}>
+                        {isEnglish ? `${pickedCount} selected` : `${pickedCount} 項`}
+                      </span>
+                    ) : null}
+                  </div>
+                  <span style={{ fontSize: 12, color: "#9a9188" }}>{isOpen ? "▲" : "▼"}</span>
+                </div>
+                {isOpen ? (
+                  <div style={{ border: "0.5px solid #e5dbd0", borderTop: "none", borderRadius: "0 0 10px 10px", padding: "8px", background: "#fdfaf7" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {cat.items.map((item) => {
+                      const picked = companionServiceIds.includes(item.id);
+                      const priceRange = item.price_range ? displayPriceRange(item.price_range, language) : getServicePriceRange(item.name, priceData, language);
+                      return (
+                        <button
+                          key={`companion-${item.id}`}
+                          type="button"
+                          onClick={() => toggleCompanionService(item.id, { id: item.id, name: item.name, category: item.category || cat.label, priceRange: item.price_range || priceRange, duration: item.duration || "" })}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            border: `1px solid ${picked ? "#7a1f1f" : "#eee4dc"}`,
+                            background: picked ? "#fff6f4" : "#fff",
+                            color: "#1a1a1a",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: picked ? 700 : 500, lineHeight: 1.45 }}>{displayServiceName(item.name, language)}</span>
+                            <span style={{ color: picked ? "#7a1f1f" : "#c4b8b0", fontWeight: 900 }}>{picked ? "✓" : "+"}</span>
+                          </div>
+                          {priceRange ? <div style={{ fontSize: 11, color: "#7a1f1f", fontWeight: 700, marginTop: 4 }}>{priceRange}</div> : null}
+                        </button>
+                      );
+                    })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {/* 下方按鈕 */}
       <div style={{
@@ -473,21 +619,25 @@ export default function Step2() {
         gap: 10,
       }}>
         <button
-          onClick={() => { if (serviceIds.length > 0) router.push(appRoutes.customer.bookingStep3); }}
-          disabled={serviceIds.length === 0}
+          onClick={() => { if (canContinue) router.push(appRoutes.customer.bookingStep3); }}
+          disabled={!canContinue}
           style={{
             flex: 1,
             padding: "13px 0",
-            background: serviceIds.length > 0 ? "#7a1f1f" : "#e5dbd0",
+            background: canContinue ? "#7a1f1f" : "#e5dbd0",
             color: "#fff",
             border: "none",
             borderRadius: 12,
             fontSize: 15,
             fontWeight: 600,
-            cursor: serviceIds.length > 0 ? "pointer" : "default",
+            cursor: canContinue ? "pointer" : "default",
           }}
         >
-          {serviceIds.length > 0 ? (isEnglish ? "Next: Choose Time →" : "下一步：選擇時間 →") : (isEnglish ? "Please select at least one service" : "請選擇至少一項服務")}
+          {canContinue
+            ? (isEnglish ? "Next: Choose Time →" : "下一步：選擇時間 →")
+            : attendeeCount === 2 && selectedServices.length > 0
+              ? (isEnglish ? "Please complete second guest info" : "請填寫同行人與服務")
+              : (isEnglish ? "Please select at least one service" : "請選擇至少一項服務")}
         </button>
       </div>
     </div>

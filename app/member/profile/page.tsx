@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { appRoutes } from "../../../lib/appRoutes";
+import { getLineUserIdFromAuthUser } from "../../../lib/lineIdentity";
 
 type Booking = {
   id: number;
@@ -17,6 +18,12 @@ type Booking = {
 type Designer = { id: number; name: string; nickname: string };
 type Service = { id: number; name: string };
 
+function phoneLookupCandidates(value: string) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  return Array.from(new Set([trimmed, digits].filter(Boolean)));
+}
+
 export default function MemberProfile() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -29,6 +36,7 @@ export default function MemberProfile() {
   const [editPhone, setEditPhone] = useState("");
   const [editReferrer, setEditReferrer] = useState("");
   const [customerNo, setCustomerNo] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -37,18 +45,39 @@ export default function MemberProfile() {
       if (!session) { router.push("/member/login"); return; }
       setUser(session.user);
       setEditName(session.user.user_metadata?.full_name || "");
+      const lineUserId = getLineUserIdFromAuthUser(session.user);
 
-      const { data: customerData } = await supabase
+      const { data: customerById } = await supabase
         .from("customers")
-        .select("phone, customer_no, referrer")
+        .select("id, name, phone, customer_no, referrer, line_user_id")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
+      let customerData = customerById;
+      const metadataPhone = session.user.user_metadata?.phone || "";
+      if (!customerData && metadataPhone) {
+        const { data: customerByPhone } = await supabase
+          .from("customers")
+          .select("id, name, phone, customer_no, referrer, line_user_id")
+          .in("phone", phoneLookupCandidates(metadataPhone))
+          .limit(1)
+          .maybeSingle();
+        customerData = customerByPhone;
+      }
+      if (lineUserId && customerData?.line_user_id !== lineUserId) {
+        await supabase.from("customers").update({ line_user_id: lineUserId }).eq("id", customerData.id);
+      }
+      if (customerData?.id) setCustomerId(customerData.id);
+      if (customerData?.name) setEditName(customerData.name);
       if (customerData?.phone) setEditPhone(customerData.phone);
       if (customerData?.customer_no) setCustomerNo(customerData.customer_no);
       if (customerData?.referrer) setEditReferrer(customerData.referrer);
+      const bookingPhone = customerData?.phone || metadataPhone;
+      const bookingQuery = bookingPhone
+        ? supabase.from("bookings").select("*").or(`user_id.eq.${session.user.id},customer_phone.eq.${bookingPhone}`).order("booking_date", { ascending: false })
+        : supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false });
 
       const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
-        supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false }),
+        bookingQuery,
         supabase.from("designers").select("id, name, nickname"),
         supabase.from("services").select("id, name"),
       ]);
@@ -125,7 +154,18 @@ export default function MemberProfile() {
               <button
                 onClick={async () => {
                   setSaving(true);
-                  await supabase.from("customers").upsert({ id: user.id, name: editName, phone: editPhone, email: user.email, referrer: editReferrer.trim() || null });
+                  const lineUserId = getLineUserIdFromAuthUser(user);
+                  const phoneCandidates = phoneLookupCandidates(editPhone);
+                  const { data: matchedCustomers } = await supabase.from("customers").select("id").in("phone", phoneCandidates).limit(1);
+                  const targetCustomerId = customerId || matchedCustomers?.[0]?.id || user.id;
+                  await supabase.from("customers").upsert({
+                    id: targetCustomerId,
+                    name: editName,
+                    phone: editPhone,
+                    email: user.email,
+                    referrer: editReferrer.trim() || null,
+                    ...(lineUserId ? { line_user_id: lineUserId } : {}),
+                  });
                   await supabase.auth.updateUser({ data: { full_name: editName } });
                   setSaving(false);
                   setShowEdit(false);
