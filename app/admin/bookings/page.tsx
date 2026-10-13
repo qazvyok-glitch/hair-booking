@@ -27,6 +27,17 @@ type Service = { id: number; name: string };
 type OffDay = { designer_id: number; off_date: string };
 type OffSlot = { designer_id: number; slot_date: string; slot_time: string };
 type ViewMode = "calendar" | "list";
+type AuditLog = {
+  id: number;
+  booking_id: number;
+  action: "created" | "updated" | "status_changed" | "deleted";
+  before_data: Record<string, unknown> | null;
+  after_data: Record<string, unknown> | null;
+  actor_username: string;
+  actor_role: string;
+  is_test_data: boolean;
+  created_at: string;
+};
 type ScheduleRow =
   | { type: "booking"; id: number; booking: Booking; date: string; time: string; designer_id: number; status: string }
   | { type: "off-day"; id: string; date: string; time: string; designer_id: number; status: "off_day" }
@@ -99,6 +110,52 @@ function formatDisplayDate(date: string) {
   return date.replace(/-/g, "/");
 }
 
+const auditFieldLabels: Record<string, string> = {
+  customer_name: "客戶姓名",
+  customer_phone: "客戶電話",
+  customer_email: "客戶信箱",
+  designer_id: "設計師",
+  booking_date: "預約日期",
+  booking_time: "預約時間",
+  duration_minutes: "服務時間",
+  service_ids: "服務項目",
+  note: "預約備註",
+  status: "預約狀態",
+  reference_image_url: "參考圖片",
+  locked_at: "鎖定時間",
+};
+
+function getAuditActionLabel(action: AuditLog["action"]) {
+  if (action === "created") return "建立預約";
+  if (action === "status_changed") return "變更狀態";
+  if (action === "deleted") return "刪除預約";
+  return "修改資料";
+}
+
+function formatAuditValue(key: string, value: unknown, designers: Designer[], services: Service[]) {
+  if (value === null || value === undefined || value === "") return "未填寫";
+  if (key === "designer_id") return designers.find((item) => item.id === Number(value))?.name || String(value);
+  if (key === "service_ids" && Array.isArray(value)) {
+    return value.map((id) => services.find((item) => item.id === Number(id))?.name || String(id)).join("、") || "未填寫";
+  }
+  if (key === "duration_minutes") return `${value} 分鐘`;
+  if (key === "status") return getStatusMeta(String(value)).label;
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (Array.isArray(value)) return value.join("、");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function getAuditChanges(log: AuditLog) {
+  const before = log.before_data || {};
+  const after = log.after_data || {};
+  const source = log.action === "deleted" ? before : after;
+  const keys = log.action === "updated" || log.action === "status_changed"
+    ? Object.keys(auditFieldLabels).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    : Object.keys(auditFieldLabels).filter((key) => source[key] !== null && source[key] !== undefined && source[key] !== "");
+  return keys.map((key) => ({ key, before: before[key], after: after[key] }));
+}
+
 function getMonthCells(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
   const firstDay = new Date(year, month - 1, 1).getDay();
@@ -142,6 +199,9 @@ export default function AdminBookings() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [dataMode, setDataMode] = useState<"test" | "live">("test");
+  const [auditBooking, setAuditBooking] = useState<Booking | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -209,6 +269,23 @@ export default function AdminBookings() {
         console.warn("LINE booking confirmation notification failed", notifyError);
       });
     }
+  }
+
+  async function openAuditLog(booking: Booking) {
+    setAuditBooking(booking);
+    setAuditLogs([]);
+    setAuditLoading(true);
+    const { data, error } = await supabase
+      .from("booking_audit_logs")
+      .select("id, booking_id, action, before_data, after_data, actor_username, actor_role, is_test_data, created_at")
+      .eq("booking_id", booking.id)
+      .order("created_at", { ascending: false });
+    if (error) {
+      alert("修改紀錄讀取失敗，請重新登入後再試。");
+    } else {
+      setAuditLogs((data || []) as AuditLog[]);
+    }
+    setAuditLoading(false);
   }
 
   const scheduleRows = buildScheduleRows(bookings, offDays, offSlots);
@@ -406,9 +483,10 @@ export default function AdminBookings() {
                         <div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 3, lineHeight: 1.4 }}>{row.type === "booking" ? getServiceNames(row.booking.service_ids, row.booking.note) : row.type === "off-day" ? "整天公休" : row.label}</div>
                       </div>
                     )}
-                    <span style={{ justifySelf: isDesktop ? "end" : "start", fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 600, background: statusMeta.background, color: statusMeta.color }}>
-                      {statusMeta.label}
-                    </span>
+                    <div style={{ justifySelf: isDesktop ? "end" : "start", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 10, fontWeight: 600, background: statusMeta.background, color: statusMeta.color }}>{statusMeta.label}</span>
+                      {row.type === "booking" && <button onClick={() => openAuditLog(row.booking)} style={{ border: "none", background: "transparent", color: "#534AB7", fontSize: 10, fontWeight: 700, cursor: "pointer", padding: 2 }}>紀錄</button>}
+                    </div>
                   </div>
                 );
               }) : (
@@ -471,12 +549,15 @@ export default function AdminBookings() {
                       </span>
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {b.status === "pending" && (
-                        <div style={{ display: "flex", gap: 4 }}>
+                      <div style={{ display: "flex", gap: 4, alignItems: "center", flexWrap: "wrap" }}>
+                        {b.status === "pending" && (
+                          <>
                           <button onClick={() => updateStatus(b.id, "confirmed")} style={{ padding: "4px 8px", background: "#534AB7", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>確認</button>
                           <button onClick={() => updateStatus(b.id, "cancelled")} style={{ padding: "4px 8px", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>取消</button>
-                        </div>
-                      )}
+                          </>
+                        )}
+                        <button onClick={() => openAuditLog(b)} style={{ padding: "4px 8px", background: "#F1EFE8", color: "#534AB7", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>紀錄</button>
+                      </div>
                     </td>
                   </tr>
                   );
@@ -533,11 +614,55 @@ export default function AdminBookings() {
                   <button onClick={() => updateStatus(b.id, "cancelled")} style={{ flex: 1, padding: "8px 0", background: "#FCEBEB", color: "#A32D2D", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>取消</button>
                 </div>
               )}
+              <button onClick={() => openAuditLog(b)} style={{ width: "100%", marginTop: 8, padding: "8px 0", background: "#F1EFE8", color: "#534AB7", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>查看修改紀錄</button>
             </div>
             );
           })
         ))}
       </div>
+
+      {auditBooking && (
+        <div onClick={() => setAuditBooking(null)} style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(20, 20, 18, 0.48)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(event) => event.stopPropagation()} style={{ width: "min(720px, 100%)", maxHeight: "85vh", overflow: "auto", background: "#F8F7F3", borderRadius: 18, boxShadow: "0 20px 70px rgba(0,0,0,.25)" }}>
+            <div style={{ position: "sticky", top: 0, zIndex: 1, padding: "16px 18px", background: "#fff", borderBottom: "1px solid #E8E5DA", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: "#2C2C2A" }}>預約修改紀錄</div>
+                <div style={{ marginTop: 3, fontSize: 11, color: "#888780" }}>{auditBooking.customer_name || "訪客"} · {formatDisplayDate(auditBooking.booking_date)} {auditBooking.booking_time}</div>
+              </div>
+              <button onClick={() => setAuditBooking(null)} aria-label="關閉" style={{ width: 34, height: 34, borderRadius: 99, border: "none", background: "#F1EFE8", color: "#5F5E5A", cursor: "pointer", fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              <div style={{ padding: "10px 12px", borderRadius: 10, background: auditBooking.is_test_data ? "#FFF3D6" : auditBooking.locked_at ? "#EAF8F3" : "#EEEDFE", color: auditBooking.is_test_data ? "#7A4D00" : "#3C3489", fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
+                {auditBooking.is_test_data ? "測試資料：不套用正式鎖定，可於上線前清除。" : auditBooking.locked_at ? "正式資料：已完成並鎖定。" : "正式資料：尚未鎖定。"}
+              </div>
+              {auditLoading ? (
+                <div style={{ padding: 30, textAlign: "center", color: "#888780", fontSize: 13 }}>讀取紀錄中...</div>
+              ) : auditLogs.length === 0 ? (
+                <div style={{ padding: 30, textAlign: "center", color: "#888780", fontSize: 13 }}>目前尚無修改紀錄。資料庫安全功能啟用前的歷史變更不會回溯產生。</div>
+              ) : auditLogs.map((log) => {
+                const changes = getAuditChanges(log);
+                return (
+                  <div key={log.id} style={{ background: "#fff", border: "1px solid #E3E0D6", borderRadius: 12, padding: 13, marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: changes.length ? 10 : 0 }}>
+                      <div><span style={{ fontSize: 13, fontWeight: 800, color: "#2C2C2A" }}>{getAuditActionLabel(log.action)}</span><span style={{ marginLeft: 7, fontSize: 10, color: "#888780" }}>{log.is_test_data ? "測試資料" : "正式資料"}</span></div>
+                      <div style={{ textAlign: "right", fontSize: 10, color: "#888780", lineHeight: 1.5 }}>{new Date(log.created_at).toLocaleString("zh-TW")}<br />{log.actor_username} · {log.actor_role}</div>
+                    </div>
+                    {changes.map((change) => (
+                      <div key={change.key} style={{ display: "grid", gridTemplateColumns: "90px minmax(0, 1fr)", gap: 10, padding: "7px 0", borderTop: "1px solid #F1EFE8", fontSize: 11 }}>
+                        <div style={{ color: "#888780", fontWeight: 700 }}>{auditFieldLabels[change.key]}</div>
+                        <div style={{ color: "#2C2C2A", lineHeight: 1.5, wordBreak: "break-word" }}>
+                          {log.action === "updated" || log.action === "status_changed" ? <><span style={{ color: "#A32D2D", textDecoration: "line-through" }}>{formatAuditValue(change.key, change.before, designers, services)}</span><span style={{ margin: "0 7px", color: "#888780" }}>→</span></> : null}
+                          <span style={{ color: log.action === "deleted" ? "#A32D2D" : "#0B6E5A", fontWeight: 700 }}>{formatAuditValue(change.key, log.action === "deleted" ? change.before : change.after, designers, services)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AdminBottomNav current="bookings" />
     </div>
