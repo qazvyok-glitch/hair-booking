@@ -276,7 +276,10 @@ export default function Step4() {
       user_id: session?.user?.id || null,
     }).select("id").single();
     if (error) {
-      alert(isEnglish ? "Booking failed. Please try again." : "預約失敗，請再試一次");
+      const isConflict = error.message.includes("BOOKING_TIME_CONFLICT");
+      alert(isConflict
+        ? (isEnglish ? "This time was just booked. Please choose another time." : "此時段剛被預約，請返回選擇其他時間。")
+        : (isEnglish ? "Booking failed. Please try again." : "預約失敗，請再試一次"));
       setSubmitting(false);
       return;
     }

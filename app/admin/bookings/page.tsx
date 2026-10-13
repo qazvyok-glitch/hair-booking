@@ -16,6 +16,8 @@ type Booking = {
   reference_image_url?: string;
   designer_id: number;
   user_id: string;
+  is_test_data: boolean;
+  locked_at?: string | null;
 };
 
 type Customer = { id: string; phone: string; customer_no: string };
@@ -139,6 +141,7 @@ export default function AdminBookings() {
   });
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().toLocaleDateString("en-CA").slice(0, 7));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [dataMode, setDataMode] = useState<"test" | "live">("test");
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -152,13 +155,14 @@ export default function AdminBookings() {
     if (!session) { router.push("/admin/login"); return; }
 
     async function fetchData() {
-      const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }, { data: offDayData }, { data: offSlotData }] = await Promise.all([
+      const [{ data: bData }, { data: dData }, { data: sData }, { data: cData }, { data: offDayData }, { data: offSlotData }, { data: configData }] = await Promise.all([
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
         supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("services").select("id, name"),
         supabase.from("customers").select("id, phone, customer_no"),
         supabase.from("designer_off_days").select("designer_id, off_date"),
         supabase.from("designer_off_slots").select("designer_id, slot_date, slot_time"),
+        supabase.from("booking_system_config").select("data_mode").eq("singleton", true).maybeSingle(),
       ]);
       if (bData) setBookings(bData);
       if (dData) setDesigners(dData);
@@ -166,6 +170,7 @@ export default function AdminBookings() {
       if (cData) setCustomers(cData);
       if (offDayData) setOffDays(offDayData);
       if (offSlotData) setOffSlots(offSlotData);
+      if (configData?.data_mode === "live") setDataMode("live");
       setLoading(false);
     }
     fetchData();
@@ -191,7 +196,7 @@ export default function AdminBookings() {
   async function updateStatus(id: number, status: string) {
     const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
     if (error) {
-      alert("預約狀態更新失敗，請稍後再試。");
+      alert(error.message.includes("BOOKING_TIME_CONFLICT") ? "此設計師在該時段已有預約，請先調整時間。" : "預約狀態更新失敗，請稍後再試。");
       return;
     }
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
@@ -249,6 +254,14 @@ export default function AdminBookings() {
       </div>
 
       <div style={{ padding: "12px 16px 0" }}>
+        <div style={{ marginBottom: 12, padding: "11px 14px", borderRadius: 12, border: `1px solid ${dataMode === "test" ? "#E8C46A" : "#9DD8C8"}`, background: dataMode === "test" ? "#FFF7DF" : "#EAF8F3", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: dataMode === "test" ? "#7A4D00" : "#0B604E" }}>{dataMode === "test" ? "目前為測試模式" : "目前為正式模式"}</div>
+            <div style={{ marginTop: 2, fontSize: 11, color: "#6B6860" }}>{dataMode === "test" ? "新預約會標記為測試資料，完成後仍可修正，日後可由最高管理員一次清除。" : "新預約會套用狀態規則，完成後自動鎖定並保留修改紀錄。"}</div>
+          </div>
+          <span style={{ borderRadius: 999, padding: "5px 10px", background: dataMode === "test" ? "#F5C451" : "#63C7AD", color: dataMode === "test" ? "#5A3800" : "#063F34", fontSize: 11, fontWeight: 800 }}>{dataMode === "test" ? "TEST" : "LIVE"}</span>
+        </div>
+
         {/* 搜尋 */}
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜尋客人姓名或電話..." style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
 
