@@ -38,14 +38,12 @@ export default function AdminAnnouncements() {
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
-    fetchData();
+    void (async () => {
+      const { data } = await supabase.from("announcements").select("*").order("created_at", { ascending: false });
+      if (data) setAnnouncements(data);
+      setLoading(false);
+    })();
   }, [router]);
-
-  async function fetchData() {
-    const { data } = await supabase.from("announcements").select("*").order("created_at", { ascending: false });
-    if (data) setAnnouncements(data);
-    setLoading(false);
-  }
 
   function openNew() {
     setEditing(null);
@@ -91,8 +89,7 @@ export default function AdminAnnouncements() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  function shareIG(a: Announcement) {
-    const text = encodeURIComponent(`【${a.title}】\n\n${a.content}`);
+  function shareIG() {
     window.open("https://www.instagram.com/", "_blank");
   }
 
@@ -152,7 +149,7 @@ export default function AdminAnnouncements() {
                 {copiedId === a.id ? "✓ 已複製" : "📋 複製文字"}
               </button>
               <button onClick={() => shareLine(a)} style={{ padding: "5px 10px", background: "#07B53B", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>LINE 分享</button>
-              <button onClick={() => shareIG(a)} style={{ padding: "5px 10px", background: "linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>IG 開啟</button>
+              <button onClick={shareIG} style={{ padding: "5px 10px", background: "linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>IG 開啟</button>
               <button onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=https://bingcherryhair.com`, "_blank")} style={{ padding: "5px 10px", background: "#1877F2", color: "#fff", border: "none", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>FB 分享</button>
             </div>
 

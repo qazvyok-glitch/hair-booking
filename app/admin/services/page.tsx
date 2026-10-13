@@ -32,18 +32,16 @@ export default function AdminServices() {
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
-    fetchData();
+    void (async () => {
+      const [{ data: sData }, { data: cData }] = await Promise.all([
+        supabase.from("services").select("*").order("category_id").order("sort_order"),
+        supabase.from("service_categories").select("*").order("sort_order"),
+      ]);
+      if (sData) setServices(sData);
+      if (cData) setCategories(cData);
+      setLoading(false);
+    })();
   }, [router]);
-
-  async function fetchData() {
-    const [{ data: sData }, { data: cData }] = await Promise.all([
-      supabase.from("services").select("*").order("category_id").order("sort_order"),
-      supabase.from("service_categories").select("*").order("sort_order"),
-    ]);
-    if (sData) setServices(sData);
-    if (cData) setCategories(cData);
-    setLoading(false);
-  }
 
   function openNew() {
     setEditing(null);
@@ -212,19 +210,19 @@ export default function AdminServices() {
               <div style={{ fontSize: 15, fontWeight: 600 }}>{editingCat ? "編輯分類" : "新增分類"}</div>
               <button onClick={() => setShowCatForm(false)} style={{ background: "#F1EFE8", border: "none", borderRadius: 8, width: 32, height: 32, fontSize: 16, cursor: "pointer" }}>x</button>
             </div>
-            {[
+            {([
               { key: "name", label: "分類代碼", placeholder: "cut" },
               { key: "label", label: "顯示名稱", placeholder: "✂ 剪髮" },
               { key: "color", label: "背景色", placeholder: "#E1F5EE", type: "color" },
               { key: "text_color", label: "文字色", placeholder: "#085041", type: "color" },
-            ].map(f => (
+            ] as const).map(f => (
               <div key={f.key} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12, color: "#888780", marginBottom: 4 }}>{f.label}</div>
                 <input
-                  value={(catForm as any)[f.key]}
+                  value={catForm[f.key]}
                   onChange={(e) => setCatForm({ ...catForm, [f.key]: e.target.value })}
                   placeholder={f.placeholder}
-                  type={(f as any).type || "text"}
+                  type={"type" in f ? f.type : "text"}
                   style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #D3D1C7", fontSize: 13, outline: "none", boxSizing: "border-box" }}
                 />
               </div>

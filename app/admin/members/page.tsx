@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
+import * as XLSX from "xlsx";
 
 type Member = {
   id: string;
@@ -43,6 +44,7 @@ type CustomerPhoto = {
 };
 
 type Designer = { id: number; name: string };
+type ImportedMemberRow = Record<string, string | number | null | undefined>;
 
 export default function AdminMembers() {
   const router = useRouter();
@@ -142,11 +144,10 @@ export default function AdminMembers() {
     setImportResult(null);
 
     try {
-      const XLSX = require("xlsx");
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws);
+      const rows = XLSX.utils.sheet_to_json<ImportedMemberRow>(ws);
 
       let success = 0, skip = 0;
       const errors: string[] = [];
@@ -174,13 +175,6 @@ export default function AdminMembers() {
           continue;
         }
 
-        // 建立 auth user
-        const { data: authData, error: authError } = await supabase.auth.admin?.createUser({
-          email: email || `${phone}@noemail.bc`,
-          phone: phone,
-          user_metadata: { full_name: name, phone },
-        }).catch(() => ({ data: null, error: new Error("no admin") })) || { data: null, error: null };
-
         // 直接插入 customers
         const { error } = await supabase.from("customers").insert({
           name,
@@ -197,8 +191,9 @@ export default function AdminMembers() {
 
       setImportResult({ success, skip, errors });
       if (success > 0) fetchData();
-    } catch(e: any) {
-      setImportResult({ success: 0, skip: 0, errors: ["匯入失敗：" + e.message] });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "未知錯誤";
+      setImportResult({ success: 0, skip: 0, errors: ["匯入失敗：" + message] });
     }
     setImporting(false);
   }

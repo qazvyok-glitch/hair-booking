@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
+import type { Html5Qrcode } from "html5-qrcode";
 
 type Product = { id: number; name: string; unit: string; unit_price: number; category: string; is_active: boolean; stock_quantity: number; barcode: string };
 type StockRecord = { id: number; product_id: number; product_name: string; quantity: number; type: string; note: string; created_at: string };
@@ -27,10 +28,9 @@ export default function AdminInventory() {
   const [filterCategory, setFilterCategory] = useState("all");
   const [recordFilter, setRecordFilter] = useState<"all" | "in" | "adjust" | "shop_use" | "out">("all");
   const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState("");
   const [showBarcodeEdit, setShowBarcodeEdit] = useState<number | null>(null);
   const [barcodeInput, setBarcodeInput] = useState("");
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const scanDivRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,20 +43,18 @@ export default function AdminInventory() {
   useEffect(() => {
     const session = sessionStorage.getItem("adminSession");
     if (!session) { router.push("/admin/login"); return; }
-    fetchData();
+    void (async () => {
+      const [{ data: pData }, { data: rData }, { data: dData }] = await Promise.all([
+        supabase.from("products").select("*").order("category").order("sort_order"),
+        supabase.from("stock_records").select("*").order("created_at", { ascending: false }).limit(100),
+        supabase.from("designers").select("id, name, display_name, nickname").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
+      ]);
+      if (pData) setProducts(pData);
+      if (rData) setRecords(rData);
+      if (dData) setDesigners(dData);
+      setLoading(false);
+    })();
   }, [router]);
-
-  async function fetchData() {
-    const [{ data: pData }, { data: rData }, { data: dData }] = await Promise.all([
-      supabase.from("products").select("*").order("category").order("sort_order"),
-      supabase.from("stock_records").select("*").order("created_at", { ascending: false }).limit(100),
-      supabase.from("designers").select("id, name, display_name, nickname").eq("is_active", true).order("sort_order", { nullsFirst: false }).order("id"),
-    ]);
-    if (pData) setProducts(pData);
-    if (rData) setRecords(rData);
-    if (dData) setDesigners(dData);
-    setLoading(false);
-  }
 
   const categories = [...new Set(products.map(p => p.category))].filter(Boolean);
   const filtered = products.filter(p => {
@@ -167,7 +165,6 @@ export default function AdminInventory() {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 150 } },
         (decodedText: string) => {
-          setScanResult(decodedText);
           scanner.stop();
           setScanning(false);
           // 找到對應商品
@@ -183,7 +180,7 @@ export default function AdminInventory() {
         },
         () => {}
       );
-    } catch(e) {
+    } catch {
       alert("無法啟動相機，請確認已授權相機權限");
       setScanning(false);
     }
@@ -191,7 +188,7 @@ export default function AdminInventory() {
 
   async function stopScanner() {
     if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch(e) {}
+      try { await scannerRef.current.stop(); } catch {}
     }
     setScanning(false);
   }
@@ -221,8 +218,8 @@ export default function AdminInventory() {
       )}
 
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 8px" }}>
-        {[{ key: "stock", label: "庫存清單" }, { key: "records", label: "進出記錄" }].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as any)} style={{ flex: 1, padding: "6px 0", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
+        {([{ key: "stock", label: "庫存清單" }, { key: "records", label: "進出記錄" }] as const).map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} style={{ flex: 1, padding: "6px 0", borderRadius: 20, border: "none", background: tab === t.key ? "#534AB7" : "#fff", color: tab === t.key ? "#fff" : "#5F5E5A", fontSize: 12, fontWeight: tab === t.key ? 600 : 400, cursor: "pointer" }}>
             {t.label}
           </button>
         ))}
