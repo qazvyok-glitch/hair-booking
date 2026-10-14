@@ -112,6 +112,7 @@ export default function Home() {
       const { data: customers } = await supabase
         .from("customers")
         .select("name, official_line_user_id")
+        .eq("is_active", true)
         .in("phone", phoneCandidates)
         .order("updated_at", { ascending: false })
         .limit(5);

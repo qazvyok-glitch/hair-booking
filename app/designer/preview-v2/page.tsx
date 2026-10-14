@@ -311,7 +311,7 @@ export default function DesignerPreviewV2Page() {
       transactionQuery.eq("designer_id", session.id),
       productUsageQuery.eq("designer_id", session.id),
       supabase.from("products").select("id, name, unit, unit_price, category, stock_quantity, is_active, sort_order").eq("is_active", true).order("category").order("sort_order"),
-      supabase.from("customers").select("id, name, phone, email, customer_no, referrer").order("customer_no"),
+      supabase.from("customers").select("id, name, phone, email, customer_no, referrer").eq("is_active", true).order("customer_no"),
       session.is_manager ? supabase.from("customer_notes").select("*") : supabase.from("customer_notes").select("*").eq("designer_id", session.id),
       supabase.from("price_items").select("id, category, name, price_range, duration, sort_order").order("category").order("sort_order"),
       supabase.from("designer_price_items").select("id, designer_id, category, name, price_range, duration, sort_order, is_active").eq("designer_id", session.id).eq("is_active", true).order("category").order("sort_order"),
@@ -488,7 +488,7 @@ export default function DesignerPreviewV2Page() {
       const customerPhone = bookingDraft.phone.trim();
       const customerReferrer = bookingDraft.referrer.trim();
       if (customerPhone) {
-        const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", customerPhone).maybeSingle();
+        const { data: existingCustomer } = await supabase.from("customers").select("id").eq("is_active", true).eq("phone", customerPhone).maybeSingle();
         if (existingCustomer?.id) {
           await supabase.from("customers").update({ name: customerName, referrer: customerReferrer || null }).eq("id", existingCustomer.id);
         } else {
@@ -721,7 +721,7 @@ export default function DesignerPreviewV2Page() {
     const customerPhone = draft.customerPhone.trim();
     const customerReferrer = draft.customerReferrer.trim();
     if (customerPhone) {
-      const { data: existingCustomer } = await supabase.from("customers").select("id").eq("phone", customerPhone).maybeSingle();
+      const { data: existingCustomer } = await supabase.from("customers").select("id").eq("is_active", true).eq("phone", customerPhone).maybeSingle();
       if (existingCustomer?.id) {
         await supabase.from("customers").update({ name: customerName, referrer: customerReferrer || null }).eq("id", existingCustomer.id);
       } else {

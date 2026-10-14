@@ -1335,7 +1335,7 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
       const [{ data: dData }, { data: pData }, { data: cData }, { data: stockData }] = await Promise.all([
         supabase.from("designers").select("*").order("id"),
         supabase.from("product_usage").select("*").order("used_at", { ascending: false }),
-        supabase.from("customers").select("id, phone, customer_no"),
+        supabase.from("customers").select("id, phone, customer_no").eq("is_active", true),
         supabase.from("stock_records").select("*").order("created_at", { ascending: false }),
       ]);
       if (dData) setDesigners(dData);

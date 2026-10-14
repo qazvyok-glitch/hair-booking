@@ -168,6 +168,7 @@ export default function Step1() {
     supabase
       .from("customers")
       .select("id, name, phone, official_line_user_id")
+      .eq("is_active", true)
       .in("phone", phoneCandidates)
       .order("updated_at", { ascending: false })
       .limit(5)
@@ -198,6 +199,7 @@ export default function Step1() {
     const { data: existingCustomers } = await supabase
       .from("customers")
       .select("id, name, phone, official_line_user_id")
+      .eq("is_active", true)
       .in("phone", phoneCandidates)
       .order("updated_at", { ascending: false })
       .limit(5);

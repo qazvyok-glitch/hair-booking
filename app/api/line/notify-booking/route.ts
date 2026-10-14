@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
     const result = await supabase
       .from("customers")
       .select("official_line_user_id")
+      .eq("is_active", true)
       .eq("id", row.user_id)
       .maybeSingle();
     customer = result.data;
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
     const result = await supabase
       .from("customers")
       .select("official_line_user_id")
+      .eq("is_active", true)
       .eq("phone", row.customer_phone)
       .not("official_line_user_id", "is", null)
       .order("line_bound_at", { ascending: false, nullsFirst: false })

@@ -66,6 +66,7 @@ async function bindCustomerLineUser(codeText: string, officialLineUserId: string
   const { data: customers, error: lookupError } = await supabase
     .from("customers")
     .select("id, name, phone, line_binding_expires_at")
+    .eq("is_active", true)
     .eq("line_binding_code", code)
     .gt("line_binding_expires_at", now)
     .limit(1);

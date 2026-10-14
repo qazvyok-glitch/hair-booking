@@ -27,13 +27,14 @@ export default function MemberSetup() {
       setName(session.user.user_metadata?.full_name || "");
       const lineUserId = getLineUserIdFromAuthUser(session.user);
 
-      const { data: customerById } = await supabase.from("customers").select("*").eq("id", session.user.id).maybeSingle();
+      const { data: customerById } = await supabase.from("customers").select("*").eq("is_active", true).eq("id", session.user.id).maybeSingle();
       let data = customerById;
       const metadataPhone = session.user.user_metadata?.phone || "";
       if (!data && metadataPhone) {
         const { data: customerByPhone } = await supabase
           .from("customers")
           .select("*")
+          .eq("is_active", true)
           .in("phone", phoneLookupCandidates(metadataPhone))
           .limit(1)
           .maybeSingle();
@@ -62,12 +63,14 @@ export default function MemberSetup() {
     const { data: phoneMatches } = await supabase
       .from("customers")
       .select("id, customer_no")
+      .eq("is_active", true)
       .in("phone", phoneCandidates)
       .limit(5);
     const matchedByPhone = phoneMatches?.find((customer) => customer.id !== user.id);
     const { data: existing } = await supabase
       .from("customers")
       .select("customer_no")
+      .eq("is_active", true)
       .eq("id", user.id)
       .single();
     const lineUserId = getLineUserIdFromAuthUser(user);

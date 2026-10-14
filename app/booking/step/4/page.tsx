@@ -167,6 +167,7 @@ export default function Step4() {
         const { data } = await supabase
           .from("customers")
           .select("name, phone")
+          .eq("is_active", true)
           .eq("id", session.user.id)
           .single();
         if (data) {

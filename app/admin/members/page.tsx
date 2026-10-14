@@ -13,6 +13,22 @@ type Member = {
   referrer?: string | null;
   customer_no: string;
   created_at: string;
+  line_user_id?: string | null;
+  official_line_user_id?: string | null;
+  is_active?: boolean;
+};
+
+type MergeLog = {
+  id: string;
+  primary_customer_id: string;
+  duplicate_customer_id: string;
+  reason: string;
+  merged_by_username: string;
+  merged_at: string;
+  reverted_at?: string | null;
+  status: "merged" | "reverted";
+  primary_before: Member;
+  duplicate_before: Member;
 };
 
 type Booking = {
@@ -67,6 +83,15 @@ export default function AdminMembers() {
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState("");
+  const [mergeLogs, setMergeLogs] = useState<MergeLog[]>([]);
+  const [showMerge, setShowMerge] = useState(false);
+  const [mergePair, setMergePair] = useState<{ primary: Member; duplicate: Member } | null>(null);
+  const [mergeReason, setMergeReason] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [isOwner] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return JSON.parse(sessionStorage.getItem("adminSession") || "{}").role !== "manager"; } catch { return false; }
+  });
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth >= 768);
@@ -82,18 +107,20 @@ export default function AdminMembers() {
   }, [router]);
 
   async function fetchData() {
-    const [{ data: mData }, { data: bData }, { data: nData }, { data: pData }, { data: dData }] = await Promise.all([
-      supabase.from("customers").select("*").order("customer_no"),
+    const [{ data: mData }, { data: bData }, { data: nData }, { data: pData }, { data: dData }, { data: mergeData }] = await Promise.all([
+      supabase.from("customers").select("*").eq("is_active", true).order("customer_no"),
       supabase.from("bookings").select("id, user_id, customer_phone, booking_date, status"),
       supabase.from("customer_notes").select("*").order("customer_name"),
       supabase.from("customer_photos").select("*").order("taken_at", { ascending: false }),
       supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
+      supabase.from("customer_merge_logs").select("*").order("merged_at", { ascending: false }).limit(20),
     ]);
     if (mData) setMembers(mData);
     if (bData) setBookings(bData);
     if (nData) setCustomerNotes(nData);
     if (pData) setCustomerPhotos(pData);
     if (dData) setDesigners(dData);
+    if (mergeData) setMergeLogs(mergeData as MergeLog[]);
     setLoading(false);
   }
 
@@ -110,6 +137,31 @@ export default function AdminMembers() {
     (n.customer_phone || "").includes(search) ||
     getDesignerName(n.designer_id).includes(search)
   );
+
+  const duplicateGroups = (() => {
+    const matches = new Map<string, { label: string; members: Member[] }>();
+    const add = (key: string, label: string, member: Member) => {
+      if (!key) return;
+      const existing = matches.get(key) || { label, members: [] };
+      if (!existing.members.some((item) => item.id === member.id)) existing.members.push(member);
+      matches.set(key, existing);
+    };
+    members.forEach((member) => {
+      const phone = normalizePhone(member.phone);
+      if (phone.length >= 8) add(`phone:${phone}`, `電話相同：${member.phone}`, member);
+      const email = (member.email || "").trim().toLowerCase();
+      if (email) add(`email:${email}`, `Email 相同：${email}`, member);
+      if (member.line_user_id) add(`line:${member.line_user_id}`, "LINE 帳號相同", member);
+      if (member.official_line_user_id) add(`official-line:${member.official_line_user_id}`, "官方 LINE 綁定相同", member);
+    });
+    const seen = new Set<string>();
+    return [...matches.values()].filter((group) => group.members.length > 1).filter((group) => {
+      const key = group.members.map((member) => member.id).sort().join(":");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   async function handleAddMember() {
     if (!addForm.name || !addForm.phone) { alert("請填寫姓名和電話"); return; }
@@ -167,6 +219,7 @@ export default function AdminMembers() {
         const { data: existing } = await supabase
           .from("customers")
           .select("id")
+          .eq("is_active", true)
           .eq("phone", phone)
           .single();
 
@@ -239,6 +292,36 @@ export default function AdminMembers() {
     setShowEdit(false);
   }
 
+  async function mergeMembers() {
+    if (!mergePair || mergeReason.trim().length < 4) { alert("請填寫至少 4 個字的合併原因。"); return; }
+    if (!confirm(`確定保留「${mergePair.primary.name}」，並將「${mergePair.duplicate.name}」合併停用？`)) return;
+    setMergeBusy(true);
+    const { error } = await supabase.rpc("merge_customer_records", {
+      p_primary_id: mergePair.primary.id,
+      p_duplicate_id: mergePair.duplicate.id,
+      p_reason: mergeReason.trim(),
+    });
+    setMergeBusy(false);
+    if (error) {
+      alert(error.message.includes("LINE_ID_CONFLICT") ? "兩筆會員綁定不同 LINE 帳號，已停止合併，請先人工確認。" : error.message.includes("permission denied") ? "僅最高管理員可合併會員。" : `合併失敗：${error.message}`);
+      return;
+    }
+    setMergePair(null);
+    setMergeReason("");
+    await fetchData();
+    alert("會員已合併；24 小時內可從合併紀錄復原。");
+  }
+
+  async function revertMerge(log: MergeLog) {
+    if (!confirm(`確定復原「${log.primary_before.name}／${log.duplicate_before.name}」的合併？`)) return;
+    setMergeBusy(true);
+    const { error } = await supabase.rpc("revert_customer_merge", { p_merge_id: log.id });
+    setMergeBusy(false);
+    if (error) { alert(error.message.includes("REVERT_WINDOW_EXPIRED") ? "已超過 24 小時，無法直接復原。" : `復原失敗：${error.message}`); return; }
+    await fetchData();
+    alert("會員合併已復原。");
+  }
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#F1EFE8", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ color: "#534AB7", fontSize: 14 }}>載入中...</div>
@@ -254,6 +337,7 @@ export default function AdminMembers() {
         </div>
         <div style={{ fontSize: 12, color: "#888780" }}>共 {filtered.length} 位</div>
         <div style={{ display: "flex", gap: 6 }}>
+          {isOwner && <button onClick={() => setShowMerge(true)} style={{ background: duplicateGroups.length ? "#A85600" : "#2C2C2A", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>重複檢查 {duplicateGroups.length > 0 ? `(${duplicateGroups.length})` : ""}</button>}
           <button onClick={() => setShowAddMember(true)} style={{ background: "#1D9E75", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>+ 新增</button>
           <button onClick={() => setShowImport(!showImport)} style={{ background: "#534AB7", color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer" }}>匯入</button>
         </div>
@@ -395,6 +479,50 @@ export default function AdminMembers() {
           )}
         </div>
       </div>
+
+      {showMerge && (
+        <div onClick={() => { setShowMerge(false); setMergePair(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.58)", zIndex: 180, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={(event) => event.stopPropagation()} style={{ width: "min(820px, 100%)", maxHeight: "88vh", overflow: "auto", background: "#F8F7F3", borderRadius: 18 }}>
+            <div style={{ position: "sticky", top: 0, zIndex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 18px", background: "#fff", borderBottom: "1px solid #E3E0D6" }}>
+              <div><div style={{ fontSize: 17, fontWeight: 800, color: "#2C2C2A" }}>重複會員檢查</div><div style={{ marginTop: 3, fontSize: 11, color: "#888780" }}>合併後保留主會員，重複會員停用但不刪除</div></div>
+              <button onClick={() => { setShowMerge(false); setMergePair(null); }} style={{ width: 34, height: 34, border: "none", borderRadius: 99, background: "#F1EFE8", fontSize: 18, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              {!mergePair && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#2C2C2A", marginBottom: 9 }}>待確認候選組（{duplicateGroups.length}）</div>
+                  {duplicateGroups.length === 0 ? <div style={{ padding: 24, background: "#EAF8F3", borderRadius: 12, textAlign: "center", color: "#0B6E5A", fontSize: 13, fontWeight: 700 }}>目前沒有偵測到重複會員</div> : duplicateGroups.map((group, index) => (
+                    <div key={`${group.label}-${index}`} style={{ background: "#fff", border: "1px solid #E3E0D6", borderRadius: 12, padding: 12, marginBottom: 9 }}>
+                      <div style={{ fontSize: 11, color: "#A85600", fontWeight: 800, marginBottom: 8 }}>{group.label}</div>
+                      <div style={{ display: "grid", gridTemplateColumns: isDesktop ? `repeat(${Math.min(group.members.length, 3)}, 1fr)` : "1fr", gap: 8 }}>
+                        {group.members.map((member) => <div key={member.id} style={{ border: "1px solid #E8E5DA", borderRadius: 10, padding: 10 }}><div style={{ fontSize: 13, fontWeight: 800 }}>{member.name || "未填姓名"}</div><div style={{ fontSize: 11, color: "#888780", marginTop: 3 }}>{member.customer_no || "無編號"} · {member.phone || "無電話"}</div><div style={{ fontSize: 11, color: "#534AB7", marginTop: 3 }}>預約 {getMemberBookings(member).length} 筆</div></div>)}
+                      </div>
+                      {group.members.length === 2 && <div style={{ display: "flex", gap: 7, marginTop: 9 }}><button onClick={() => setMergePair({ primary: group.members[0], duplicate: group.members[1] })} style={{ flex: 1, border: "none", borderRadius: 8, padding: 8, background: "#EEEDFE", color: "#534AB7", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>保留 {group.members[0].name}</button><button onClick={() => setMergePair({ primary: group.members[1], duplicate: group.members[0] })} style={{ flex: 1, border: "none", borderRadius: 8, padding: 8, background: "#EEEDFE", color: "#534AB7", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>保留 {group.members[1].name}</button></div>}
+                      {group.members.length > 2 && <div style={{ marginTop: 8, fontSize: 11, color: "#A32D2D" }}>此組超過兩筆，請先逐筆確認後再合併。</div>}
+                    </div>
+                  ))}
+                </>
+              )}
+              {mergePair && (
+                <div style={{ background: "#fff", borderRadius: 14, padding: 14, border: "1px solid #E3E0D6" }}>
+                  <button onClick={() => setMergePair(null)} style={{ border: "none", background: "transparent", color: "#534AB7", fontSize: 11, fontWeight: 800, cursor: "pointer", padding: 0, marginBottom: 10 }}>← 返回候選清單</button>
+                  <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 40px 1fr" : "1fr", gap: 10, alignItems: "center" }}>
+                    <div style={{ padding: 12, borderRadius: 11, background: "#EAF8F3", border: "1px solid #9DD8C8" }}><div style={{ fontSize: 10, color: "#0B6E5A", fontWeight: 800 }}>保留主會員</div><div style={{ fontSize: 15, fontWeight: 900, marginTop: 5 }}>{mergePair.primary.name}</div><div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 4 }}>{mergePair.primary.customer_no} · {mergePair.primary.phone}</div><div style={{ fontSize: 11, color: "#0B6E5A", marginTop: 3 }}>預約 {getMemberBookings(mergePair.primary).length} 筆</div></div>
+                    {isDesktop && <div style={{ textAlign: "center", color: "#888780", fontWeight: 900 }}>←</div>}
+                    <div style={{ padding: 12, borderRadius: 11, background: "#FFF3D6", border: "1px solid #E8C46A" }}><div style={{ fontSize: 10, color: "#A85600", fontWeight: 800 }}>合併後停用</div><div style={{ fontSize: 15, fontWeight: 900, marginTop: 5 }}>{mergePair.duplicate.name}</div><div style={{ fontSize: 11, color: "#5F5E5A", marginTop: 4 }}>{mergePair.duplicate.customer_no} · {mergePair.duplicate.phone}</div><div style={{ fontSize: 11, color: "#A85600", marginTop: 3 }}>預約 {getMemberBookings(mergePair.duplicate).length} 筆</div></div>
+                  </div>
+                  <div style={{ marginTop: 11, padding: 10, borderRadius: 9, background: "#F1EFE8", fontSize: 11, color: "#5F5E5A", lineHeight: 1.6 }}>系統會同步整理相符電話的預約與設計師備註。若兩筆 LINE 綁定不同，合併會自動停止。</div>
+                  <textarea value={mergeReason} onChange={(event) => setMergeReason(event.target.value)} placeholder="合併原因，例如：同一顧客重複建立" rows={2} style={{ marginTop: 10, width: "100%", boxSizing: "border-box", resize: "vertical", border: "1px solid #D3D1C7", borderRadius: 9, padding: 9, fontSize: 12 }} />
+                  <button disabled={mergeBusy} onClick={mergeMembers} style={{ marginTop: 8, width: "100%", border: "none", borderRadius: 9, padding: 10, background: "#534AB7", color: "#fff", fontWeight: 800, cursor: "pointer", opacity: mergeBusy ? 0.6 : 1 }}>{mergeBusy ? "合併中..." : "確認合併"}</button>
+                </div>
+              )}
+
+              <div style={{ marginTop: 18, fontSize: 13, fontWeight: 800, color: "#2C2C2A", marginBottom: 8 }}>最近合併紀錄</div>
+              {mergeLogs.length === 0 ? <div style={{ color: "#888780", fontSize: 12 }}>尚無合併紀錄</div> : mergeLogs.map((log) => { const canRevert = log.status === "merged" && Date.now() - new Date(log.merged_at).getTime() <= 24 * 60 * 60 * 1000; return <div key={log.id} style={{ background: "#fff", border: "1px solid #E3E0D6", borderRadius: 10, padding: 10, marginBottom: 7, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}><div><div style={{ fontSize: 12, fontWeight: 800 }}>{log.primary_before.name} ← {log.duplicate_before.name}</div><div style={{ marginTop: 3, fontSize: 10, color: "#888780" }}>{new Date(log.merged_at).toLocaleString("zh-TW")} · {log.merged_by_username} · {log.reason}</div></div>{canRevert ? <button disabled={mergeBusy} onClick={() => revertMerge(log)} style={{ flex: "0 0 auto", border: "none", borderRadius: 7, padding: "6px 9px", background: "#FCEBEB", color: "#A32D2D", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>復原</button> : <span style={{ flex: "0 0 auto", fontSize: 10, color: "#888780" }}>{log.status === "reverted" ? "已復原" : "已逾期"}</span>}</div>; })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 新增會員 Modal */}
       {showAddMember && (

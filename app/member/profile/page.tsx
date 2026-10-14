@@ -50,6 +50,7 @@ export default function MemberProfile() {
       const { data: customerById } = await supabase
         .from("customers")
         .select("id, name, phone, customer_no, referrer, line_user_id")
+        .eq("is_active", true)
         .eq("id", session.user.id)
         .maybeSingle();
       let customerData = customerById;
@@ -58,6 +59,7 @@ export default function MemberProfile() {
         const { data: customerByPhone } = await supabase
           .from("customers")
           .select("id, name, phone, customer_no, referrer, line_user_id")
+          .eq("is_active", true)
           .in("phone", phoneLookupCandidates(metadataPhone))
           .limit(1)
           .maybeSingle();
@@ -156,7 +158,7 @@ export default function MemberProfile() {
                   setSaving(true);
                   const lineUserId = getLineUserIdFromAuthUser(user);
                   const phoneCandidates = phoneLookupCandidates(editPhone);
-                  const { data: matchedCustomers } = await supabase.from("customers").select("id").in("phone", phoneCandidates).limit(1);
+                  const { data: matchedCustomers } = await supabase.from("customers").select("id").eq("is_active", true).in("phone", phoneCandidates).limit(1);
                   const targetCustomerId = customerId || matchedCustomers?.[0]?.id || user.id;
                   await supabase.from("customers").upsert({
                     id: targetCustomerId,

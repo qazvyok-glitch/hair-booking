@@ -46,6 +46,7 @@ export async function ensureLineBindingCode(params: {
   const { data: existingCustomers } = await supabase
     .from("customers")
     .select("id, official_line_user_id")
+    .eq("is_active", true)
     .eq("phone", phone)
     .order("updated_at", { ascending: false })
     .limit(1);
@@ -103,6 +104,7 @@ export async function bindOfficialLineUserToPhone(params: {
   const { data: existingCustomers } = await supabase
     .from("customers")
     .select("id, official_line_user_id")
+    .eq("is_active", true)
     .eq("phone", phone)
     .order("official_line_user_id", { ascending: false, nullsFirst: false })
     .order("updated_at", { ascending: false })

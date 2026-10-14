@@ -232,7 +232,7 @@ export default function AdminBookings() {
         supabase.from("bookings").select("*").order("booking_date", { ascending: false }).order("booking_time", { ascending: false }),
         supabase.from("designers").select("id, name").order("sort_order", { nullsFirst: false }).order("id"),
         supabase.from("services").select("id, name"),
-        supabase.from("customers").select("id, phone, customer_no"),
+        supabase.from("customers").select("id, phone, customer_no").eq("is_active", true),
         supabase.from("designer_off_days").select("designer_id, off_date"),
         supabase.from("designer_off_slots").select("designer_id, slot_date, slot_time"),
         supabase.from("booking_system_config").select("data_mode").eq("singleton", true).maybeSingle(),
