@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
-import * as XLSX from "xlsx";
+import { readExcelObjects } from "../../../lib/excel";
 
 type Member = {
   id: string;
@@ -197,9 +197,7 @@ export default function AdminMembers() {
 
     try {
       const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<ImportedMemberRow>(ws);
+      const rows = await readExcelObjects(data) as ImportedMemberRow[];
 
       let success = 0, skip = 0;
       const errors: string[] = [];

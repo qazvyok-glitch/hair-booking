@@ -18,7 +18,7 @@ export default function BookingLayout({ children }: { children: React.ReactNode 
   const currentStep = (() => {
     for (let i = steps.length - 1; i >= 0; i--) {
       const s = steps[i];
-      if (s.exact ? pathname === s.path : pathname.startsWith(s.path)) return i + 1;
+      if (pathname.startsWith(s.path)) return i + 1;
     }
     return 0;
   })();

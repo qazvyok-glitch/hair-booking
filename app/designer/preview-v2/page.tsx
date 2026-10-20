@@ -86,7 +86,7 @@ type CustomerRecord = {
 };
 type ScheduleItem = { text: string; tone: string; designer?: string; customer?: string; bgColor?: string; textColor?: string; appointment?: Appointment };
 type LeaveItem = { text: string; tone: "day-off" | "blocked"; designer?: string; bgColor?: string; textColor?: string };
-type CalendarItem = { text: string; tone: string; designer?: string; customer?: string; category?: "booking" | "leave"; bgColor?: string; textColor?: string };
+type CalendarItem = { text: string; tone: string; designer?: string; customer?: string; category?: "booking" | "leave"; bgColor?: string; textColor?: string; appointment?: Appointment };
 type CalendarRecords<T> = Record<string, T[]>;
 type LeaveDraft = {
   date: string;
@@ -950,7 +950,15 @@ export default function DesignerPreviewV2Page() {
   return (
     <main className="preview-page">
       <section className="phone-shell">
-        <Header profile={designerProfile} onOpenSettings={() => setShowSettings(true)} />
+        <Header
+          profile={designerProfile}
+          onOpenSettings={() => setShowSettings(true)}
+          onLogout={async () => {
+            await supabase.auth.signOut();
+            sessionStorage.removeItem("designerSession");
+            window.location.replace("/designer/login");
+          }}
+        />
         <div className="screen-body">
           {backendLoading && <div className="sync-banner">正在同步後台資料...</div>}
           {showSettings ? (
@@ -1380,7 +1388,7 @@ export default function DesignerPreviewV2Page() {
   );
 }
 
-function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenSettings: () => void }) {
+function Header({ profile, onOpenSettings, onLogout }: { profile: DesignerProfile; onOpenSettings: () => void; onLogout: () => void | Promise<void> }) {
   return (
     <header className="top-bar">
       <button className="brand-area" onClick={onOpenSettings} aria-label="開啟個人設定">
@@ -1390,7 +1398,7 @@ function Header({ profile, onOpenSettings }: { profile: DesignerProfile; onOpenS
           <span className="designer-role">{profile.role}</span>
         </span>
       </button>
-      <button className="logout-btn">登出</button>
+      <button className="logout-btn" onClick={() => void onLogout()}>登出</button>
     </header>
   );
 }
@@ -3421,31 +3429,19 @@ function getDesignerLabel(designer: BackendDesigner) {
 }
 
 async function resolveDesignerSession(): Promise<DesignerSession | null> {
-  const sessionText = window.sessionStorage.getItem("designerSession");
-  if (sessionText) {
-    try {
-      return JSON.parse(sessionText) as DesignerSession;
-    } catch {
-      window.sessionStorage.removeItem("designerSession");
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("designers")
-    .select("id, name, nickname, is_manager")
-    .eq("is_active", true)
-    .order("sort_order", { nullsFirst: false })
-    .order("id")
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !data) return null;
-  return {
-    id: data.id,
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profileData, error } = await supabase.rpc("current_designer_profile");
+  const data = Array.isArray(profileData) ? profileData[0] : profileData;
+  if (error || !data?.designer_id) return null;
+  const session = {
+    id: data.designer_id,
     name: data.name,
     nickname: data.nickname || "設計師",
     is_manager: data.is_manager || false,
   };
+  window.sessionStorage.setItem("designerSession", JSON.stringify(session));
+  return session;
 }
 
 function findDesignerByLabel(designers: BackendDesigner[], label: string) {

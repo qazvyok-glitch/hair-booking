@@ -49,6 +49,7 @@ export default function Home() {
   useEffect(() => {
     const liffId = process.env.NEXT_PUBLIC_LINE_LIFF_ID;
     if (!liffId || typeof window === "undefined") return;
+    const resolvedLiffId = liffId;
 
     let cancelled = false;
 
@@ -73,7 +74,7 @@ export default function Home() {
           });
         }
 
-        await window.liff?.init({ liffId });
+        await window.liff?.init({ liffId: resolvedLiffId });
         if (cancelled || !window.liff) return;
 
         if (!window.liff.isLoggedIn()) {

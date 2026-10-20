@@ -1,13 +1,13 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import AdminBottomNav from "../components/BottomNav";
 import SettlementPreviewPage from "./settlement/page";
+import { downloadExcelWorkbook, readExcelRows } from "../../../lib/excel";
 
 type Designer = {
   id: number;
@@ -709,10 +709,9 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
   }
 
   // 導出 Excel — 格式與舊系統訂單列表對齊
-  function exportExcel() {
+  async function exportExcel() {
     try {
       const exportTx = getExportTransactions();
-      const wb = XLSX.utils.book_new();
 
       // ── Sheet 1：設計師抽成 ──
       const dr = getExportDesigners().map((d: any) => {
@@ -727,18 +726,18 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
           "應付抽成": r.totalCommission,
         };
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dr), "設計師抽成");
 
       // ── Sheet 2：訂單列表（對齊舊系統格式）──
       // 欄位：訂單號碼 / 訂單時間 / 分類 / 品項 / 數量 / 總價 / 折扣 / 工作人員 / 指定 / 業績 / 支付方式
       const tr = buildExportOrderRows(exportTx);
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tr), "訂單列表");
 
       // ── Sheet 3：年度統計 ──
       const yr = yearlyData.map(([month, amount]: any) => ({ "月份": month, "總業績": amount }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yr), "年度統計");
-
-      XLSX.writeFile(wb, "BC_報表_" + getExportLabel() + ".xlsx");
+      await downloadExcelWorkbook([
+        { name: "設計師抽成", rows: dr },
+        { name: "訂單列表", rows: tr },
+        { name: "年度統計", rows: yr },
+      ], "BC_報表_" + getExportLabel() + ".xlsx");
     } catch(e) {
       alert("Excel 導出失敗");
     }
@@ -822,7 +821,7 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
         .filter((item) => item.category === "商品")
         .reduce((sum, item) => sum + item.amount, 0);
       const dailyDiscountTotal = dailyDetailItems.reduce((sum, item) => sum + item.discount, 0);
-      const serviceCategoryTotals = Array.from(orderRows.reduce((map, row) => {
+      const serviceCategoryTotals: { label: string; amount: number }[] = Array.from(orderRows.reduce<Map<string, number>>((map, row) => {
         const category = normalizePdfText(row["分類"]);
         if (!category.startsWith("美髮-")) return map;
         const amount = Number(row["業績"] || 0);
@@ -1134,9 +1133,7 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
 
     try {
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const rows: any[] = await readExcelRows(buf);
 
       // 跳過標題列
       const dataRows = rows.slice(1).filter((r: any) => r.some((c: any) => c !== ""));
@@ -1428,7 +1425,7 @@ export default function AdminReport({ initialMode = "shop", importOnly = false }
     const designer = designers.find((item) => item.id === designerId);
     return designer ? getDesignerLabel(designer) : "-";
   };
-  const serviceDetailRows: ReportDetailRow[] = monthlyTransactions.flatMap((transaction) => {
+  const serviceDetailRows: ReportDetailRow[] = monthlyTransactions.flatMap<ReportDetailRow>((transaction) => {
     const serviceItems = (transaction.service_items || []).map((item: any, sourceIndex) => ({ item, sourceIndex })).filter(({ item }) => !item.name?.startsWith("[商品]"));
     if (serviceItems.length === 0 && getServiceRevenue(transaction) > 0) {
       return [{

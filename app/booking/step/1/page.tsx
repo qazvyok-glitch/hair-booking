@@ -165,24 +165,25 @@ export default function Step1() {
     let cancelled = false;
     setCheckingProfile(true);
 
-    supabase
-      .from("customers")
-      .select("id, name, phone, official_line_user_id")
-      .eq("is_active", true)
-      .in("phone", phoneCandidates)
-      .order("updated_at", { ascending: false })
-      .limit(5)
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from("customers")
+          .select("id, name, phone, official_line_user_id")
+          .eq("is_active", true)
+          .in("phone", phoneCandidates)
+          .order("updated_at", { ascending: false })
+          .limit(5);
         if (cancelled) return;
         const customer = pickExistingCustomer(data);
         if (customer?.name) {
           setCustomerName(customer.name);
           setContact("phone", customer.phone || contactValue);
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setCheckingProfile(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

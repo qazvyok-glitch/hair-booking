@@ -65,7 +65,7 @@ export default function MemberProfile() {
           .maybeSingle();
         customerData = customerByPhone;
       }
-      if (lineUserId && customerData?.line_user_id !== lineUserId) {
+      if (lineUserId && customerData?.id && customerData.line_user_id !== lineUserId) {
         await supabase.from("customers").update({ line_user_id: lineUserId }).eq("id", customerData.id);
       }
       if (customerData?.id) setCustomerId(customerData.id);

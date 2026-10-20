@@ -8,7 +8,7 @@ import { adminRoleSettingKey, readAdminSession, type AdminRole } from "../../../
 import { adminPermissionSettingKey, allAdminPermissions, defaultManagerPermissions, hasPermission, permissionGroups, permissionsForRole, type AdminAccess, type AdminPermission } from "../../../lib/adminPermissions";
 
 type AdminAccount = {
-  id: number;
+  id: number | string;
   username: string;
   password_hash: string;
   role: AdminRole;

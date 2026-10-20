@@ -15,22 +15,31 @@ export default function DesignerLogin() {
     if (!username || !password) { setError("請填寫帳號與密碼"); return; }
     setLoading(true);
     setError("");
-    const { data, error: dbError } = await supabase
-      .from("designer_auth")
-      .select("*, designers(*)")
-      .eq("username", username)
-      .eq("password_hash", password)
-      .single();
-    if (dbError || !data || !data.designers?.is_active || data.designers?.status !== "active") {
+    const { data: migration, error: migrationError } = await supabase.functions.invoke("designer-login", { body: { username: username.trim(), password } });
+    if (migrationError || !migration?.email) {
       setError("帳號或密碼錯誤");
+      setLoading(false);
+      return;
+    }
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: migration.email, password });
+    if (signInError) {
+      setError("登入失敗，請稍後再試");
+      setLoading(false);
+      return;
+    }
+    const { data: profileData, error: profileError } = await supabase.rpc("current_designer_profile");
+    const data = Array.isArray(profileData) ? profileData[0] : profileData;
+    if (profileError || !data?.designer_id) {
+      await supabase.auth.signOut();
+      setError("帳號權限尚未建立，請聯繫管理員");
       setLoading(false);
       return;
     }
     sessionStorage.setItem("designerSession", JSON.stringify({
       id: data.designer_id,
-      name: data.designers.name,
-      nickname: data.designers.nickname,
-      is_manager: data.designers.is_manager || false,
+      name: data.name,
+      nickname: data.nickname,
+      is_manager: data.is_manager || false,
     }));
     router.push(appRoutes.designer.home);
   }
