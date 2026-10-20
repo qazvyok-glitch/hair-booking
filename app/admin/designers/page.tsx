@@ -36,7 +36,7 @@ type Designer = {
 type DesignerAuth = {
   designer_id: number;
   username: string;
-  password_hash: string;
+  user_id?: string | null;
 };
 
 type SettlementItemType = "addition" | "deduction";
@@ -180,7 +180,7 @@ export function AdminDesignersContent() {
   async function fetchData() {
     const [{ data }, { data: authData }, { data: settlementData }, { data: contractData }] = await Promise.all([
       supabase.from("designers").select("*").order("sort_order", { nullsFirst: false }).order("id"),
-      supabase.from("designer_auth").select("designer_id, username, password_hash"),
+      supabase.from("designer_auth").select("designer_id, username, user_id"),
       supabase.from("designer_settlement_items").select("*").order("sort_order").order("id"),
       supabase.from("shop_info").select("key, value").like("key", "designer_contract_%"),
     ]);
@@ -256,7 +256,7 @@ export function AdminDesignersContent() {
       is_manager: d.is_manager ?? false,
       status: d.status || "active",
       login_username: auth?.username || d.name.toLowerCase(),
-      login_password: auth?.password_hash || "",
+      login_password: "",
       work_hours: d.work_hours || defaultWorkHours,
     });
     setShowSettlementForm(false);
@@ -299,24 +299,22 @@ export function AdminDesignersContent() {
       if (editing) {
         const { error: designerError } = await supabase.from("designers").update(saveData).eq("id", editing.id);
         if (designerError) throw designerError;
-        const authPayload = {
-          designer_id: editing.id,
-          username: login_username,
-          password_hash: login_password || authByDesignerId[editing.id]?.password_hash || "",
-        };
-        const { error: authUpdateError } = await supabase.from("designer_auth").update(authPayload).eq("designer_id", editing.id);
+        const { error: authUpdateError } = await supabase.functions.invoke("designer-login", {
+          body: { action: "upsert", designer_id: editing.id, username: login_username, password: login_password },
+        });
         if (authUpdateError) throw authUpdateError;
-        setAuthByDesignerId({ ...authByDesignerId, [editing.id]: authPayload });
+        setAuthByDesignerId({ ...authByDesignerId, [editing.id]: { ...authByDesignerId[editing.id], designer_id: editing.id, username: login_username } });
         setDesigners(designers.map(d => d.id === editing.id ? { ...d, ...designerForm, is_active: isActive } : d));
       } else {
         const { data, error: designerError } = await supabase.from("designers").insert(saveData).select().single();
         if (designerError || !data) throw designerError || new Error("設計師資料新增失敗");
         savedDesignerId = data.id;
         setDesigners([...designers, data].sort((a, b) => (a.sort_order || a.id) - (b.sort_order || b.id)));
-        const authPayload = { designer_id: data.id, username: login_username, password_hash: login_password };
-        const { error: authError } = await supabase.from("designer_auth").insert(authPayload);
+        const { error: authError } = await supabase.functions.invoke("designer-login", {
+          body: { action: "upsert", designer_id: data.id, username: login_username, password: login_password },
+        });
         if (authError) throw authError;
-        setAuthByDesignerId({ ...authByDesignerId, [data.id]: authPayload });
+        setAuthByDesignerId({ ...authByDesignerId, [data.id]: { designer_id: data.id, username: login_username } });
       }
 
       const previousContract = contractByDesignerId[savedDesignerId];

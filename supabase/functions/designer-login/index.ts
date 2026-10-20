@@ -26,13 +26,81 @@ Deno.serve(async (request) => {
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > 4096) throw new Error("invalid");
     const body = await request.json();
+    const action = String(body.action || "login");
     const username = String(body.username || "").trim();
     const password = String(body.password || "");
-    if (!username || !password || username.length > 80 || password.length > 200) throw new Error("invalid");
 
     const url = Deno.env.get("SUPABASE_URL")!;
-    const service = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const service = createClient(url, serviceRoleKey);
     const authClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!);
+
+    if (action === "upsert") {
+      const designerId = Number(body.designer_id);
+      if (!Number.isInteger(designerId) || designerId <= 0 || !username || username.length > 80 || password.length > 200) throw new Error("invalid");
+
+      const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+      const { data: caller } = await service.auth.getUser(token);
+      if (!caller.user) throw new Error("unauthorized");
+      const { data: admin } = await service
+        .from("admin_profiles")
+        .select("role, permissions")
+        .eq("user_id", caller.user.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      const permissions = Array.isArray(admin?.permissions) ? admin.permissions : [];
+      if (!admin || (admin.role !== "owner" && !permissions.includes("designers"))) throw new Error("forbidden");
+
+      const { data: existing } = await service
+        .from("designer_auth")
+        .select("id, user_id, password_hash")
+        .eq("designer_id", designerId)
+        .maybeSingle();
+      const email = `designer-${await hashUsername(username)}@bingcherry.invalid`;
+
+      if (existing?.user_id) {
+        const attributes: { email: string; password?: string; app_metadata: Record<string, unknown> } = {
+          email,
+          app_metadata: { app_role: "designer", designer_id: designerId },
+        };
+        if (password) attributes.password = password;
+        const updated = await service.auth.admin.updateUserById(existing.user_id, attributes);
+        if (updated.error) throw updated.error;
+        const saved = await service.from("designer_auth").update({ username, password_hash: crypto.randomUUID() }).eq("id", existing.id);
+        if (saved.error) throw saved.error;
+        if (password) {
+          await fetch(`${url}/auth/v1/admin/users/${existing.user_id}/logout`, {
+            method: "POST",
+            headers: { apikey: serviceRoleKey, authorization: `Bearer ${serviceRoleKey}` },
+          });
+        }
+      } else if (password) {
+        const created = await service.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          app_metadata: { app_role: "designer", designer_id: designerId },
+        });
+        if (created.error || !created.data.user) throw created.error || new Error("create failed");
+        const payload = { designer_id: designerId, username, user_id: created.data.user.id, password_hash: crypto.randomUUID() };
+        const saved = existing
+          ? await service.from("designer_auth").update(payload).eq("id", existing.id)
+          : await service.from("designer_auth").insert(payload);
+        if (saved.error) {
+          await service.auth.admin.deleteUser(created.data.user.id);
+          throw saved.error;
+        }
+      } else if (existing) {
+        const saved = await service.from("designer_auth").update({ username }).eq("id", existing.id);
+        if (saved.error) throw saved.error;
+      } else {
+        throw new Error("password required");
+      }
+
+      return new Response(JSON.stringify({ ok: true }), { headers });
+    }
+
+    if (!username || !password || username.length > 80 || password.length > 200) throw new Error("invalid");
     const email = `designer-${await hashUsername(username)}@bingcherry.invalid`;
 
     const signedIn = await authClient.auth.signInWithPassword({ email, password });
