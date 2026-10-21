@@ -178,11 +178,18 @@ export default function MyBookingsPage() {
 
     setLoading(true);
     setSearched(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setLoading(false);
+      alert(isEnglish ? "Please sign in to view your bookings securely." : "為保護預約資料，請先登入會員。" );
+      router.push("/member/login");
+      return;
+    }
     const [{ data: bookingData }, { data: serviceData }, { data: transactionData }] = await Promise.all([
       supabase
         .from("bookings")
         .select("*, designers(id, name, display_name, nickname)")
-        .eq("customer_phone", phone)
+        .eq("user_id", session.user.id)
         .order("booking_date", { ascending: false })
         .order("booking_time", { ascending: false }),
       supabase.from("services").select("id, name"),

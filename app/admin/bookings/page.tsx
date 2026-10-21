@@ -274,9 +274,13 @@ export default function AdminBookings() {
     }
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     if (status === "confirmed") {
+      const { data: { session } } = await supabase.auth.getSession();
       fetch("/api/line/notify-booking", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ bookingId: id }),
       }).catch((notifyError) => {
         console.warn("LINE booking confirmation notification failed", notifyError);

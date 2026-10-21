@@ -8,3 +8,10 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     detectSessionInUrl: true,
   },
 });
+
+export function createRequestSupabase(authorization?: string | null) {
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: authorization ? { headers: { Authorization: authorization } } : undefined,
+  });
+}

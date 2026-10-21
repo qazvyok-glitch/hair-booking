@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bindOfficialLineUserToPhone, maskLineId, normalizePhone } from "../../../../lib/lineBinding";
+import { maskLineId } from "../../../../lib/lineBinding";
+import { createRequestSupabase } from "../../../../lib/supabase";
 
 type LineProfile = {
   userId?: string;
@@ -29,9 +30,8 @@ async function getLineProfile(accessToken: string) {
 export async function POST(request: NextRequest) {
   let body: {
     accessToken?: string;
-    customerName?: string;
-    customerPhone?: string;
-    userId?: string | null;
+    bookingId?: number;
+    bookingToken?: string;
   };
 
   try {
@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
   }
 
   const accessToken = (body.accessToken || "").trim();
-  const customerName = (body.customerName || "").trim();
-  const customerPhone = (body.customerPhone || "").trim();
+  const bookingId = Number(body.bookingId || 0);
+  const bookingToken = (body.bookingToken || "").trim();
 
-  if (!accessToken || !customerName || normalizePhone(customerPhone).length < 8) {
+  if (!accessToken || !bookingId || !bookingToken) {
     return NextResponse.json({ ok: false, error: "Invalid LIFF binding information" }, { status: 400 });
   }
 
@@ -54,22 +54,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "LINE profile unavailable" }, { status: 401 });
     }
 
-    const binding = await bindOfficialLineUserToPhone({
-      customerName,
-      customerPhone,
-      officialLineUserId: profile.userId,
-      userId: body.userId || null,
+    const supabase = createRequestSupabase(request.headers.get("authorization"));
+    const { data, error } = await supabase.rpc("bind_booking_line_user", {
+      p_booking_id: bookingId,
+      p_access_token: bookingToken,
+      p_official_line_user_id: profile.userId,
     });
+    if (error) throw error;
+    const binding = data?.[0];
 
     console.info("LINE_LIFF_BOUND", {
-      phone: normalizePhone(customerPhone).slice(-4),
+      bookingId,
       lineUserId: maskLineId(profile.userId),
     });
 
     return NextResponse.json({
       ok: true,
       alreadyBound: true,
-      customerId: binding?.customerId || null,
+      customerId: binding?.customer_id || null,
     });
   } catch (error) {
     console.error("LINE_LIFF_BIND_FAILED", {

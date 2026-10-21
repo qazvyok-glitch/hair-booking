@@ -239,7 +239,6 @@ export default function Step4() {
       return;
     }
     setSubmitting(true);
-    const { data: { session } } = await supabase.auth.getSession();
     let referenceImageUrl: string | null = null;
 
     try {
@@ -256,14 +255,14 @@ export default function Step4() {
     const totalDurationMinutes = getSelectedDurationMinutes(
       attendeeCount === 2 ? [...selectedServices, ...companionSelectedServices] : selectedServices
     );
-    const { data: booking, error } = await supabase.from("bookings").insert({
-      designer_id: designer!.id === 0 ? null : designer!.id,
-      service_ids: combinedServiceIds,
-      booking_date: date,
-      booking_time: time,
-      customer_name: name,
-      customer_phone: contact,
-      note: buildBookingNote({
+    const { data: createdBookings, error } = await supabase.rpc("create_public_booking", {
+      p_designer_id: designer!.id === 0 ? null : designer!.id,
+      p_service_ids: combinedServiceIds,
+      p_booking_date: date,
+      p_booking_time: time,
+      p_customer_name: name,
+      p_customer_phone: contact,
+      p_note: buildBookingNote({
         mainCustomerName: name,
         selectedServiceNames: displayServices.map((service) => service.name),
         attendeeCount,
@@ -271,11 +270,10 @@ export default function Step4() {
         companionServiceNames: displayCompanionServices.map((service) => service.name),
         customerNote: note,
       }),
-      status: "pending",
-      duration_minutes: totalDurationMinutes,
-      reference_image_url: referenceImageUrl,
-      user_id: session?.user?.id || null,
-    }).select("id").single();
+      p_duration_minutes: totalDurationMinutes,
+      p_reference_image_url: referenceImageUrl,
+    });
+    const booking = createdBookings?.[0];
     if (error) {
       const isConflict = error.message.includes("BOOKING_TIME_CONFLICT");
       alert(isConflict
@@ -295,9 +293,8 @@ export default function Step4() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               accessToken: lineLiffAccessToken,
-              customerName: name,
-              customerPhone: contact,
-              userId: session?.user?.id || null,
+              bookingId: booking.id,
+              bookingToken: booking.public_access_token,
             }),
           });
           const liffBinding = await liffBindingResponse.json();
@@ -315,9 +312,8 @@ export default function Step4() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              customerName: name,
-              customerPhone: contact,
-              userId: session?.user?.id || null,
+              bookingId: booking.id,
+              bookingToken: booking.public_access_token,
             }),
           });
           lineBinding = await bindingResponse.json();
@@ -329,7 +325,7 @@ export default function Step4() {
       fetch("/api/line/notify-booking", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id }),
+        body: JSON.stringify({ bookingId: booking.id, bookingToken: booking.public_access_token }),
       }).catch((notifyError) => {
         console.warn("LINE booking notification failed", notifyError);
       });

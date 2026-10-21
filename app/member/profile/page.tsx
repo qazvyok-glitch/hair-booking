@@ -18,12 +18,6 @@ type Booking = {
 type Designer = { id: number; name: string; nickname: string };
 type Service = { id: number; name: string };
 
-function phoneLookupCandidates(value: string) {
-  const trimmed = value.trim();
-  const digits = trimmed.replace(/\D/g, "");
-  return Array.from(new Set([trimmed, digits].filter(Boolean)));
-}
-
 export default function MemberProfile() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -53,18 +47,7 @@ export default function MemberProfile() {
         .eq("is_active", true)
         .eq("id", session.user.id)
         .maybeSingle();
-      let customerData = customerById;
-      const metadataPhone = session.user.user_metadata?.phone || "";
-      if (!customerData && metadataPhone) {
-        const { data: customerByPhone } = await supabase
-          .from("customers")
-          .select("id, name, phone, customer_no, referrer, line_user_id")
-          .eq("is_active", true)
-          .in("phone", phoneLookupCandidates(metadataPhone))
-          .limit(1)
-          .maybeSingle();
-        customerData = customerByPhone;
-      }
+      const customerData = customerById;
       if (lineUserId && customerData?.id && customerData.line_user_id !== lineUserId) {
         await supabase.from("customers").update({ line_user_id: lineUserId }).eq("id", customerData.id);
       }
@@ -73,10 +56,7 @@ export default function MemberProfile() {
       if (customerData?.phone) setEditPhone(customerData.phone);
       if (customerData?.customer_no) setCustomerNo(customerData.customer_no);
       if (customerData?.referrer) setEditReferrer(customerData.referrer);
-      const bookingPhone = customerData?.phone || metadataPhone;
-      const bookingQuery = bookingPhone
-        ? supabase.from("bookings").select("*").or(`user_id.eq.${session.user.id},customer_phone.eq.${bookingPhone}`).order("booking_date", { ascending: false })
-        : supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false });
+      const bookingQuery = supabase.from("bookings").select("*").eq("user_id", session.user.id).order("booking_date", { ascending: false });
 
       const [{ data: bData }, { data: dData }, { data: sData }] = await Promise.all([
         bookingQuery,
@@ -157,9 +137,7 @@ export default function MemberProfile() {
                 onClick={async () => {
                   setSaving(true);
                   const lineUserId = getLineUserIdFromAuthUser(user);
-                  const phoneCandidates = phoneLookupCandidates(editPhone);
-                  const { data: matchedCustomers } = await supabase.from("customers").select("id").eq("is_active", true).in("phone", phoneCandidates).limit(1);
-                  const targetCustomerId = customerId || matchedCustomers?.[0]?.id || user.id;
+                  const targetCustomerId = customerId || user.id;
                   await supabase.from("customers").upsert({
                     id: targetCustomerId,
                     name: editName,

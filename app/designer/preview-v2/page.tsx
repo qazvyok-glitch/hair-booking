@@ -442,9 +442,13 @@ export default function DesignerPreviewV2Page() {
       return;
     }
     if (status === "confirmed" || status === "cancelled") {
+      const { data: { session } } = await supabase.auth.getSession();
       fetch("/api/line/notify-booking", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ bookingId: row.id }),
       }).catch((notifyError) => {
         console.warn("LINE booking confirmation notification failed", notifyError);

@@ -2,14 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { appRoutes } from "../lib/appRoutes";
-import { supabase } from "../lib/supabase";
 import { useBookingStore } from "../store/bookingStore";
 import { useLanguageStore } from "../store/languageStore";
-
-type CustomerLookup = {
-  name?: string | null;
-  official_line_user_id?: string | null;
-};
 
 type LiffClient = {
   init: (options: { liffId: string }) => Promise<void>;
@@ -23,17 +17,6 @@ declare global {
   interface Window {
     liff?: LiffClient;
   }
-}
-
-function pickBestCustomer(customers?: CustomerLookup[] | null) {
-  if (!customers?.length) return null;
-  return customers.find((customer) => customer.official_line_user_id) || customers[0];
-}
-
-function phoneLookupCandidates(value: string) {
-  const trimmed = value.trim();
-  const digits = trimmed.replace(/\D/g, "");
-  return Array.from(new Set([trimmed, digits].filter(Boolean)));
 }
 
 export default function Home() {
@@ -109,25 +92,7 @@ export default function Home() {
     setContact("phone", phone);
 
     try {
-      const phoneCandidates = phoneLookupCandidates(phone);
-      const { data: customers } = await supabase
-        .from("customers")
-        .select("name, official_line_user_id")
-        .eq("is_active", true)
-        .in("phone", phoneCandidates)
-        .order("updated_at", { ascending: false })
-        .limit(5);
-
-      const customer = pickBestCustomer(customers);
-      const { data: booking } = customer?.name ? { data: null } : await supabase
-        .from("bookings")
-        .select("customer_name")
-        .in("customer_phone", phoneCandidates)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      setCustomerName(customer?.name || booking?.customer_name || "");
+      setCustomerName("");
       router.push(appRoutes.customer.bookingStart);
     } catch (error) {
       console.warn("Phone lookup failed", error);

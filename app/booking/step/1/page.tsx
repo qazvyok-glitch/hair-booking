@@ -64,17 +64,6 @@ function portfolioUrl(designer: Designer) {
   return `https://www.instagram.com/${handle}`;
 }
 
-function phoneLookupCandidates(value: string) {
-  const trimmed = value.trim();
-  const digits = trimmed.replace(/\D/g, "");
-  return Array.from(new Set([trimmed, digits].filter(Boolean)));
-}
-
-function pickExistingCustomer(customers?: { id?: string | null; name?: string | null; phone?: string | null; official_line_user_id?: string | null }[] | null) {
-  if (!customers?.length) return null;
-  return customers.find((customer) => customer.official_line_user_id) || customers[0];
-}
-
 function groupedPriceItems(items: PriceItem[]) {
   return items.reduce<Record<string, PriceItem[]>>((groups, item) => {
     const category = item.category || "其他服務";
@@ -101,7 +90,7 @@ export default function Step1() {
   const [profileEmail, setProfileEmail] = useState("");
   const [profileReferrer, setProfileReferrer] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
-  const [checkingProfile, setCheckingProfile] = useState(Boolean(contactValue && !customerName));
+  const checkingProfile = false;
   const canContinue = selected !== null && selected.id !== 0;
   const isEnglish = language === "en";
   const needsProfile = !customerName;
@@ -150,84 +139,12 @@ export default function Step1() {
     return specificItems.length > 0 ? specificItems : publicPriceItems;
   }
 
-  useEffect(() => {
-    if (!contactValue || customerName) {
-      setCheckingProfile(false);
-      return;
-    }
-
-    const phoneCandidates = phoneLookupCandidates(contactValue);
-    if (phoneCandidates.length === 0) {
-      setCheckingProfile(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCheckingProfile(true);
-
-    void (async () => {
-      try {
-        const { data } = await supabase
-          .from("customers")
-          .select("id, name, phone, official_line_user_id")
-          .eq("is_active", true)
-          .in("phone", phoneCandidates)
-          .order("updated_at", { ascending: false })
-          .limit(5);
-        if (cancelled) return;
-        const customer = pickExistingCustomer(data);
-        if (customer?.name) {
-          setCustomerName(customer.name);
-          setContact("phone", customer.phone || contactValue);
-        }
-      } finally {
-        if (!cancelled) setCheckingProfile(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [contactValue, customerName, setContact, setCustomerName]);
-
   async function handleSaveProfile() {
     if (!profileName.trim() || !profilePhone.trim()) {
       alert(isEnglish ? "Please enter your name and phone number" : "請填寫姓名與手機號碼");
       return;
     }
     setSavingProfile(true);
-    const phoneCandidates = phoneLookupCandidates(profilePhone);
-    const { data: existingCustomers } = await supabase
-      .from("customers")
-      .select("id, name, phone, official_line_user_id")
-      .eq("is_active", true)
-      .in("phone", phoneCandidates)
-      .order("updated_at", { ascending: false })
-      .limit(5);
-
-    const existingCustomer = pickExistingCustomer(existingCustomers);
-    if (existingCustomer?.name) {
-      setCustomerName(existingCustomer.name);
-      setContact("phone", existingCustomer.phone || profilePhone.trim());
-      alert(isEnglish ? "We found an existing profile for this phone number and loaded it for you." : "此手機號碼已有會員資料，已為您直接帶入。");
-      setSavingProfile(false);
-      return;
-    }
-
-    const payload = {
-      name: profileName.trim(),
-      phone: profilePhone.trim(),
-      email: profileEmail.trim() || null,
-      referrer: profileReferrer.trim() || null,
-    };
-    if (existingCustomer?.id) {
-      await supabase.from("customers").update(payload).eq("id", existingCustomer.id);
-    } else {
-      await supabase.from("customers").insert({
-        id: crypto.randomUUID(),
-        ...payload,
-      });
-    }
     setCustomerName(profileName.trim());
     setContact("phone", profilePhone.trim());
     setSavingProfile(false);

@@ -92,7 +92,11 @@ export default function Step3() {
     Promise.all([
       supabase.from("designer_off_days").select("*"),
       supabase.from("designer_off_slots").select("*"),
-      supabase.from("bookings").select("designer_id, booking_date, booking_time, duration_minutes, service_ids, status, note").eq("designer_id", designer.id),
+      supabase.rpc("get_public_booking_slots", {
+        p_designer_id: designer.id,
+        p_start_date: new Date(year, month - 1, 1).toISOString().slice(0, 10),
+        p_end_date: new Date(year, month, 0).toISOString().slice(0, 10),
+      }),
       supabase.from("services").select("id, name, duration"),
       supabase.from("price_items").select("id, name, duration"),
       supabase.from("designer_price_items").select("id, name, duration").eq("designer_id", designer.id).eq("is_active", true),
@@ -103,7 +107,7 @@ export default function Step3() {
       setDurationItems([...(serviceData || []), ...(priceData || []), ...(designerPriceData || [])]);
       setLoading(false);
     });
-  }, [designer, router]);
+  }, [designer, router, year, month]);
 
   function isOffDay(dateStr: string) {
     if (!designer) return false;

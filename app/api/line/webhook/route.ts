@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { getLineMessagingChannelSecret, replyLineText } from "../../../../lib/line";
 import { isLineBindingCode, maskLineId, normalizeLineBindingCode } from "../../../../lib/lineBinding";
-import { supabase } from "../../../../lib/supabase";
+import { createRequestSupabase, supabase } from "../../../../lib/supabase";
 
 type LineWebhookEvent = {
   type?: string;
@@ -62,32 +62,13 @@ async function safeReply(replyToken: string | undefined, text: string) {
 
 async function bindCustomerLineUser(codeText: string, officialLineUserId: string) {
   const code = normalizeLineBindingCode(codeText);
-  const now = new Date().toISOString();
-  const { data: customers, error: lookupError } = await supabase
-    .from("customers")
-    .select("id, name, phone, line_binding_expires_at")
-    .eq("is_active", true)
-    .eq("line_binding_code", code)
-    .gt("line_binding_expires_at", now)
-    .limit(1);
-
-  if (lookupError) throw lookupError;
-  const customer = customers?.[0];
-  if (!customer?.id) return null;
-
-  const { error: updateError } = await supabase
-    .from("customers")
-    .update({
-      official_line_user_id: officialLineUserId,
-      line_bound_at: now,
-      line_binding_code: null,
-      line_binding_expires_at: null,
-      updated_at: now,
-    })
-    .eq("id", customer.id);
-
-  if (updateError) throw updateError;
-  return customer;
+  const requestClient = createRequestSupabase();
+  const { data, error } = await requestClient.rpc("bind_line_user_by_code", {
+    p_binding_code: code,
+    p_official_line_user_id: officialLineUserId,
+  });
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
 export async function GET() {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hasLineTokenConfig, sendLineMessage } from "../../../../lib/line";
 import { maskLineId } from "../../../../lib/lineBinding";
-import { supabase } from "../../../../lib/supabase";
+import { createRequestSupabase } from "../../../../lib/supabase";
 
 type BookingRow = {
   id: number;
@@ -14,10 +14,7 @@ type BookingRow = {
   note: string | null;
   status: string | null;
   user_id: string | null;
-};
-
-type CustomerLineTarget = {
-  official_line_user_id?: string | null;
+  official_line_user_id: string | null;
 };
 
 function formatDate(date: string) {
@@ -31,10 +28,12 @@ function extractServiceLine(note?: string | null) {
 
 export async function POST(request: NextRequest) {
   let bookingId: number | null = null;
+  let bookingToken: string | null = null;
 
   try {
     const body = await request.json();
     bookingId = Number(body?.bookingId || 0) || null;
+    bookingToken = typeof body?.bookingToken === "string" ? body.bookingToken : null;
   } catch {
     return NextResponse.json({ ok: false, error: "Invalid request body" }, { status: 400 });
   }
@@ -48,11 +47,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true, reason: "LINE Messaging config missing" });
   }
 
-  const { data: booking, error: bookingError } = await supabase
-    .from("bookings")
-    .select("id, designer_id, service_ids, booking_date, booking_time, customer_name, customer_phone, note, status, user_id")
-    .eq("id", bookingId)
-    .single();
+  const supabase = createRequestSupabase(request.headers.get("authorization"));
+  const { data: payload, error: bookingError } = await supabase.rpc("get_booking_notification_payload", {
+    p_booking_id: bookingId,
+    p_access_token: bookingToken,
+  });
+  const booking = payload?.[0];
 
   if (bookingError || !booking) {
     console.error("LINE_BOOKING_NOTIFY_BOOKING_NOT_FOUND", bookingError);
@@ -68,39 +68,7 @@ export async function POST(request: NextRequest) {
       ? supabase.from("services").select("id, name").in("id", row.service_ids)
       : Promise.resolve({ data: [] }),
   ]);
-  let customer: CustomerLineTarget | null = null;
-  let customerError = null;
-
-  if (row.user_id) {
-    const result = await supabase
-      .from("customers")
-      .select("official_line_user_id")
-      .eq("is_active", true)
-      .eq("id", row.user_id)
-      .maybeSingle();
-    customer = result.data;
-    customerError = result.error;
-  }
-
-  if (!customer?.official_line_user_id && row.customer_phone) {
-    const result = await supabase
-      .from("customers")
-      .select("official_line_user_id")
-      .eq("is_active", true)
-      .eq("phone", row.customer_phone)
-      .not("official_line_user_id", "is", null)
-      .order("line_bound_at", { ascending: false, nullsFirst: false })
-      .limit(1);
-    customer = result.data?.[0] || customer;
-    customerError = customerError || result.error;
-  }
-
-  if (customerError) {
-    console.error("LINE_BOOKING_NOTIFY_CUSTOMER_LOOKUP_FAILED", { bookingId, customerError });
-    return NextResponse.json({ ok: true, skipped: true, reason: "Customer lookup failed" });
-  }
-
-  const lineUserId = customer?.official_line_user_id;
+  const lineUserId = row.official_line_user_id;
   if (!lineUserId) {
     console.info("LINE_BOOKING_NOTIFY_SKIPPED", { reason: "Customer official LINE user ID missing", bookingId });
     return NextResponse.json({ ok: true, skipped: true, reason: "Customer official LINE user ID missing" });
